@@ -1,0 +1,14 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: bizora-web
+spec:
+  template:
+    spec:
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/bizora/web:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: API_ORIGIN
+              value: https://api.example.com

@@ -1,0 +1,16 @@
+node_modules
+dist
+.next
+coverage
+*.log
+.env
+.env.local
+.env.*.local
+.turbo
+.DS_Store
+*.tsbuildinfo
+pglite-debug.log
+apps/api/drizzle/meta/_journal.json.bak
+.idea
+.vscode/*
+!.vscode/extensions.json

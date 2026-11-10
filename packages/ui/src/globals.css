@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 40%;
+  --primary: 221 83% 40%;
+  --primary-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --ring: 221 83% 40%;
+  --radius: 0.85rem;
+}
+
+.dark {
+  --background: 222 47% 7%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 9%;
+  --card-foreground: 210 40% 98%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 70%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 47% 11%;
+  --border: 217 33% 17%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}

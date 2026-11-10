@@ -1,0 +1,20 @@
+{
+  "name": "bizora",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:integration": "pnpm --filter @bizora/api test:integration",
+    "db:generate": "pnpm --filter @bizora/api db:generate",
+    "db:migrate": "pnpm --filter @bizora/api db:migrate",
+    "db:seed": "pnpm --filter @bizora/api db:seed",
+    "audit": "pnpm audit --prod"
+  }
+}
