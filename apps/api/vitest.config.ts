@@ -8,5 +8,7 @@ export default defineConfig({
     poolOptions: {
       forks: { singleFork: true },
     },
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

@@ -63,7 +63,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
           : ((payload as { message?: string | string[] }).message?.toString() ?? exception.message);
       response.status(status).json({
         error: {
-          code: status === 401 ? "UNAUTHENTICATED" : "HTTP_ERROR",
+          code: status === 401 ? "UNAUTHENTICATED" : status === 429 ? "RATE_LIMITED" : "HTTP_ERROR",
           message,
           fieldErrors: [],
           correlationId,

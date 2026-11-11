@@ -1,8 +1,8 @@
 # Bizora
 
-AI-native, multi-tenant business operating platform. This repository currently contains **Sprint 1**: monorepo foundation, PWA shell, NestJS API, tenant model, authentication, isolation tests, CI and Cloud Run/SQL configuration.
+AI-native, multi-tenant business operating platform. This repository currently contains **Sprint 1–2.5**: monorepo foundation, PWA shell, NestJS API, tenant model, authentication, onboarding/RBAC, session and tenancy hardening, isolation tests, CI and Cloud Run/SQL configuration.
 
-Later sprints add CRM, catalog, sales documents, payments, inventory and Ask Zora. Do not implement those until Sprint 1 remains green.
+Later sprints add CRM, catalog, sales documents, payments, inventory and Ask Zora. Do not implement those until the current gates remain green.
 
 ## Prerequisites
 
@@ -25,6 +25,8 @@ pnpm dev
 - API health: http://localhost:3001/health
 - Seeded users (local only): `alice@tenant-a.test` / `bob@tenant-b.test` with password `LocalOnly!Passw0rd`
 
+Invite tokens are omitted from API responses unless `INVITE_TOKEN_EXPOSE=true` (local/dev only).
+
 ## Quality gates
 
 ```bash
@@ -35,7 +37,13 @@ pnpm build
 pnpm audit --prod
 ```
 
-Tenant isolation tests in `apps/api/src/tenant-isolation.test.ts` are blocking.
+Tenant isolation tests in `apps/api/src/tenant-isolation.test.ts` are blocking. CI also runs Gitleaks.
+
+The remaining `pnpm audit` exception is documented in `docs/adr/ADR-004-pnpm-audit-exception.md`.
+
+## Tenancy and auth
+
+See `docs/security/tenancy.md`, `docs/architecture/overview.md`, and ADRs under `docs/adr/`.
 
 ## Deploy (Google Cloud)
 
@@ -44,5 +52,3 @@ Tenant isolation tests in `apps/api/src/tenant-isolation.test.ts` are blocking.
 3. Build and push `apps/api/Dockerfile` and `apps/web/Dockerfile`.
 4. Apply `infra/cloudrun/*.yaml` with project, region and image names substituted.
 5. Run migrations against Cloud SQL before shifting traffic.
-
-See `docs/architecture/overview.md` and `docs/adr/ADR-001-stack.md`.

@@ -14,6 +14,52 @@ export const roleSchema = z.enum([
 
 export type Role = z.infer<typeof roleSchema>;
 
+export const ROLE_RANK: Record<Role, number> = {
+  OWNER: 0,
+  ADMINISTRATOR: 1,
+  MANAGER: 2,
+  ACCOUNTANT: 3,
+  SALES: 4,
+  INVENTORY: 4,
+  CASHIER: 5,
+  EMPLOYEE: 6,
+  AUDITOR: 6,
+};
+
+export function isHigherPrivilege(candidate: Role, actor: Role): boolean {
+  return ROLE_RANK[candidate] < ROLE_RANK[actor];
+}
+
+export const actorTypeSchema = z.enum(["HUMAN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW"]);
+export type ActorType = z.infer<typeof actorTypeSchema>;
+
+export const uuidSchema = z.string().uuid();
+export const nullableUuidSchema = z.string().uuid().nullable();
+
+export const accessTokenClaimsSchema = z
+  .object({
+    sub: uuidSchema,
+    sid: uuidSchema,
+    typ: z.enum(["access", "preauth"]),
+    org: uuidSchema.optional(),
+    mid: uuidSchema.optional(),
+    bid: nullableUuidSchema.optional(),
+    br: nullableUuidSchema.optional(),
+    role: roleSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.typ === "access") {
+      if (!value.org) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "organizationId is required", path: ["org"] });
+      }
+      if (!value.mid) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "membershipId is required", path: ["mid"] });
+      }
+    }
+  });
+
+export type AccessTokenClaims = z.infer<typeof accessTokenClaimsSchema>;
+
 export const errorEnvelopeSchema = z.object({
   error: z.object({
     code: z.string(),
@@ -60,6 +106,15 @@ export const selectContextRequestSchema = z.object({
   branchId: z.string().uuid().optional(),
 });
 
+export const refreshRequestSchema = z.object({
+  refreshToken: z.string().min(16).optional(),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(12).max(128),
+});
+
 export const tenantContextSchema = z.object({
   userId: z.string().uuid(),
   tenantId: z.string().uuid(),
@@ -71,6 +126,19 @@ export const tenantContextSchema = z.object({
 
 export type TenantContextDto = z.infer<typeof tenantContextSchema>;
 
+export const workspaceOptionSchema = z.object({
+  organizationId: z.string().uuid(),
+  organizationName: z.string(),
+  membershipId: z.string().uuid(),
+  role: roleSchema,
+  businessId: z.string().uuid().nullable(),
+  businessName: z.string().nullable(),
+  branchId: z.string().uuid().nullable(),
+  branchName: z.string().nullable(),
+});
+
+export type WorkspaceOption = z.infer<typeof workspaceOptionSchema>;
+
 export const Permission = {
   TENANT_READ: "tenant.read",
   TENANT_MANAGE: "tenant.manage",
@@ -81,6 +149,9 @@ export const Permission = {
   ONBOARDING_COMPLETE: "onboarding.complete",
   BRANCHES_READ: "branches.read",
   BRANCHES_MANAGE: "branches.manage",
+  ORG_SETTINGS_MANAGE: "org.settings.manage",
+  BUSINESS_SETTINGS_MANAGE: "business.settings.manage",
+  BRANCH_SETTINGS_MANAGE: "branch.settings.manage",
 } as const;
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission];
@@ -106,6 +177,18 @@ export const updateBrandingSchema = z.object({
   accentColor: hexColor.optional(),
 });
 
+export const updateBusinessSchema = z.object({
+  name: z.string().min(1).max(160).optional(),
+  countryCode: z.string().length(2).toUpperCase().optional(),
+  baseCurrencyCode: z.string().length(3).toUpperCase().optional(),
+  timezone: z.string().min(1).optional(),
+  industryCode: z.string().min(1).max(64).nullable().optional(),
+});
+
+export const updateBranchSchema = z.object({
+  name: z.string().min(1).max(160),
+});
+
 export const createInvitationSchema = z.object({
   email: z.string().email(),
   role: roleSchema,
@@ -123,4 +206,3 @@ export const createBranchSchema = z.object({
   name: z.string().min(1).max(160),
   businessId: z.string().uuid().optional(),
 });
-

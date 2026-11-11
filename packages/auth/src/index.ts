@@ -1,18 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import * as argon2 from "argon2";
-import { SignJWT, jwtVerify, type JWTPayload } from "jose";
-import type { Role } from "@bizora/contracts";
+import { SignJWT, jwtVerify } from "jose";
+import { accessTokenClaimsSchema, type AccessTokenClaims } from "@bizora/contracts";
 
 export const SESSION_COOKIE = "bizora_session";
+export const REFRESH_COOKIE = "bizora_refresh";
 
-export type AccessTokenClaims = {
-  sub: string;
-  org: string;
-  bid: string | null;
-  br: string | null;
-  mid: string;
-  role: Role;
-};
+export type { AccessTokenClaims };
 
 export async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, { type: argon2.argon2id });
@@ -22,6 +16,14 @@ export async function verifyPassword(hash: string, password: string): Promise<bo
   return argon2.verify(hash, password);
 }
 
+export function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function newRefreshToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
 function secretKey(secret: string): Uint8Array {
   return new TextEncoder().encode(secret);
 }
@@ -29,48 +31,40 @@ function secretKey(secret: string): Uint8Array {
 export async function signAccessToken(
   claims: AccessTokenClaims,
   secret: string,
-  expiresIn: string,
+  expiresIn: string | number,
 ): Promise<string> {
+  const parsed = accessTokenClaimsSchema.parse(claims);
   return new SignJWT({
-    org: claims.org,
-    bid: claims.bid,
-    br: claims.br,
-    mid: claims.mid,
-    role: claims.role,
+    sid: parsed.sid,
+    typ: parsed.typ,
+    org: parsed.org,
+    bid: parsed.bid ?? null,
+    br: parsed.br ?? null,
+    mid: parsed.mid,
+    role: parsed.role,
   })
     .setProtectedHeader({ alg: "HS256" })
-    .setSubject(claims.sub)
+    .setSubject(parsed.sub)
     .setIssuedAt()
     .setJti(randomUUID())
     .setExpirationTime(expiresIn)
     .sign(secretKey(secret));
 }
 
-export async function verifyAccessToken(
-  token: string,
-  secret: string,
-): Promise<AccessTokenClaims> {
+export async function verifyAccessToken(token: string, secret: string): Promise<AccessTokenClaims> {
   const { payload } = await jwtVerify(token, secretKey(secret), {
     algorithms: ["HS256"],
   });
-  return toClaims(payload);
-}
-
-function toClaims(payload: JWTPayload): AccessTokenClaims {
-  if (typeof payload.sub !== "string") {
-    throw new Error("Invalid token subject");
-  }
-  if (typeof payload.org !== "string" || typeof payload.mid !== "string") {
-    throw new Error("Invalid tenant claims");
-  }
-  return {
+  return accessTokenClaimsSchema.parse({
     sub: payload.sub,
+    sid: payload.sid,
+    typ: payload.typ,
     org: payload.org,
-    bid: typeof payload.bid === "string" ? payload.bid : null,
-    br: typeof payload.br === "string" ? payload.br : null,
     mid: payload.mid,
-    role: payload.role as Role,
-  };
+    bid: payload.bid ?? null,
+    br: payload.br ?? null,
+    role: payload.role,
+  });
 }
 
 export function readBearerToken(header: string | undefined): string | null {
@@ -78,4 +72,13 @@ export function readBearerToken(header: string | undefined): string | null {
   const [scheme, token] = header.split(" ");
   if (scheme?.toLowerCase() !== "bearer" || !token) return null;
   return token;
+}
+
+export function readCookieValue(cookieHeader: string | undefined, name: string): string | null {
+  if (!cookieHeader) return null;
+  const found = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  return found ? found.slice(name.length + 1) : null;
 }

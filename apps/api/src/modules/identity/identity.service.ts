@@ -1,13 +1,16 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { hashPassword, signAccessToken, verifyPassword } from "@bizora/auth";
+import { hashPassword, verifyPassword } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
 import {
+  changePasswordSchema,
   loginRequestSchema,
   registerRequestSchema,
   selectContextRequestSchema,
   type RegisterRequest,
+  type Role,
+  type WorkspaceOption,
 } from "@bizora/contracts";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId, slugify } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
@@ -15,6 +18,24 @@ import { branches, businesses, memberships, organizations, users } from "../../d
 import { APP_ENV, DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { TenantRepository } from "../tenant/tenant.repository.js";
+import { SessionService, type IssuedTokens } from "./session.service.js";
+
+export type AuthMeta = { correlationId: string; ip?: string | null; userAgent?: string | null };
+
+export type AuthPayload = {
+  user: { id: string; email: string; displayName: string };
+  needsWorkspaceSelection: boolean;
+  workspaces: WorkspaceOption[];
+  accessToken: string | null;
+  refreshToken: string | null;
+  tenant: {
+    tenantId: string;
+    businessId: string | null;
+    branchId: string | null;
+    membershipId: string;
+    role: string;
+  } | null;
+};
 
 @Injectable()
 export class IdentityService {
@@ -23,9 +44,10 @@ export class IdentityService {
     @Inject(APP_ENV) private readonly env: AppEnv,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
+    @Inject(SessionService) private readonly sessions: SessionService,
   ) {}
 
-  async register(input: RegisterRequest, correlationId: string) {
+  async register(input: RegisterRequest, meta: AuthMeta): Promise<AuthPayload> {
     const payload = registerRequestSchema.parse(input);
     const existing = await this.findUserByEmail(payload.email);
     if (existing) {
@@ -94,10 +116,14 @@ export class IdentityService {
       action: "identity.register",
       entityType: "organization",
       entityId: tenantId,
-      correlationId,
+      correlationId: meta.correlationId,
+      businessId,
+      branchId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
     });
 
-    return this.issueSession({
+    return this.issueWorkspaceSession({
       userId,
       email: payload.email.toLowerCase(),
       displayName: payload.displayName,
@@ -106,47 +132,72 @@ export class IdentityService {
       branchId,
       membershipId,
       role: "OWNER",
+      meta,
     });
   }
 
-  async login(raw: unknown, correlationId: string) {
+  async login(raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
     const payload = loginRequestSchema.parse(raw);
     const user = await this.findUserByEmail(payload.email);
     if (!user || !(await verifyPassword(user.passwordHash, payload.password))) {
       throw new ApiError("INVALID_CREDENTIALS", "Email or password is incorrect.", 401);
     }
 
-    const [membership] = await this.db
-      .select()
-      .from(memberships)
-      .where(eq(memberships.userId, user.id))
-      .limit(1);
-    if (!membership) {
+    const workspaces = await this.listWorkspaces(user.id);
+    if (workspaces.length === 0) {
       throw new ApiError("NO_MEMBERSHIP", "This user has no tenant membership.", 403);
     }
 
+    const only = workspaces[0];
     await this.audit.record({
-      tenantId: membership.tenantId,
+      tenantId: workspaces.length === 1 && only ? only.organizationId : null,
       actorUserId: user.id,
       action: "identity.login",
       entityType: "user",
       entityId: user.id,
-      correlationId,
+      correlationId: meta.correlationId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
     });
 
-    return this.issueSession({
+    if (workspaces.length > 1) {
+      const tokens = await this.sessions.issue({
+        userId: user.id,
+        tenantId: null,
+        membershipId: null,
+        businessId: null,
+        branchId: null,
+        typ: "preauth",
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
+      return {
+        user: { id: user.id, email: user.email, displayName: user.displayName },
+        needsWorkspaceSelection: true,
+        workspaces,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        tenant: null,
+      };
+    }
+
+    if (!only) {
+      throw new ApiError("NO_MEMBERSHIP", "This user has no tenant membership.", 403);
+    }
+    return this.issueWorkspaceSession({
       userId: user.id,
       email: user.email,
       displayName: user.displayName,
-      tenantId: membership.tenantId,
-      businessId: membership.businessId,
-      branchId: membership.branchId,
-      membershipId: membership.id,
-      role: membership.role,
+      tenantId: only.organizationId,
+      businessId: only.businessId,
+      branchId: only.branchId,
+      membershipId: only.membershipId,
+      role: only.role,
+      meta,
     });
   }
 
-  async selectContext(userId: string, raw: unknown) {
+  async selectContext(userId: string, sessionId: string, raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
     const payload = selectContextRequestSchema.parse(raw);
     const membership = await this.tenants.findMembership(payload.organizationId, userId);
     if (!membership) {
@@ -171,12 +222,16 @@ export class IdentityService {
       if (!branch) {
         throw new ApiError("FORBIDDEN", "Branch is outside the authenticated tenant.", 403);
       }
+      if (businessId && branch.businessId !== businessId) {
+        throw new ApiError("FORBIDDEN", "Branch does not belong to the selected business.", 403);
+      }
     }
     const user = await this.findUserById(userId);
     if (!user) {
       throw new ApiError("UNAUTHENTICATED", "User was not found.", 401);
     }
-    return this.issueSession({
+    await this.sessions.revoke(sessionId, userId);
+    return this.issueWorkspaceSession({
       userId: user.id,
       email: user.email,
       displayName: user.displayName,
@@ -185,7 +240,29 @@ export class IdentityService {
       branchId,
       membershipId: membership.id,
       role: membership.role,
+      meta,
     });
+  }
+
+  async refresh(rawToken: string, meta: AuthMeta) {
+    const tokens = await this.sessions.refresh(rawToken, meta);
+    return tokens;
+  }
+
+  async logout(userId: string, sessionId: string) {
+    await this.sessions.revoke(sessionId, userId);
+  }
+
+  async changePassword(userId: string, raw: unknown) {
+    const payload = changePasswordSchema.parse(raw);
+    const user = await this.findUserById(userId);
+    if (!user || !(await verifyPassword(user.passwordHash, payload.currentPassword))) {
+      throw new ApiError("INVALID_CREDENTIALS", "Current password is incorrect.", 401);
+    }
+    await this.db
+      .update(users)
+      .set({ passwordHash: await hashPassword(payload.newPassword), updatedBy: userId })
+      .where(eq(users.id, userId));
   }
 
   async me(userId: string, tenantId: string) {
@@ -196,7 +273,73 @@ export class IdentityService {
       user: user ? { id: user.id, email: user.email, displayName: user.displayName } : null,
       organization,
       membership,
+      workspaces: await this.listWorkspaces(userId),
       onboardingCompleted: Boolean(organization?.onboardingCompletedAt),
+    };
+  }
+
+  async listWorkspaces(userId: string): Promise<WorkspaceOption[]> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.userId, userId), eq(memberships.status, "ACTIVE")));
+    const result: WorkspaceOption[] = [];
+    for (const membership of rows) {
+      const organization = await this.tenants.findOrganization(membership.tenantId);
+      const business = membership.businessId
+        ? await this.tenants.findBusiness(membership.tenantId, membership.businessId)
+        : null;
+      const branch = membership.branchId
+        ? await this.tenants.findBranch(membership.tenantId, membership.branchId)
+        : null;
+      result.push({
+        organizationId: membership.tenantId,
+        organizationName: organization?.name ?? "Workspace",
+        membershipId: membership.id,
+        role: membership.role as Role,
+        businessId: membership.businessId,
+        businessName: business?.name ?? null,
+        branchId: membership.branchId,
+        branchName: branch?.name ?? null,
+      });
+    }
+    return result;
+  }
+
+  private async issueWorkspaceSession(input: {
+    userId: string;
+    email: string;
+    displayName: string;
+    tenantId: string;
+    businessId: string | null;
+    branchId: string | null;
+    membershipId: string;
+    role: string;
+    meta: AuthMeta;
+  }): Promise<AuthPayload> {
+    const tokens: IssuedTokens = await this.sessions.issue({
+      userId: input.userId,
+      tenantId: input.tenantId,
+      membershipId: input.membershipId,
+      businessId: input.businessId,
+      branchId: input.branchId,
+      typ: "access",
+      ip: input.meta.ip,
+      userAgent: input.meta.userAgent,
+    });
+    return {
+      user: { id: input.userId, email: input.email, displayName: input.displayName },
+      needsWorkspaceSelection: false,
+      workspaces: await this.listWorkspaces(input.userId),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      tenant: {
+        tenantId: input.tenantId,
+        businessId: input.businessId,
+        branchId: input.branchId,
+        membershipId: input.membershipId,
+        role: input.role,
+      },
     };
   }
 
@@ -208,40 +351,5 @@ export class IdentityService {
   private async findUserById(id: string) {
     const [row] = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
     return row ?? null;
-  }
-
-  private async issueSession(input: {
-    userId: string;
-    email: string;
-    displayName: string;
-    tenantId: string;
-    businessId: string | null;
-    branchId: string | null;
-    membershipId: string;
-    role: string;
-  }) {
-    const accessToken = await signAccessToken(
-      {
-        sub: input.userId,
-        org: input.tenantId,
-        bid: input.businessId,
-        br: input.branchId,
-        mid: input.membershipId,
-        role: input.role as "OWNER",
-      },
-      this.env.JWT_SECRET,
-      this.env.JWT_ACCESS_TTL,
-    );
-    return {
-      accessToken,
-      user: { id: input.userId, email: input.email, displayName: input.displayName },
-      tenant: {
-        tenantId: input.tenantId,
-        businessId: input.businessId,
-        branchId: input.branchId,
-        membershipId: input.membershipId,
-        role: input.role,
-      },
-    };
   }
 }

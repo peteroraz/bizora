@@ -1,12 +1,18 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { completeOnboardingSchema, updateBrandingSchema } from "@bizora/contracts";
-import { eq } from "drizzle-orm";
+import { completeOnboardingSchema, updateBrandingSchema, updateBranchSchema, updateBusinessSchema } from "@bizora/contracts";
+import { and, eq } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
+import {
+  canManageBranchSettings,
+  canManageBusinessSettings,
+  canManageOrganizationSettings,
+} from "../../common/tenant-scope.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase } from "../../db/database.js";
 import { branches, businesses, organizations } from "../../db/schema.js";
-import { DB } from "../../tokens.js";
+import { DB, FINANCIAL_LEDGER } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
+import type { FinancialLedgerPort } from "./financial-ledger.port.js";
 import { TenantRepository } from "./tenant.repository.js";
 
 @Injectable()
@@ -15,6 +21,7 @@ export class OnboardingService {
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
+    @Inject(FINANCIAL_LEDGER) private readonly ledger: FinancialLedgerPort,
   ) {}
 
   async complete(tenant: TenantContext, raw: unknown) {
@@ -36,6 +43,25 @@ export class OnboardingService {
     const businessId = tenant.businessId;
     if (!businessId) {
       throw new ApiError("BUSINESS_REQUIRED", "Select a business before completing onboarding.", 400);
+    }
+    const business = await this.tenants.findBusiness(tenant.tenantId, businessId);
+    if (!business) {
+      throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
+    }
+
+    const countryChanged = business.countryCode !== payload.countryCode;
+    const currencyChanged = business.baseCurrencyCode !== payload.baseCurrencyCode;
+    if (countryChanged || currencyChanged) {
+      if (!canManageBusinessSettings(tenant, businessId)) {
+        throw new ApiError("FORBIDDEN", "Business country and currency require business or organization authority.", 403);
+      }
+      if (currencyChanged && (await this.ledger.hasPostedTransactions(tenant.tenantId, businessId))) {
+        throw new ApiError("CURRENCY_LOCKED", "Base currency cannot change after financial transactions exist.", 409);
+      }
+    }
+
+    if (payload.organizationName && !canManageOrganizationSettings(tenant)) {
+      throw new ApiError("FORBIDDEN", "Organization settings require organization-wide authority.", 403);
     }
 
     await this.db.transaction(async (tx) => {
@@ -61,13 +87,13 @@ export class OnboardingService {
           industryCode: payload.industryCode,
           updatedBy: tenant.userId,
         })
-        .where(eq(businesses.id, businessId));
+        .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)));
 
       if (payload.branchName && tenant.branchId) {
         await tx
           .update(branches)
           .set({ name: payload.branchName, updatedBy: tenant.userId })
-          .where(eq(branches.id, tenant.branchId));
+          .where(and(eq(branches.id, tenant.branchId), eq(branches.tenantId, tenant.tenantId)));
       }
     });
 
@@ -78,12 +104,17 @@ export class OnboardingService {
       entityType: "organization",
       entityId: tenant.tenantId,
       correlationId: tenant.correlationId,
+      businessId,
+      branchId: tenant.branchId,
     });
 
     return this.tenants.findOrganization(tenant.tenantId);
   }
 
   async updateBranding(tenant: TenantContext, raw: unknown) {
+    if (!canManageOrganizationSettings(tenant)) {
+      throw new ApiError("FORBIDDEN", "Organization settings require organization-wide authority.", 403);
+    }
     const payload = updateBrandingSchema.parse(raw);
     await this.db
       .update(organizations)
@@ -106,5 +137,57 @@ export class OnboardingService {
       correlationId: tenant.correlationId,
     });
     return this.tenants.findOrganization(tenant.tenantId);
+  }
+
+  async updateBusiness(tenant: TenantContext, businessId: string, raw: unknown) {
+    const payload = updateBusinessSchema.parse(raw);
+    if (!canManageBusinessSettings(tenant, businessId)) {
+      throw new ApiError("FORBIDDEN", "You cannot change business-level configuration.", 403);
+    }
+    const business = await this.tenants.findBusiness(tenant.tenantId, businessId);
+    if (!business) {
+      throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
+    }
+    const currencyChanged =
+      payload.baseCurrencyCode !== undefined && payload.baseCurrencyCode !== business.baseCurrencyCode;
+    if (currencyChanged && (await this.ledger.hasPostedTransactions(tenant.tenantId, businessId))) {
+      throw new ApiError("CURRENCY_LOCKED", "Base currency cannot change after financial transactions exist.", 409);
+    }
+    const [updated] = await this.db
+      .update(businesses)
+      .set({
+        ...(payload.name ? { name: payload.name } : {}),
+        ...(payload.countryCode ? { countryCode: payload.countryCode } : {}),
+        ...(payload.baseCurrencyCode ? { baseCurrencyCode: payload.baseCurrencyCode } : {}),
+        ...(payload.timezone ? { timezone: payload.timezone } : {}),
+        ...(payload.industryCode !== undefined ? { industryCode: payload.industryCode } : {}),
+        updatedBy: tenant.userId,
+      })
+      .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)))
+      .returning();
+    if (!updated) {
+      throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
+    }
+    return updated;
+  }
+
+  async updateBranch(tenant: TenantContext, branchId: string, raw: unknown) {
+    const payload = updateBranchSchema.parse(raw);
+    const branch = await this.tenants.findBranch(tenant.tenantId, branchId);
+    if (!branch) {
+      throw new ApiError("BRANCH_NOT_FOUND", "Branch was not found.", 404);
+    }
+    if (!canManageBranchSettings(tenant, branch)) {
+      throw new ApiError("FORBIDDEN", "You cannot change this branch.", 403);
+    }
+    const [updated] = await this.db
+      .update(branches)
+      .set({ name: payload.name, updatedBy: tenant.userId })
+      .where(and(eq(branches.id, branchId), eq(branches.tenantId, tenant.tenantId)))
+      .returning();
+    if (!updated) {
+      throw new ApiError("BRANCH_NOT_FOUND", "Branch was not found.", 404);
+    }
+    return updated;
   }
 }

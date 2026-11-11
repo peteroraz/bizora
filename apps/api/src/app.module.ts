@@ -1,4 +1,5 @@
 import { DynamicModule, Module } from "@nestjs/common";
+import { ThrottlerModule } from "@nestjs/throttler";
 import type { AppEnv } from "@bizora/config/env";
 import type { Logger } from "pino";
 import { CoreModule } from "./core.module.js";
@@ -22,6 +23,14 @@ export class AppModule {
       module: AppModule,
       imports: [
         CoreModule.forRoot(options),
+        ThrottlerModule.forRoot({
+          throttlers: [
+            {
+              ttl: options.env.THROTTLE_TTL_MS,
+              limit: options.env.THROTTLE_AUTH_LIMIT,
+            },
+          ],
+        }),
         AuditModule,
         HealthModule,
         TenantModule,

@@ -1,4 +1,4 @@
-import { char, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { char, foreignKey, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -38,7 +38,10 @@ export const businesses = pgTable(
     industryCode: varchar("industry_code", { length: 64 }),
     ...timestamps,
   },
-  (table) => [index("businesses_tenant_id_idx").on(table.tenantId)],
+  (table) => [
+    index("businesses_tenant_id_idx").on(table.tenantId),
+    uniqueIndex("businesses_tenant_id_id_key").on(table.tenantId, table.id),
+  ],
 );
 
 export const branches = pgTable(
@@ -53,6 +56,12 @@ export const branches = pgTable(
   (table) => [
     index("branches_tenant_id_idx").on(table.tenantId),
     index("branches_business_id_idx").on(table.businessId),
+    uniqueIndex("branches_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "branches_tenant_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
   ],
 );
 
@@ -71,6 +80,16 @@ export const memberships = pgTable(
   (table) => [
     uniqueIndex("memberships_tenant_user_idx").on(table.tenantId, table.userId),
     index("memberships_user_id_idx").on(table.userId),
+    foreignKey({
+      name: "memberships_tenant_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "memberships_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
   ],
 );
 
@@ -120,6 +139,39 @@ export const invitations = pgTable(
   (table) => [
     index("invitations_tenant_id_idx").on(table.tenantId),
     index("invitations_email_idx").on(table.email),
+    foreignKey({
+      name: "invitations_tenant_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "invitations_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+  ],
+);
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    tenantId: uuid("tenant_id"),
+    membershipId: uuid("membership_id"),
+    refreshTokenHash: varchar("refresh_token_hash", { length: 64 }).notNull().unique(),
+    familyId: uuid("family_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    replacedBy: uuid("replaced_by"),
+    userAgent: varchar("user_agent", { length: 512 }),
+    ip: varchar("ip", { length: 64 }),
+  },
+  (table) => [
+    index("sessions_user_id_idx").on(table.userId),
+    index("sessions_family_id_idx").on(table.familyId),
   ],
 );
 
@@ -134,6 +186,12 @@ export const auditEvents = pgTable(
     entityId: uuid("entity_id"),
     correlationId: varchar("correlation_id", { length: 64 }).notNull(),
     metadataJson: text("metadata_json"),
+    businessId: uuid("business_id"),
+    branchId: uuid("branch_id"),
+    actorType: varchar("actor_type", { length: 24 }).notNull().default("HUMAN"),
+    source: varchar("source", { length: 64 }),
+    ip: varchar("ip", { length: 64 }),
+    userAgent: varchar("user_agent", { length: 512 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -153,6 +211,7 @@ export const schema = {
   countryPacks,
   industryPacks,
   invitations,
+  sessions,
   auditEvents,
 };
 

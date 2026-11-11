@@ -30,6 +30,11 @@ export default function LoginPage() {
       setError(payload.error?.message ?? "Unable to sign in.");
       return;
     }
+    if (payload.data?.needsWorkspaceSelection) {
+      sessionStorage.setItem("bizora.workspaces", JSON.stringify(payload.data.workspaces ?? []));
+      router.push("/select-workspace");
+      return;
+    }
     const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((r) => r.json());
     router.push(me.data?.onboardingCompleted === false ? "/app/onboarding" : "/app");
   }

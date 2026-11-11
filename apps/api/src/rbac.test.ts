@@ -19,6 +19,11 @@ const env: AppEnv = {
   JWT_ACCESS_TTL: "1h",
   JWT_REFRESH_TTL: "7d",
   WEB_ORIGIN: "http://localhost:3000",
+  COOKIE_SECURE: false,
+  COOKIE_SAMESITE: "lax",
+  THROTTLE_TTL_MS: 60_000,
+  THROTTLE_AUTH_LIMIT: 100,
+  INVITE_TOKEN_EXPOSE: true,
 };
 
 async function registerOwner(http: unknown, email: string, org: string) {

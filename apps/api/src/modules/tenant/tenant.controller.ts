@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { Permission, createBranchSchema, success } from "@bizora/contracts";
+import { isBranchScope } from "../../common/tenant-scope.js";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
@@ -90,10 +91,29 @@ export class TenantController {
     return success({ branch }, tenant.correlationId);
   }
 
+  @Patch("businesses/:id")
+  @UseGuards(TenantGuard, PermissionGuard)
+  @RequirePermissions(Permission.BUSINESS_SETTINGS_MANAGE)
+  async updateBusiness(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
+    const business = await this.onboarding.updateBusiness(tenant, id, body);
+    return success({ business }, tenant.correlationId);
+  }
+
+  @Patch("branches/:id")
+  @UseGuards(TenantGuard, PermissionGuard)
+  @RequirePermissions(Permission.BRANCH_SETTINGS_MANAGE)
+  async updateBranch(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
+    const branch = await this.onboarding.updateBranch(tenant, id, body);
+    return success({ branch }, tenant.correlationId);
+  }
+
   @Post("branches")
   @UseGuards(TenantGuard, PermissionGuard)
   @RequirePermissions(Permission.BRANCHES_MANAGE)
   async createBranch(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    if (isBranchScope(tenant)) {
+      throw new ApiError("FORBIDDEN", "Branch-scoped users cannot create additional branches.", 403);
+    }
     const payload = createBranchSchema.parse(body);
     const businessId = payload.businessId ?? tenant.businessId;
     if (!businessId) {

@@ -80,7 +80,7 @@ export default function SettingsPage() {
       setError(payload.error?.message ?? "Could not send invitation.");
       return;
     }
-    setInviteToken(payload.data.invitation.token as string);
+    setInviteToken((payload.data.invitation.token as string | undefined) ?? null);
     await refresh();
   }
 
