@@ -1,4 +1,5 @@
-import { char, foreignKey, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { char, check, foreignKey, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -79,6 +80,7 @@ export const memberships = pgTable(
   },
   (table) => [
     uniqueIndex("memberships_tenant_user_idx").on(table.tenantId, table.userId),
+    uniqueIndex("memberships_tenant_id_id_key").on(table.tenantId, table.id),
     index("memberships_user_id_idx").on(table.userId),
     foreignKey({
       name: "memberships_tenant_business_fk",
@@ -174,6 +176,22 @@ export const sessions = pgTable(
   (table) => [
     index("sessions_user_id_idx").on(table.userId),
     index("sessions_family_id_idx").on(table.familyId),
+    foreignKey({
+      name: "sessions_tenant_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "sessions_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "sessions_tenant_membership_fk",
+      columns: [table.tenantId, table.membershipId],
+      foreignColumns: [memberships.tenantId, memberships.id],
+    }),
+    check("sessions_scope_ck", sql`${table.branchId} IS NULL OR ${table.businessId} IS NOT NULL`),
   ],
 );
 

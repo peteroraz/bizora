@@ -10,6 +10,7 @@ import { memberships, schema } from "./db/schema.js";
 import { loadMigrationSql } from "./db/sql.js";
 import type { INestApplication } from "@nestjs/common";
 import type { AppEnv } from "@bizora/config/env";
+import { signAccessToken } from "@bizora/auth";
 
 const env: AppEnv = {
   NODE_ENV: "test",
@@ -151,12 +152,66 @@ describe("tenant isolation", () => {
     expect(me.body.data.tenant.tenantId).not.toBe("00000000-0000-4000-8000-000000000099");
   });
 
-  it("rejects Tenant B business and branch ids in scope headers", async () => {
-    await request(app.getHttpServer())
+  it("ignores Tenant B business and branch ids in scope headers", async () => {
+    const me = await request(app.getHttpServer())
       .get("/api/v1/auth/me")
       .set("authorization", `Bearer ${tenantAToken}`)
       .set("x-business-id", tenantBBusinessId)
       .set("x-branch-id", tenantBBranchId)
+      .expect(200);
+
+    expect(me.body.data.tenant.businessId).toBe(tenantABusinessId);
+    expect(me.body.data.tenant.branchId).toBe(tenantABranchId);
+    expect(me.body.data.tenant.tenantId).not.toBeUndefined();
+  });
+
+  it("rejects a business-scoped token whose claims point outside membership", async () => {
+    const invited = await request(app.getHttpServer())
+      .post("/api/v1/invitations")
+      .set("authorization", `Bearer ${tenantAToken}`)
+      .send({
+        email: "scoped-claims@tenant-a.test",
+        role: "ADMINISTRATOR",
+        businessId: tenantABusinessId,
+        branchId: tenantABranchId,
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/invitations/accept")
+      .send({
+        token: invited.body.data.invitation.token,
+        displayName: "Scoped",
+        password: "LocalOnly!Passw0rd",
+      })
+      .expect(201);
+
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "scoped-claims@tenant-a.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    const payload = JSON.parse(
+      Buffer.from((login.body.data.accessToken as string).split(".")[1], "base64url").toString(),
+    ) as { sub: string; sid: string; org: string; mid: string; bid: string | null; br: string | null };
+
+    const forged = await signAccessToken(
+      {
+        sub: payload.sub,
+        sid: payload.sid,
+        typ: "access",
+        org: payload.org,
+        mid: payload.mid,
+        bid: tenantBBusinessId,
+        br: tenantBBranchId,
+        role: "ADMINISTRATOR",
+      },
+      env.JWT_SECRET,
+      "1h",
+    );
+
+    await request(app.getHttpServer())
+      .get("/api/v1/auth/me")
+      .set("authorization", `Bearer ${forged}`)
       .expect(403);
   });
 

@@ -2,7 +2,7 @@
 
 ## Hierarchy
 
-Organization (tenant) → Business → Branch. Every tenant-owned row stores `tenant_id`. Client `X-Tenant-Id` / `X-Organization-Id` headers are ignored.
+Organization (tenant) → Business → Branch. Every tenant-owned row stores `tenant_id`. Client `X-Tenant-Id`, `X-Organization-Id`, `X-Business-Id`, and `X-Branch-Id` headers are ignored. Active business/branch comes from the verified session, not from the request.
 
 ## Membership scope
 
@@ -23,6 +23,8 @@ Login considers **ACTIVE** memberships only.
 - 2+ → `needsWorkspaceSelection` with safe workspace metadata; `/select-workspace` calls `POST /api/v1/auth/select-context`
 
 Switching to an organization without an active membership returns 403.
+
+`POST /api/v1/auth/select-context` is the only way to change the active business or branch. Org-wide members who omit `businessId` receive the same default as login: the sole business (and its sole branch) when the organization has exactly one. Business-scoped members with exactly one branch receive that branch automatically.
 
 ## Session lifecycle
 

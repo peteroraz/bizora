@@ -171,6 +171,86 @@ describe("sprint 2.5 security", () => {
     expect(decode(loggedIn.body.data.accessToken as string).bid).toBe(registerBid);
   });
 
+  it("ignores same-tenant business headers and keeps session scope", async () => {
+    const me = await request(app.getHttpServer())
+      .get("/api/v1/auth/me")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .set("x-business-id", businessAId)
+      .set("x-branch-id", branchAId)
+      .expect(200);
+    expect(me.body.data.tenant.businessId).toBe(businessBId);
+    expect(me.body.data.tenant.branchId).toBe(branchBId);
+  });
+
+  it("auto-selects the only business on select-context when omitted", async () => {
+    const solo = await request(app.getHttpServer())
+      .post("/api/v1/auth/register")
+      .send({
+        email: "picker@tenant-p.test",
+        password: "LocalOnly!Passw0rd",
+        displayName: "Picker",
+        organizationName: "Picker Org",
+        countryCode: "NG",
+        baseCurrencyCode: "NGN",
+        timezone: "Africa/Lagos",
+      })
+      .expect(201);
+    const soloOrg = solo.body.data.tenant.tenantId as string;
+    const soloBid = solo.body.data.tenant.businessId as string;
+
+    const invite = await request(app.getHttpServer())
+      .post("/api/v1/invitations")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .send({ email: "picker@tenant-p.test", role: "SALES" })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post("/api/v1/invitations/accept")
+      .send({ token: invite.body.data.invitation.token, displayName: "Picker" })
+      .expect(201);
+
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "picker@tenant-p.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    expect(login.body.data.needsWorkspaceSelection).toBe(true);
+
+    const single = await request(app.getHttpServer())
+      .post("/api/v1/auth/select-context")
+      .set("authorization", `Bearer ${login.body.data.accessToken}`)
+      .send({ organizationId: soloOrg })
+      .expect(201);
+    expect(decode(single.body.data.accessToken as string).bid).toBe(soloBid);
+
+    const dual = await request(app.getHttpServer())
+      .post("/api/v1/auth/select-context")
+      .set("authorization", `Bearer ${single.body.data.accessToken}`)
+      .send({ organizationId: tenantId })
+      .expect(201);
+    expect(decode(dual.body.data.accessToken as string).bid ?? null).toBeNull();
+  });
+
+  it("auto-selects the only branch for a business-scoped membership", async () => {
+    const invite = await request(app.getHttpServer())
+      .post("/api/v1/invitations")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .send({ email: "biz-scoped@tenant-a.test", role: "SALES", businessId: businessAId })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post("/api/v1/invitations/accept")
+      .send({
+        token: invite.body.data.invitation.token,
+        displayName: "Biz Scoped",
+        password: "LocalOnly!Passw0rd",
+      })
+      .expect(201);
+    const loggedIn = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "biz-scoped@tenant-a.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    expect(decode(loggedIn.body.data.accessToken as string).bid).toBe(businessAId);
+    expect(decode(loggedIn.body.data.accessToken as string).br).toBe(branchAId);
+  });
+
   it("rotates refresh tokens with at most one winner", async () => {
     const minted = await request(app.getHttpServer())
       .post("/api/v1/auth/login")
