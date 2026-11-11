@@ -16,6 +16,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
+    "@bizora/config": "workspace:*",
+    "eslint": "^9.28.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
   }

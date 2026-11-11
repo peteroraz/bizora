@@ -16,7 +16,9 @@
     "pino": "^9.7.0"
   },
   "devDependencies": {
+    "@bizora/config": "workspace:*",
     "@types/node": "^22.15.21",
+    "eslint": "^9.28.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"

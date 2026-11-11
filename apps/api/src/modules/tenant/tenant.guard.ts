@@ -11,7 +11,7 @@ import { TenantRepository } from "./tenant.repository.js";
 export class TenantGuard implements CanActivate {
   constructor(
     @Inject(APP_ENV) private readonly env: AppEnv,
-    private readonly tenants: TenantRepository,
+    @Inject(TenantRepository) private readonly tenants: TenantRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

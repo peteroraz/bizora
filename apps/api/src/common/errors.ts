@@ -72,6 +72,8 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       return;
     }
 
+    console.error(exception);
+
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: {
         code: "INTERNAL_ERROR",

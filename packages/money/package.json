@@ -19,6 +19,8 @@
     "decimal.js": "^10.5.0"
   },
   "devDependencies": {
+    "@bizora/config": "workspace:*",
+    "eslint": "^9.28.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
   }

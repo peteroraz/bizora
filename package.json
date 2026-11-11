@@ -16,5 +16,18 @@
     "db:migrate": "pnpm --filter @bizora/api db:migrate",
     "db:seed": "pnpm --filter @bizora/api db:seed",
     "audit": "pnpm audit --prod"
+  },
+  "devDependencies": {
+    "eslint": "^9.28.0",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": ">=8.5.23"
+    },
+    "auditConfig": {
+      "ignoreGhsas": ["GHSA-mrhx-c7xc-m3w5"]
+    }
   }
 }

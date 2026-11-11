@@ -24,8 +24,10 @@
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
+    "@bizora/config": "workspace:*",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
+    "eslint": "^9.28.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
   }

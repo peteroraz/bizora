@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { SESSION_COOKIE } from "@bizora/auth";
 import { registerRequestSchema, success } from "@bizora/contracts";
 import type { Request, Response } from "express";
@@ -8,7 +8,7 @@ import { IdentityService } from "./identity.service.js";
 
 @Controller("api/v1/auth")
 export class IdentityController {
-  constructor(private readonly identity: IdentityService) {}
+  constructor(@Inject(IdentityService) private readonly identity: IdentityService) {}
 
   @Post("register")
   async register(

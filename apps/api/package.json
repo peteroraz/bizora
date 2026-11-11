@@ -23,7 +23,7 @@
     "@nestjs/core": "^11.1.2",
     "@nestjs/platform-express": "^11.1.2",
     "cookie-parser": "^1.4.7",
-    "drizzle-orm": "^0.44.2",
+    "drizzle-orm": "^0.45.2",
     "pino": "^9.7.0",
     "pino-http": "^10.5.0",
     "postgres": "^3.4.7",
@@ -32,12 +32,14 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@bizora/config": "workspace:*",
     "@electric-sql/pglite": "^0.3.2",
     "@nestjs/testing": "^11.1.2",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.2",
     "@types/node": "^22.15.21",
     "@types/supertest": "^6.0.3",
+    "eslint": "^9.28.0",
     "supertest": "^7.1.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",

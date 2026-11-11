@@ -48,7 +48,11 @@ describe("tenant isolation", () => {
         baseCurrencyCode: "NGN",
         timezone: "Africa/Lagos",
       })
-      .expect(201);
+      .expect((res) => {
+        if (res.status !== 201) {
+          throw new Error(`register failed ${res.status}: ${JSON.stringify(res.body)}`);
+        }
+      });
 
     const tenantB = await request(http)
       .post("/api/v1/auth/register")
@@ -61,7 +65,11 @@ describe("tenant isolation", () => {
         baseCurrencyCode: "GBP",
         timezone: "Europe/London",
       })
-      .expect(201);
+      .expect((res) => {
+        if (res.status !== 201) {
+          throw new Error(`register failed ${res.status}: ${JSON.stringify(res.body)}`);
+        }
+      });
 
     tenantAToken = tenantA.body.data.accessToken as string;
     tenantBBusinessId = tenantB.body.data.tenant.businessId as string;

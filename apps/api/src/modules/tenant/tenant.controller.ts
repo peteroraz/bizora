@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Param, UseGuards } from "@nestjs/common";
 import { success } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
@@ -8,7 +8,7 @@ import { TenantRepository } from "./tenant.repository.js";
 @Controller("api/v1")
 @UseGuards(TenantGuard)
 export class TenantController {
-  constructor(private readonly tenants: TenantRepository) {}
+  constructor(@Inject(TenantRepository) private readonly tenants: TenantRepository) {}
 
   @Get("organizations/current")
   async currentOrganization(@CurrentTenant() tenant: TenantContext) {

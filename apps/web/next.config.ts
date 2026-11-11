@@ -3,7 +3,9 @@ import type { NextConfig } from "next";
 const apiOrigin = process.env.API_ORIGIN ?? "http://localhost:3001";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Standalone tracing uses symlinks; Windows without Developer Mode cannot create them.
+  // Linux CI and Cloud Run images still emit the standalone output.
+  output: process.platform === "win32" ? undefined : "standalone",
   transpilePackages: ["@bizora/ui"],
   async rewrites() {
     return [

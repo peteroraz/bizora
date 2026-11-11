@@ -21,8 +21,8 @@ export class IdentityService {
   constructor(
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(APP_ENV) private readonly env: AppEnv,
-    private readonly audit: AuditService,
-    private readonly tenants: TenantRepository,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(TenantRepository) private readonly tenants: TenantRepository,
   ) {}
 
   async register(input: RegisterRequest, correlationId: string) {
@@ -152,8 +152,8 @@ export class IdentityService {
     if (!membership) {
       throw new ApiError("FORBIDDEN", "You cannot switch into that tenant.", 403);
     }
-    let businessId = payload.businessId ?? membership.businessId;
-    let branchId = payload.branchId ?? membership.branchId;
+    const businessId = payload.businessId ?? membership.businessId;
+    const branchId = payload.branchId ?? membership.branchId;
     if (businessId) {
       const business = await this.tenants.findBusiness(membership.tenantId, businessId);
       if (!business) {
