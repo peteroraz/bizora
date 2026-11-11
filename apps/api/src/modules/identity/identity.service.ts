@@ -184,13 +184,14 @@ export class IdentityService {
     if (!only) {
       throw new ApiError("NO_MEMBERSHIP", "This user has no tenant membership.", 403);
     }
+    const selected = await this.defaultSelectedScope(only);
     return this.issueWorkspaceSession({
       userId: user.id,
       email: user.email,
       displayName: user.displayName,
       tenantId: only.organizationId,
-      businessId: only.businessId,
-      branchId: only.branchId,
+      businessId: selected.businessId,
+      branchId: selected.branchId,
       membershipId: only.membershipId,
       role: only.role,
       meta,
@@ -341,6 +342,29 @@ export class IdentityService {
         role: input.role,
       },
     };
+  }
+
+  private async defaultSelectedScope(workspace: WorkspaceOption) {
+    let businessId = workspace.businessId;
+    let branchId = workspace.branchId;
+    if (!businessId) {
+      const items = await this.tenants.listBusinesses(workspace.organizationId);
+      if (items.length === 1 && items[0]) {
+        businessId = items[0].id;
+        if (!branchId) {
+          const branchRows = await this.tenants.listBranches({
+            tenantId: workspace.organizationId,
+            businessId,
+            membershipBusinessId: null,
+            membershipBranchId: null,
+          });
+          if (branchRows.length === 1 && branchRows[0]) {
+            branchId = branchRows[0].id;
+          }
+        }
+      }
+    }
+    return { businessId, branchId };
   }
 
   private async findUserByEmail(email: string) {

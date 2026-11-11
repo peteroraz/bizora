@@ -23,11 +23,13 @@ const envSchema = z.object({
   THROTTLE_TTL_MS: z.coerce.number().int().positive().default(60_000),
   THROTTLE_AUTH_LIMIT: z.coerce.number().int().positive().default(20),
   INVITE_TOKEN_EXPOSE: booleanFromEnv,
+  TRUST_PROXY: booleanFromEnv,
 });
 
-export type AppEnv = Omit<z.infer<typeof envSchema>, "COOKIE_SECURE" | "INVITE_TOKEN_EXPOSE"> & {
+export type AppEnv = Omit<z.infer<typeof envSchema>, "COOKIE_SECURE" | "INVITE_TOKEN_EXPOSE" | "TRUST_PROXY"> & {
   COOKIE_SECURE: boolean;
   INVITE_TOKEN_EXPOSE: boolean;
+  TRUST_PROXY: boolean;
 };
 
 export function ttlToMs(ttl: string): number {
@@ -53,5 +55,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     ...parsed.data,
     COOKIE_SECURE: parsed.data.COOKIE_SECURE ?? parsed.data.NODE_ENV === "production",
     INVITE_TOKEN_EXPOSE: parsed.data.INVITE_TOKEN_EXPOSE ?? false,
+    TRUST_PROXY: parsed.data.TRUST_PROXY ?? parsed.data.NODE_ENV === "production",
   };
 }

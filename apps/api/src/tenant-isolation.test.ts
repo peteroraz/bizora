@@ -25,6 +25,7 @@ const env: AppEnv = {
   THROTTLE_TTL_MS: 60_000,
   THROTTLE_AUTH_LIMIT: 100,
   INVITE_TOKEN_EXPOSE: true,
+  TRUST_PROXY: false,
 };
 
 describe("tenant isolation", () => {

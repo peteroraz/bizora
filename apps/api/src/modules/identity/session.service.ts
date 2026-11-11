@@ -20,7 +20,6 @@ import { newId } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
 import { sessions } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
-import { TenantRepository } from "../tenant/tenant.repository.js";
 
 export type IssuedTokens = {
   sessionId: string;
@@ -33,7 +32,6 @@ export class SessionService {
   constructor(
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(APP_ENV) private readonly env: AppEnv,
-    @Inject(TenantRepository) private readonly tenants: TenantRepository,
   ) {}
 
   async issue(input: {
@@ -57,6 +55,8 @@ export class SessionService {
       userId: input.userId,
       tenantId: input.tenantId,
       membershipId: input.membershipId,
+      businessId: input.businessId,
+      branchId: input.branchId,
       refreshTokenHash: sha256Hex(refreshToken),
       familyId,
       expiresAt,
@@ -87,11 +87,8 @@ export class SessionService {
   }
 
   async refresh(rawToken: string, meta?: { userAgent?: string | null; ip?: string | null }): Promise<IssuedTokens> {
-    const [current] = await this.db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.refreshTokenHash, sha256Hex(rawToken)))
-      .limit(1);
+    const hash = sha256Hex(rawToken);
+    const [current] = await this.db.select().from(sessions).where(eq(sessions.refreshTokenHash, hash)).limit(1);
     if (!current) {
       throw new ApiError("UNAUTHENTICATED", "Refresh token is invalid.", 401);
     }
@@ -106,23 +103,48 @@ export class SessionService {
       throw new ApiError("UNAUTHENTICATED", "Refresh token has expired.", 401);
     }
 
-    const membership = current.membershipId ? await this.tenants.findMembershipById(current.membershipId) : null;
-    const issued = await this.issue({
+    const sessionId = newId();
+    const refreshToken = newRefreshToken();
+    const [claimed] = await this.db
+      .update(sessions)
+      .set({ revokedAt: new Date(), replacedBy: sessionId })
+      .where(and(eq(sessions.id, current.id), eq(sessions.userId, current.userId), isNull(sessions.revokedAt)))
+      .returning();
+    if (!claimed) {
+      await this.db
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.familyId, current.familyId), isNull(sessions.revokedAt)));
+      throw new ApiError("UNAUTHENTICATED", "Refresh token reuse detected.", 401);
+    }
+
+    await this.db.insert(sessions).values({
+      id: sessionId,
       userId: current.userId,
       tenantId: current.tenantId,
       membershipId: current.membershipId,
-      businessId: membership?.businessId ?? null,
-      branchId: membership?.branchId ?? null,
-      typ: current.membershipId ? "access" : "preauth",
+      businessId: current.businessId,
+      branchId: current.branchId,
+      refreshTokenHash: sha256Hex(refreshToken),
       familyId: current.familyId,
+      expiresAt: new Date(Date.now() + ttlToMs(this.env.JWT_REFRESH_TTL)),
       userAgent: meta?.userAgent ?? current.userAgent,
       ip: meta?.ip ?? current.ip,
     });
-    await this.db
-      .update(sessions)
-      .set({ revokedAt: new Date(), replacedBy: issued.sessionId })
-      .where(and(eq(sessions.id, current.id), eq(sessions.userId, current.userId)));
-    return issued;
+    const accessToken = await signAccessToken(
+      {
+        sub: current.userId,
+        sid: sessionId,
+        typ: current.membershipId ? "access" : "preauth",
+        org: current.tenantId ?? undefined,
+        mid: current.membershipId ?? undefined,
+        bid: current.businessId,
+        br: current.branchId,
+      },
+      this.env.JWT_SECRET,
+      this.env.JWT_ACCESS_TTL,
+    );
+    return { sessionId, accessToken, refreshToken };
   }
 
   async requireIdentity(request: Request): Promise<{ claims: AccessTokenClaims; userId: string; sessionId: string }> {

@@ -8,7 +8,7 @@ import { sha256Hex, signAccessToken } from "@bizora/auth";
 import type { INestApplication } from "@nestjs/common";
 import type { AppEnv } from "@bizora/config/env";
 import { createApp } from "./bootstrap.js";
-import { branches, businesses, invitations, memberships, schema, sessions } from "./db/schema.js";
+import { auditEvents, branches, businesses, invitations, memberships, schema, sessions } from "./db/schema.js";
 import { loadMigrationSql } from "./db/sql.js";
 import { createLogger } from "./logging.js";
 import { newId } from "./common/ids.js";
@@ -27,6 +27,7 @@ const env: AppEnv = {
   THROTTLE_TTL_MS: 60_000,
   THROTTLE_AUTH_LIMIT: 100,
   INVITE_TOKEN_EXPOSE: true,
+  TRUST_PROXY: true,
 };
 
 function decode(token: string) {
@@ -119,7 +120,107 @@ describe("sprint 2.5 security", () => {
     expect(intoB.body.data.invitation.businessId).toBe(businessBId);
   });
 
+  it("derives businessId when an org-wide owner invites with only branchId", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/invitations")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .send({ email: "branch-only@tenant-a.test", role: "SALES", branchId: branchBId });
+    expect(created.status).not.toBe(500);
+    expect(created.status).toBe(201);
+    expect(created.body.data.invitation.branchId).toBe(branchBId);
+    expect(created.body.data.invitation.businessId).toBe(businessBId);
+  });
+
+  it("keeps the selected Business B on the token after refresh", async () => {
+    const selected = await request(app.getHttpServer())
+      .post("/api/v1/auth/select-context")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .send({ organizationId: tenantId, businessId: businessBId, branchId: branchBId })
+      .expect(201);
+    expect(decode(selected.body.data.accessToken as string).bid).toBe(businessBId);
+    ownerToken = selected.body.data.accessToken as string;
+    const rotated = await request(app.getHttpServer())
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: selected.body.data.refreshToken })
+      .expect(201);
+    expect(decode(rotated.body.data.accessToken as string).bid).toBe(businessBId);
+    expect(decode(rotated.body.data.accessToken as string).br).toBe(branchBId);
+    ownerToken = rotated.body.data.accessToken as string;
+    ownerRefresh = rotated.body.data.refreshToken as string;
+  });
+
+  it("auto-selects the only business on login, matching register", async () => {
+    const registered = await request(app.getHttpServer())
+      .post("/api/v1/auth/register")
+      .send({
+        email: "solo-biz@tenant-s.test",
+        password: "LocalOnly!Passw0rd",
+        displayName: "Solo",
+        organizationName: "Solo Org",
+        countryCode: "NG",
+        baseCurrencyCode: "NGN",
+        timezone: "Africa/Lagos",
+      })
+      .expect(201);
+    const registerBid = decode(registered.body.data.accessToken as string).bid;
+    expect(registerBid).toBeTruthy();
+    const loggedIn = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "solo-biz@tenant-s.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    expect(decode(loggedIn.body.data.accessToken as string).bid).toBe(registerBid);
+  });
+
+  it("rotates refresh tokens with at most one winner", async () => {
+    const minted = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "owner@tenant-a.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    const token = minted.body.data.refreshToken as string;
+    const results = await Promise.all(
+      [0, 1].map(() => request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: token })),
+    );
+    expect(results.filter((result) => result.status === 201)).toHaveLength(1);
+    expect(results.filter((result) => result.status === 401)).toHaveLength(1);
+  });
+
+  it("records an audit event when an invitation is resent", async () => {
+    const session = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "owner@tenant-a.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    ownerToken = session.body.data.accessToken as string;
+
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/invitations")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .send({ email: "resend-audit@tenant-a.test", role: "SALES" })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/invitations/${created.body.data.invitation.id}/resend`)
+      .set("authorization", `Bearer ${ownerToken}`)
+      .expect(201);
+    const events = await db.select().from(auditEvents);
+    expect(events.some((event) => event.action === "invitation.resent")).toBe(true);
+  });
+
+  it("uses the forwarded client IP when trust proxy is enabled", async () => {
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .set("x-forwarded-for", "203.0.113.50")
+      .send({ email: "owner@tenant-a.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    const events = await db.select().from(auditEvents);
+    expect(events.some((event) => event.action === "identity.login" && event.ip === "203.0.113.50")).toBe(true);
+  });
+
   it("blocks business and branch invitation escalation inside the tenant", async () => {
+    const session = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "owner@tenant-a.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    ownerToken = session.body.data.accessToken as string;
+
     const bizAdmin = await request(app.getHttpServer())
       .post("/api/v1/invitations")
       .set("authorization", `Bearer ${ownerToken}`)

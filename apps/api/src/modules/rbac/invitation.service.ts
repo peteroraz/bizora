@@ -34,7 +34,7 @@ export class InvitationService {
       throw new ApiError("ROLE_ESCALATION_FORBIDDEN", "You cannot invite a role above your own.", 403);
     }
 
-    const scoped = resolveAssignableScope(tenant, { businessId: payload.businessId, branchId: payload.branchId });
+    const scoped = await this.resolveInviteScope(tenant, payload.businessId, payload.branchId);
     const businessId = await this.assertBusiness(tenant, scoped.businessId);
     const branchId = await this.assertBranch(tenant, scoped.branchId, businessId);
 
@@ -140,6 +140,16 @@ export class InvitationService {
     if (!updated) {
       throw new ApiError("INVITATION_NOT_FOUND", "Invitation was not found.", 404);
     }
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "invitation.resent",
+      entityType: "invitation",
+      entityId: updated.id,
+      correlationId: tenant.correlationId,
+      businessId: updated.businessId,
+      branchId: updated.branchId,
+    });
     return this.publicInvitation(
       { id: updated.id, email: updated.email, role: updated.role, businessId: updated.businessId, branchId: updated.branchId },
       token,
@@ -271,6 +281,21 @@ export class InvitationService {
       token: this.env.INVITE_TOKEN_EXPOSE ? token : undefined,
       inviteUrl: this.env.INVITE_TOKEN_EXPOSE ? `/invite?token=${token}` : undefined,
     };
+  }
+
+  private async resolveInviteScope(tenant: TenantContext, requestedBusinessId?: string, requestedBranchId?: string) {
+    const scoped = resolveAssignableScope(tenant, { businessId: requestedBusinessId, branchId: requestedBranchId });
+    if (scoped.branchId && !scoped.businessId) {
+      const branch = await this.tenants.findBranch(tenant.tenantId, scoped.branchId);
+      if (!branch) {
+        throw new ApiError("FORBIDDEN", "Branch is outside your membership scope.", 403);
+      }
+      if (tenant.membershipBusinessId && branch.businessId !== tenant.membershipBusinessId) {
+        throw new ApiError("FORBIDDEN", "Branch is outside your membership scope.", 403);
+      }
+      return { businessId: branch.businessId, branchId: scoped.branchId };
+    }
+    return scoped;
   }
 
   private async assertBusiness(tenant: TenantContext, businessId: string | null) {

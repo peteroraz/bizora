@@ -159,6 +159,8 @@ export const sessions = pgTable(
     userId: uuid("user_id").notNull(),
     tenantId: uuid("tenant_id"),
     membershipId: uuid("membership_id"),
+    businessId: uuid("business_id"),
+    branchId: uuid("branch_id"),
     refreshTokenHash: varchar("refresh_token_hash", { length: 64 }).notNull().unique(),
     familyId: uuid("family_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
