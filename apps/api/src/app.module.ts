@@ -6,6 +6,7 @@ import type { AppDatabase } from "./db/database.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
+import { RbacModule } from "./modules/rbac/rbac.module.js";
 import { TenantModule } from "./modules/tenant/tenant.module.js";
 
 export type AppModuleOptions = {
@@ -25,6 +26,7 @@ export class AppModule {
         HealthModule,
         TenantModule,
         IdentityModule,
+        RbacModule,
       ],
     };
   }

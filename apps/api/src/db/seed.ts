@@ -2,7 +2,7 @@ import { loadEnv } from "@bizora/config/env";
 import { hashPassword } from "@bizora/auth";
 import { eq } from "drizzle-orm";
 import { createPostgresDatabase } from "./database.js";
-import { branches, businesses, countryPacks, industryPacks, memberships, organizations, permissions, rolePermissions, users } from "./schema.js";
+import { branches, businesses, memberships, organizations, users } from "./schema.js";
 import { newId, slugify } from "../common/ids.js";
 
 const SEED_PASSWORD = "LocalOnly!Passw0rd";
@@ -49,8 +49,8 @@ async function seedTenant(
     tenantId,
     userId,
     role: "OWNER",
-    businessId,
-    branchId,
+    businessId: null,
+    branchId: null,
     status: "ACTIVE",
   });
   return userId;
@@ -59,24 +59,6 @@ async function seedTenant(
 async function main() {
   const env = loadEnv();
   const { db, client } = createPostgresDatabase(env.DATABASE_URL);
-
-  await db.insert(countryPacks).values([
-    { code: "NG", name: "Nigeria", defaultCurrencyCode: "NGN", defaultTimezone: "Africa/Lagos" },
-    { code: "GB", name: "United Kingdom", defaultCurrencyCode: "GBP", defaultTimezone: "Europe/London" },
-    { code: "US", name: "United States", defaultCurrencyCode: "USD", defaultTimezone: "America/New_York" },
-  ]).onConflictDoNothing();
-
-  await db.insert(industryPacks).values([
-    { code: "general-retail", name: "General Retail" },
-    { code: "professional-services", name: "Professional Services" },
-  ]).onConflictDoNothing();
-
-  const tenantRead = newId();
-  await db.insert(permissions).values([
-    { id: tenantRead, code: "tenant.read", description: "Read tenant configuration" },
-    { id: newId(), code: "tenant.manage", description: "Manage tenant configuration" },
-  ]).onConflictDoNothing();
-  await db.insert(rolePermissions).values([{ role: "OWNER", permissionId: tenantRead }]).onConflictDoNothing();
 
   await seedTenant(db, {
     email: "alice@tenant-a.test",

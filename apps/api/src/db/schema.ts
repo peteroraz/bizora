@@ -11,6 +11,10 @@ export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey(),
   name: varchar("name", { length: 160 }).notNull(),
   slug: varchar("slug", { length: 160 }).notNull().unique(),
+  logoUrl: varchar("logo_url", { length: 2048 }),
+  primaryColor: varchar("primary_color", { length: 7 }).notNull().default("#1D4ED8"),
+  accentColor: varchar("accent_color", { length: 7 }).notNull().default("#0F172A"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   ...timestamps,
 });
 
@@ -97,6 +101,28 @@ export const industryPacks = pgTable("industry_packs", {
   name: varchar("name", { length: 120 }).notNull(),
 });
 
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    role: varchar("role", { length: 32 }).notNull(),
+    businessId: uuid("business_id"),
+    branchId: uuid("branch_id"),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    status: varchar("status", { length: 24 }).notNull().default("PENDING"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    invitedBy: uuid("invited_by").notNull(),
+    acceptedBy: uuid("accepted_by"),
+    ...timestamps,
+  },
+  (table) => [
+    index("invitations_tenant_id_idx").on(table.tenantId),
+    index("invitations_email_idx").on(table.email),
+  ],
+);
+
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -126,6 +152,7 @@ export const schema = {
   rolePermissions,
   countryPacks,
   industryPacks,
+  invitations,
   auditEvents,
 };
 

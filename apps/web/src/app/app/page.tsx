@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 type MeResponse = {
   data?: {
     user?: { displayName: string; email: string };
-    organization?: { name: string };
+    organization?: { name: string; primaryColor?: string };
     tenant?: { role: string; tenantId: string };
+    onboardingCompleted?: boolean;
   };
   error?: { message: string };
 };
@@ -18,7 +19,13 @@ export default function AppHomePage() {
   useEffect(() => {
     void fetch("/api/v1/auth/me", { credentials: "include" })
       .then((response) => response.json())
-      .then(setMe);
+      .then((payload: MeResponse) => {
+        if (payload.data && payload.data.onboardingCompleted === false) {
+          window.location.href = "/app/onboarding";
+          return;
+        }
+        setMe(payload);
+      });
   }, []);
 
   if (me?.error) {
@@ -49,7 +56,7 @@ export default function AppHomePage() {
         </Card>
         <Card>
           <p className="text-sm text-[hsl(var(--muted-foreground))]">Tasks</p>
-          <p className="mt-1">No operational tasks yet. Sprint 1 is foundation only.</p>
+          <p className="mt-1">Invite your team from Settings. CRM and sales land in later sprints.</p>
         </Card>
         <Card>
           <p className="text-sm text-[hsl(var(--muted-foreground))]">Ask Zora</p>

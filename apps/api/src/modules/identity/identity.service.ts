@@ -80,8 +80,8 @@ export class IdentityService {
         tenantId,
         userId,
         role: "OWNER",
-        businessId,
-        branchId,
+        businessId: null,
+        branchId: null,
         status: "ACTIVE",
         createdBy: userId,
         updatedBy: userId,
@@ -152,8 +152,14 @@ export class IdentityService {
     if (!membership) {
       throw new ApiError("FORBIDDEN", "You cannot switch into that tenant.", 403);
     }
-    const businessId = payload.businessId ?? membership.businessId;
-    const branchId = payload.branchId ?? membership.branchId;
+    if (membership.businessId && payload.businessId && payload.businessId !== membership.businessId) {
+      throw new ApiError("FORBIDDEN", "Business is outside your membership scope.", 403);
+    }
+    if (membership.branchId && payload.branchId && payload.branchId !== membership.branchId) {
+      throw new ApiError("FORBIDDEN", "Branch is outside your membership scope.", 403);
+    }
+    const businessId = membership.businessId ?? payload.businessId ?? null;
+    const branchId = membership.branchId ?? payload.branchId ?? null;
     if (businessId) {
       const business = await this.tenants.findBusiness(membership.tenantId, businessId);
       if (!business) {
@@ -186,7 +192,12 @@ export class IdentityService {
     const user = await this.findUserById(userId);
     const organization = await this.tenants.findOrganization(tenantId);
     const membership = await this.tenants.findMembership(tenantId, userId);
-    return { user: user ? { id: user.id, email: user.email, displayName: user.displayName } : null, organization, membership };
+    return {
+      user: user ? { id: user.id, email: user.email, displayName: user.displayName } : null,
+      organization,
+      membership,
+      onboardingCompleted: Boolean(organization?.onboardingCompletedAt),
+    };
   }
 
   private async findUserByEmail(email: string) {

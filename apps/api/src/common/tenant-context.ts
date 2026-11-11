@@ -1,13 +1,16 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
-import type { Role } from "@bizora/contracts";
+import type { PermissionCode, Role } from "@bizora/contracts";
 
 export type TenantContext = {
   userId: string;
   tenantId: string;
   businessId: string | null;
   branchId: string | null;
+  membershipBusinessId: string | null;
+  membershipBranchId: string | null;
   membershipId: string;
   role: Role;
+  permissions: PermissionCode[];
   correlationId: string;
 };
 

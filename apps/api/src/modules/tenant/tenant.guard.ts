@@ -41,27 +41,29 @@ export class TenantGuard implements CanActivate {
       throw new ApiError("UNAUTHENTICATED", "Membership is no longer valid.", 401);
     }
 
-    // Client-supplied tenant IDs are ignored. Tenant comes from the verified membership.
     void request.headers["x-tenant-id"];
     void request.headers["x-organization-id"];
 
-    const requestedBusinessId = typeof request.headers["x-business-id"] === "string"
-      ? request.headers["x-business-id"]
-      : claims.bid;
-    const requestedBranchId = typeof request.headers["x-branch-id"] === "string"
-      ? request.headers["x-branch-id"]
-      : claims.br;
+    const requestedBusinessId =
+      typeof request.headers["x-business-id"] === "string" ? request.headers["x-business-id"] : claims.bid;
+    const requestedBranchId =
+      typeof request.headers["x-branch-id"] === "string" ? request.headers["x-branch-id"] : claims.br;
 
-    let businessId = membership.businessId ?? requestedBusinessId;
-    let branchId = membership.branchId ?? requestedBranchId;
+    if (membership.businessId && requestedBusinessId && requestedBusinessId !== membership.businessId) {
+      throw new ApiError("FORBIDDEN", "Business is outside your membership scope.", 403);
+    }
+    if (membership.branchId && requestedBranchId && requestedBranchId !== membership.branchId) {
+      throw new ApiError("FORBIDDEN", "Branch is outside your membership scope.", 403);
+    }
+
+    const businessId = membership.businessId ?? requestedBusinessId ?? null;
+    const branchId = membership.branchId ?? requestedBranchId ?? null;
 
     if (businessId) {
       const business = await this.tenants.findBusiness(membership.tenantId, businessId);
       if (!business) {
         throw new ApiError("FORBIDDEN", "Business is outside the authenticated tenant.", 403);
       }
-    } else {
-      businessId = null;
     }
 
     if (branchId) {
@@ -72,17 +74,20 @@ export class TenantGuard implements CanActivate {
       if (businessId && branch.businessId !== businessId) {
         throw new ApiError("FORBIDDEN", "Branch does not belong to the selected business.", 403);
       }
-    } else {
-      branchId = null;
     }
+
+    const permissions = await this.tenants.permissionsForRole(membership.role);
 
     request[TENANT_CONTEXT_KEY] = {
       userId: membership.userId,
       tenantId: membership.tenantId,
       businessId,
       branchId,
+      membershipBusinessId: membership.businessId,
+      membershipBranchId: membership.branchId,
       membershipId: membership.id,
       role: membership.role as TenantContext["role"],
+      permissions,
       correlationId: request.correlationId ?? "unknown",
     };
     return true;

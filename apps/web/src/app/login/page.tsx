@@ -30,7 +30,8 @@ export default function LoginPage() {
       setError(payload.error?.message ?? "Unable to sign in.");
       return;
     }
-    router.push("/app");
+    const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((r) => r.json());
+    router.push(me.data?.onboardingCompleted === false ? "/app/onboarding" : "/app");
   }
 
   return (
