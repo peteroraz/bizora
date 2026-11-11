@@ -45,10 +45,22 @@ The remaining `pnpm audit` exception is documented in `docs/adr/ADR-004-pnpm-aud
 
 See `docs/security/tenancy.md`, `docs/architecture/overview.md`, and ADRs under `docs/adr/`.
 
+Tenant context is server-derived from the verified session. Do not send `X-Tenant-Id`, `X-Organization-Id`, `X-Business-Id`, or `X-Branch-Id` — those headers are ignored. Use `POST /api/v1/auth/select-context` to change the active business or branch.
+
 ## Deploy (Google Cloud)
+
+See `docs/deployment.md`.
 
 1. Apply `infra/terraform` (enables Cloud Run, Cloud SQL, Secret Manager, Artifact Registry).
 2. Store `DATABASE_URL` and `JWT_SECRET` in Secret Manager — never in git.
 3. Build and push `apps/api/Dockerfile` and `apps/web/Dockerfile`.
 4. Apply `infra/cloudrun/*.yaml` with project, region and image names substituted.
 5. Run migrations against Cloud SQL before shifting traffic.
+
+Set `TRUST_PROXY=true` in production. The API trusts **1 hop** (`X-Forwarded-For` from Cloud Run). If a Google external HTTPS load balancer is placed in front of Cloud Run, set trust to **2 hops**.
+
+## Known limitations
+
+- Auth throttling (`@nestjs/throttler`) is **in-memory per Cloud Run instance**. Move it to Redis-backed storage before running more than one API instance, or limits can be bypassed by spraying requests across instances.
+- PostgreSQL RLS is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
+- CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.

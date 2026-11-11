@@ -105,11 +105,30 @@ export class SessionService {
 
     const sessionId = newId();
     const refreshToken = newRefreshToken();
-    const [claimed] = await this.db
-      .update(sessions)
-      .set({ revokedAt: new Date(), replacedBy: sessionId })
-      .where(and(eq(sessions.id, current.id), eq(sessions.userId, current.userId), isNull(sessions.revokedAt)))
-      .returning();
+    const claimed = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(sessions)
+        .set({ revokedAt: new Date(), replacedBy: sessionId })
+        .where(and(eq(sessions.id, current.id), eq(sessions.userId, current.userId), isNull(sessions.revokedAt)))
+        .returning();
+      if (!row) {
+        return null;
+      }
+      await tx.insert(sessions).values({
+        id: sessionId,
+        userId: current.userId,
+        tenantId: current.tenantId,
+        membershipId: current.membershipId,
+        businessId: current.businessId,
+        branchId: current.branchId,
+        refreshTokenHash: sha256Hex(refreshToken),
+        familyId: current.familyId,
+        expiresAt: new Date(Date.now() + ttlToMs(this.env.JWT_REFRESH_TTL)),
+        userAgent: meta?.userAgent ?? current.userAgent,
+        ip: meta?.ip ?? current.ip,
+      });
+      return row;
+    });
     if (!claimed) {
       await this.db
         .update(sessions)
@@ -118,19 +137,6 @@ export class SessionService {
       throw new ApiError("UNAUTHENTICATED", "Refresh token reuse detected.", 401);
     }
 
-    await this.db.insert(sessions).values({
-      id: sessionId,
-      userId: current.userId,
-      tenantId: current.tenantId,
-      membershipId: current.membershipId,
-      businessId: current.businessId,
-      branchId: current.branchId,
-      refreshTokenHash: sha256Hex(refreshToken),
-      familyId: current.familyId,
-      expiresAt: new Date(Date.now() + ttlToMs(this.env.JWT_REFRESH_TTL)),
-      userAgent: meta?.userAgent ?? current.userAgent,
-      ip: meta?.ip ?? current.ip,
-    });
     const accessToken = await signAccessToken(
       {
         sub: current.userId,
@@ -147,7 +153,7 @@ export class SessionService {
     return { sessionId, accessToken, refreshToken };
   }
 
-  async requireIdentity(request: Request): Promise<{ claims: AccessTokenClaims; userId: string; sessionId: string }> {
+  async requireIdentity(request: Request) {
     const token = this.readAccessToken(request);
     if (!token) {
       throw new ApiError("UNAUTHENTICATED", "Authentication is required.", 401);
@@ -166,7 +172,7 @@ export class SessionService {
     if (!session || session.revokedAt) {
       throw new ApiError("UNAUTHENTICATED", "Session is no longer valid.", 401);
     }
-    return { claims, userId: claims.sub, sessionId: session.id };
+    return { claims, userId: claims.sub, sessionId: session.id, session };
   }
 
   readAccessToken(request: Request) {

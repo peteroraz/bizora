@@ -12,7 +12,7 @@ Bizora is a multi-tenant SaaS modular monolith. Sprint 1–2.5 deliver the engin
 
 ## Tenancy
 
-Organization is the security and billing tenant. A tenant owns businesses; businesses own branches. Every tenant-owned row stores `tenant_id`. Request tenant context is loaded from the authenticated **ACTIVE** membership after JWT and session verification. `X-Tenant-Id` / `X-Organization-Id` headers are ignored.
+Organization is the security and billing tenant. A tenant owns businesses; businesses own branches. Every tenant-owned row stores `tenant_id`. Request tenant context is loaded from the verified session (`bid` / `br` claims persisted on the `sessions` row) and re-checked against the authenticated **ACTIVE** membership. Client `X-Tenant-Id`, `X-Organization-Id`, `X-Business-Id`, and `X-Branch-Id` headers are ignored. Change active business or branch only with `POST /api/v1/auth/select-context`.
 
 Writes on tenant-owned entities include `tenant_id` in the predicate. Composite foreign keys prevent cross-tenant business/branch links. PostgreSQL RLS is planned in `docs/adr/ADR-002-postgres-rls.md`.
 

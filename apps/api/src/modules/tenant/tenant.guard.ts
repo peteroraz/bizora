@@ -30,21 +30,23 @@ export class TenantGuard implements CanActivate {
 
     void request.headers["x-tenant-id"];
     void request.headers["x-organization-id"];
+    void request.headers["x-business-id"];
+    void request.headers["x-branch-id"];
 
-    const requestedBusinessId =
-      typeof request.headers["x-business-id"] === "string" ? request.headers["x-business-id"] : (identity.claims.bid ?? null);
-    const requestedBranchId =
-      typeof request.headers["x-branch-id"] === "string" ? request.headers["x-branch-id"] : (identity.claims.br ?? null);
+    const claimedBusinessId = identity.claims.bid ?? null;
+    const claimedBranchId = identity.claims.br ?? null;
+    const sessionBusinessId = identity.session.businessId ?? claimedBusinessId;
+    const sessionBranchId = identity.session.branchId ?? claimedBranchId;
 
-    if (membership.businessId && requestedBusinessId && requestedBusinessId !== membership.businessId) {
+    if (membership.businessId && claimedBusinessId && claimedBusinessId !== membership.businessId) {
       throw new ApiError("FORBIDDEN", "Business is outside your membership scope.", 403);
     }
-    if (membership.branchId && requestedBranchId && requestedBranchId !== membership.branchId) {
+    if (membership.branchId && claimedBranchId && claimedBranchId !== membership.branchId) {
       throw new ApiError("FORBIDDEN", "Branch is outside your membership scope.", 403);
     }
 
-    const businessId = membership.businessId ?? requestedBusinessId ?? null;
-    const branchId = membership.branchId ?? requestedBranchId ?? null;
+    const businessId = membership.businessId ?? sessionBusinessId ?? null;
+    const branchId = membership.branchId ?? sessionBranchId ?? null;
 
     if (businessId) {
       const business = await this.tenants.findBusiness(membership.tenantId, businessId);

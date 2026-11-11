@@ -210,8 +210,18 @@ export class IdentityService {
     if (membership.branchId && payload.branchId && payload.branchId !== membership.branchId) {
       throw new ApiError("FORBIDDEN", "Branch is outside your membership scope.", 403);
     }
-    const businessId = membership.businessId ?? payload.businessId ?? null;
-    const branchId = membership.branchId ?? payload.branchId ?? null;
+    const selected = await this.defaultSelectedScope({
+      organizationId: membership.tenantId,
+      organizationName: "",
+      membershipId: membership.id,
+      role: membership.role as Role,
+      businessId: membership.businessId ?? payload.businessId ?? null,
+      businessName: null,
+      branchId: membership.branchId ?? payload.branchId ?? null,
+      branchName: null,
+    });
+    const businessId = selected.businessId;
+    const branchId = selected.branchId;
     if (businessId) {
       const business = await this.tenants.findBusiness(membership.tenantId, businessId);
       if (!business) {
@@ -351,17 +361,17 @@ export class IdentityService {
       const items = await this.tenants.listBusinesses(workspace.organizationId);
       if (items.length === 1 && items[0]) {
         businessId = items[0].id;
-        if (!branchId) {
-          const branchRows = await this.tenants.listBranches({
-            tenantId: workspace.organizationId,
-            businessId,
-            membershipBusinessId: null,
-            membershipBranchId: null,
-          });
-          if (branchRows.length === 1 && branchRows[0]) {
-            branchId = branchRows[0].id;
-          }
-        }
+      }
+    }
+    if (businessId && !branchId) {
+      const branchRows = await this.tenants.listBranches({
+        tenantId: workspace.organizationId,
+        businessId,
+        membershipBusinessId: workspace.businessId,
+        membershipBranchId: workspace.branchId,
+      });
+      if (branchRows.length === 1 && branchRows[0]) {
+        branchId = branchRows[0].id;
       }
     }
     return { businessId, branchId };
