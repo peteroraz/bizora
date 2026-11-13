@@ -1,0 +1,159 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.event_name == 'release' && 'production' || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'release' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: access_token
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Resolve service URLs
+        id: urls
+        env:
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+        run: |
+          set -euo pipefail
+          project_number="${GCP_WIF_PROVIDER#projects/}"
+          project_number="${project_number%%/*}"
+          if [[ -z "$project_number" || "$project_number" == "$GCP_WIF_PROVIDER" ]]; then
+            echo "GCP_WIF_PROVIDER must be the full provider resource name."
+            exit 1
+          fi
+          api_origin="https://bizora-api-${project_number}.${GCP_REGION}.run.app"
+          web_origin="https://bizora-web-${project_number}.${GCP_REGION}.run.app"
+          # status.url is the legacy hash host (https://SERVICE-HASH-ew.a.run.app).
+          # The web image must be built with these deterministic origins. Any HTTP
+          # status below 500 counts: the placeholder image does not match the app.
+          reachable=0
+          for origin in "$api_origin" "$web_origin"; do
+            ok=0
+            for attempt in 1 2 3; do
+              code="$(curl --silent --show-error --output /dev/null --max-time 20 --write-out '%{http_code}' "$origin" || true)"
+              if [[ "$code" =~ ^[1-9][0-9][0-9]$ ]] && (( code < 500 )); then
+                echo "$origin returned $code"
+                ok=1
+                reachable=1
+                break
+              fi
+              echo "$origin returned ${code:-none} (attempt ${attempt})"
+              if (( attempt < 3 )); then
+                sleep 5
+              fi
+            done
+            if (( ok == 0 )); then
+              echo "$origin did not return an HTTP status below 500."
+            fi
+          done
+          if (( reachable == 0 )); then
+            echo "Neither deterministic origin returned an HTTP status below 500."
+            exit 1
+          fi
+          echo "api=${api_origin}" >> "$GITHUB_OUTPUT"
+          echo "web=${web_origin}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          tags: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/api:${{ github.sha }}
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          build-args: |
+            API_ORIGIN=${{ steps.urls.outputs.api }}
+          tags: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/web:${{ github.sha }}
+
+      - name: Run database migrations
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/api:${{ github.sha }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+        run: |
+          set -euo pipefail
+          gcloud run jobs update bizora-migrate \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --image="$IMAGE" \
+            --command=node \
+            --args=dist/db/migrate.js
+          gcloud run jobs execute bizora-migrate \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --wait
+
+      - name: Deploy API
+        run: |
+          set -euo pipefail
+          gcloud run services update bizora-api \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ vars.GCP_REGION }}" \
+            --image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/api:${{ github.sha }}"
+
+      - name: Deploy web
+        run: |
+          set -euo pipefail
+          gcloud run services update bizora-web \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ vars.GCP_REGION }}" \
+            --image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/web:${{ github.sha }}"
+
+      - name: Smoke test
+        env:
+          WEB_URL: ${{ steps.urls.outputs.web }}
+        run: |
+          set -euo pipefail
+          code=""
+          for attempt in 1 2 3 4 5 6; do
+            code="$(curl --silent --show-error --output /tmp/health-body --write-out '%{http_code}' "$WEB_URL/health" || true)"
+            if [[ "$code" == "200" ]]; then
+              exit 0
+            fi
+            echo "GET $WEB_URL/health returned ${code:-none} (attempt ${attempt})"
+            sleep 10
+          done
+          echo "Smoke test failed. Last status: ${code:-none}"
+          cat /tmp/health-body || true
+          exit 1

@@ -5,6 +5,10 @@ COPY packages ./packages
 COPY apps/web ./apps/web
 RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
 RUN pnpm install --frozen-lockfile
+# Next.js compiles rewrites from API_ORIGIN at build time. CI passes the same
+# origin Terraform sets on the Cloud Run service.
+ARG API_ORIGIN=http://localhost:3001
+ENV API_ORIGIN=$API_ORIGIN
 RUN pnpm --filter @bizora/web... build
 
 FROM node:22-alpine

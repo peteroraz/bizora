@@ -29,3 +29,36 @@ jobs:
       - run: pnpm build
       - run: pnpm audit --prod
         continue-on-error: false
+
+  terraform:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+      - name: terraform fmt
+        working-directory: infra/terraform
+        run: terraform fmt -check -recursive
+      - name: terraform validate
+        run: |
+          set -euo pipefail
+          for env in staging prod; do
+            terraform -chdir="infra/terraform/envs/${env}" init -backend=false -input=false
+            terraform -chdir="infra/terraform/envs/${env}" validate
+          done
+
+  docker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build --file apps/api/Dockerfile --tag bizora-api:ci .
+      - name: Build web image
+        run: docker build --file apps/web/Dockerfile --tag bizora-web:ci .

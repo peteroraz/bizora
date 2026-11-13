@@ -1,3 +1,5 @@
+# Superseded by infra/terraform. Do not apply this file.
+# CI updates the Cloud Run image. API max instances stay at 1.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:

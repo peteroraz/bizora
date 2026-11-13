@@ -1,3 +1,4 @@
+import { socketDirFromEnv } from "@bizora/config/env";
 import postgres from "postgres";
 import { applySqlBatches, loadMigrationSql } from "./sql.js";
 
@@ -6,7 +7,11 @@ async function migrate() {
   if (!url) {
     throw new Error("DATABASE_URL is required");
   }
-  const sql = postgres(url, { max: 1 });
+  const host = socketDirFromEnv(process.env.DATABASE_SOCKET_DIR);
+  const sql = postgres(url, {
+    max: 1,
+    ...(host ? { host } : {}),
+  });
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS schema_migrations (
