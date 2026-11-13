@@ -5,7 +5,8 @@ locals {
   # Predictable before the services exist, so the API and web can reference
   # each other without a Terraform cycle. Cloud Run assigns this URL when the
   # DNS label (service name + project number) is at most 63 characters.
-  # CI refuses to build the web image if the live service URL differs.
+  # CI builds the web image with this origin. status.url is the hash host
+  # and is not compared; deploy curls this host instead.
   api_origin = "https://bizora-api-${data.google_project.current.number}.${var.region}.run.app"
   web_origin = "https://bizora-web-${data.google_project.current.number}.${var.region}.run.app"
 

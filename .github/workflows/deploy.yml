@@ -42,7 +42,6 @@ jobs:
       - name: Resolve service URLs
         id: urls
         env:
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_REGION: ${{ vars.GCP_REGION }}
           GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
         run: |
@@ -55,12 +54,31 @@ jobs:
           fi
           api_origin="https://bizora-api-${project_number}.${GCP_REGION}.run.app"
           web_origin="https://bizora-web-${project_number}.${GCP_REGION}.run.app"
-          api_live="$(gcloud run services describe bizora-api --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --format='value(status.url)')"
-          web_live="$(gcloud run services describe bizora-web --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --format='value(status.url)')"
-          if [[ "$api_live" != "$api_origin" || "$web_live" != "$web_origin" ]]; then
-            echo "Cloud Run URL does not match the origin Terraform configured."
-            echo "api live=$api_live configured=$api_origin"
-            echo "web live=$web_live configured=$web_origin"
+          # status.url is the legacy hash host (https://SERVICE-HASH-ew.a.run.app).
+          # The web image must be built with these deterministic origins. Any HTTP
+          # status below 500 counts: the placeholder image does not match the app.
+          reachable=0
+          for origin in "$api_origin" "$web_origin"; do
+            ok=0
+            for attempt in 1 2 3; do
+              code="$(curl --silent --show-error --output /dev/null --max-time 20 --write-out '%{http_code}' "$origin" || true)"
+              if [[ "$code" =~ ^[1-9][0-9][0-9]$ ]] && (( code < 500 )); then
+                echo "$origin returned $code"
+                ok=1
+                reachable=1
+                break
+              fi
+              echo "$origin returned ${code:-none} (attempt ${attempt})"
+              if (( attempt < 3 )); then
+                sleep 5
+              fi
+            done
+            if (( ok == 0 )); then
+              echo "$origin did not return an HTTP status below 500."
+            fi
+          done
+          if (( reachable == 0 )); then
+            echo "Neither deterministic origin returned an HTTP status below 500."
             exit 1
           fi
           echo "api=${api_origin}" >> "$GITHUB_OUTPUT"

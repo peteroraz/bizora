@@ -163,7 +163,7 @@ Record the outputs:
 terraform output
 ```
 
-You need `wif_provider`, `deployer_service_account`, `api_url`, `web_url`, and `cloud_sql_connection_name`. `api_origin` and `web_origin` are the deterministic URLs Terraform injects (`https://SERVICE-PROJECT_NUMBER.europe-west1.run.app`). After apply, `api_url` and `web_url` should match them. CI refuses to build the web image if they do not.
+You need `wif_provider`, `deployer_service_account`, `api_url`, `web_url`, and `cloud_sql_connection_name`. `api_origin` and `web_origin` are the deterministic URLs Terraform injects (`https://SERVICE-PROJECT_NUMBER.europe-west1.run.app`). Cloud Run `status.url` is a different hash host. Deploy curls the deterministic origins and builds the web image with them.
 
 ## GitHub
 
