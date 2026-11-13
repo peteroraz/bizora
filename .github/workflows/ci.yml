@@ -50,3 +50,15 @@ jobs:
             terraform -chdir="infra/terraform/envs/${env}" init -backend=false -input=false
             terraform -chdir="infra/terraform/envs/${env}" validate
           done
+
+  docker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build --file apps/api/Dockerfile --tag bizora-api:ci .
+      - name: Build web image
+        run: docker build --file apps/web/Dockerfile --tag bizora-web:ci .

@@ -255,4 +255,4 @@ Auth and invitation-accept routes use `@nestjs/throttler` with **in-memory** sto
 
 ## What CI checks
 
-`.github/workflows/ci.yml` runs `terraform fmt -check` and `terraform validate` for staging and production with `terraform init -backend=false`. It does not plan or apply.
+`.github/workflows/ci.yml` runs `terraform fmt -check` and `terraform validate` for staging and production with `terraform init -backend=false`. It does not plan or apply. Pull requests also run `docker build` for the API and web Dockerfiles and do not push those images.
