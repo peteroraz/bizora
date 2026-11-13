@@ -11,10 +11,13 @@ locals {
 
   artifact_registry_url = "${var.region}-docker.pkg.dev/${var.project_id}/bizora"
 
-  # PASS is URL-encoded. The random password is URL-safe, so encoding does not
-  # change it today; it keeps the URI valid if the character set ever grows.
-  # Full value is stored in Secret Manager and in Terraform state.
-  database_url = "postgres://${google_sql_user.app.name}:${urlencode(random_password.db.result)}@/${google_sql_database.app.name}?host=/cloudsql/${google_sql_database_instance.bizora.connection_name}"
+  # postgres.js throws Invalid URL when the host is empty, and it does not read a
+  # query parameter as a unix socket. The URL stays on localhost. Cloud Run sets
+  # DATABASE_SOCKET_DIR to the connector directory and the app passes that as
+  # the postgres host option. PASS is URL-encoded. The password and this URL
+  # are stored in Secret Manager and in Terraform state.
+  database_url        = "postgres://${google_sql_user.app.name}:${urlencode(random_password.db.result)}@localhost/${google_sql_database.app.name}"
+  database_socket_dir = "/cloudsql/${google_sql_database_instance.bizora.connection_name}"
 
   wif_attribute_condition = var.wif_mode == "main_branch" ? (
     "assertion.repository == \"${local.github_repository}\" && assertion.ref == \"refs/heads/main\""

@@ -24,10 +24,18 @@ The network choice for Cloud SQL is recorded in [ADR-005](adr/ADR-005-cloud-sql-
 Terraform generates the `bizora_app` database password and writes this URL into Secret Manager secret `bizora-database-url`:
 
 ```text
-postgres://bizora_app:PASS@/bizora?host=/cloudsql/PROJECT:REGION:INSTANCE
+postgres://bizora_app:PASS@localhost/bizora
 ```
 
 `PASS` is URL-encoded. The password character set is letters, digits, `-`, and `_`.
+
+`bizora-api` and the `bizora-migrate` job also get a plain environment variable:
+
+```text
+DATABASE_SOCKET_DIR=/cloudsql/PROJECT:REGION:INSTANCE
+```
+
+The app passes that directory to postgres.js as the connection host. postgres.js then opens `/cloudsql/PROJECT:REGION:INSTANCE/.s.PGSQL.5432`. The socket directory is not part of `DATABASE_URL`. An empty host is an invalid URL, and postgres.js does not treat a query parameter as the socket path.
 
 That URL, and the password itself, are stored in the Terraform state object in the environment's state bucket. Treat the bucket like a production secret:
 
@@ -85,9 +93,9 @@ terraform apply
 
 The first apply creates the JWT secret with no versions, then Cloud Run tries to mount `JWT_SECRET`. That step fails until a version exists. Everything created before that failure stays in state. Add the secret, then apply again.
 
-Generate at least 32 characters. Do not commit the value, and do not pass it as a shell argument that lands in a repo file.
+Generate 48 random bytes (64 characters of base64, more than the 32-character minimum). Do not commit the value, do not print it, and do not pass it as a shell argument that lands in a repo file.
 
-Staging:
+Staging with OpenSSL:
 
 ```bash
 openssl rand -base64 48 | gcloud secrets versions add bizora-jwt-secret \
@@ -95,12 +103,48 @@ openssl rand -base64 48 | gcloud secrets versions add bizora-jwt-secret \
   --data-file=-
 ```
 
-Production:
+Production with OpenSSL:
 
 ```bash
 openssl rand -base64 48 | gcloud secrets versions add bizora-jwt-secret \
   --project=bizora-productions \
   --data-file=-
+```
+
+Windows PowerShell, without OpenSSL and without a pipe. This writes base64 to a temp file as UTF-8 with no BOM and no trailing newline, adds that file as the secret version, then deletes the file even if `gcloud` fails.
+
+Staging:
+
+```powershell
+$bytes = New-Object byte[] 48
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+$secret = [Convert]::ToBase64String($bytes)
+$path = Join-Path $env:TEMP ("bizora-jwt-" + [guid]::NewGuid().ToString("n") + ".txt")
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($path, $secret, $utf8)
+try {
+  gcloud secrets versions add bizora-jwt-secret --project=bizora-staging --data-file=$path
+} finally {
+  Remove-Item -LiteralPath $path -Force
+}
+```
+
+Production:
+
+```powershell
+$bytes = New-Object byte[] 48
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+$secret = [Convert]::ToBase64String($bytes)
+$path = Join-Path $env:TEMP ("bizora-jwt-" + [guid]::NewGuid().ToString("n") + ".txt")
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($path, $secret, $utf8)
+try {
+  gcloud secrets versions add bizora-jwt-secret --project=bizora-productions --data-file=$path
+} finally {
+  Remove-Item -LiteralPath $path -Force
+}
 ```
 
 Then:
@@ -129,7 +173,12 @@ Create two GitHub environments. Variables belong on the environment, under **Var
 
 ### `staging`
 
-No required reviewers. Variables:
+Open **Settings → Environments → staging** (create the environment if it is missing).
+
+- **Deployment branches and tags:** Selected branches and tags. Add a branch rule for `main` only. Do not add tag rules. A pull request or any other branch must not be able to deploy staging.
+- No required reviewers.
+
+Variables:
 
 | Name | Value |
 | --- | --- |
@@ -140,7 +189,10 @@ No required reviewers. Variables:
 
 ### `production`
 
-Create this environment and add required reviewers **before** you publish the first release. GitHub will otherwise create the environment on the first workflow run without protection, and a workflow that selects `environment: production` would satisfy the production Workload Identity condition.
+Open **Settings → Environments → production** and configure it **before** you publish the first release. GitHub will otherwise create the environment on the first workflow run without protection, and a workflow that selects `environment: production` would satisfy the production Workload Identity condition.
+
+- **Required reviewers:** add them. A release must wait for approval.
+- **Deployment branches and tags:** Selected branches and tags. Add a tag rule `v*` (for example `v0.1.0`). Do not leave this on "all branches". The production job runs when a GitHub release is published, and the environment rule is what limits that job to version tags.
 
 Variables are the production outputs, with `GCP_PROJECT_ID=bizora-productions`.
 

@@ -8,11 +8,30 @@ const booleanFromEnv = z.preprocess((value) => {
   return value;
 }, z.boolean().optional());
 
+// Cloud SQL connector sockets look like /cloudsql/PROJECT:REGION:INSTANCE.
+// postgres.js appends /.s.PGSQL.5432 when this value is the host option.
+const socketDirSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z
+    .string()
+    .regex(/^\/(?:[^/\s?]+\/)*[^/\s?]+$/, "must be an absolute path")
+    .optional(),
+);
+
+export function socketDirFromEnv(value: string | undefined): string | undefined {
+  const parsed = socketDirSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error("Invalid environment configuration: DATABASE_SOCKET_DIR: must be an absolute path");
+  }
+  return parsed.data;
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(3001),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   DATABASE_URL: z.string().min(1),
+  DATABASE_SOCKET_DIR: socketDirSchema.optional(),
   REDIS_URL: z.string().optional(),
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default("15m"),
@@ -26,10 +45,14 @@ const envSchema = z.object({
   TRUST_PROXY: booleanFromEnv,
 });
 
-export type AppEnv = Omit<z.infer<typeof envSchema>, "COOKIE_SECURE" | "INVITE_TOKEN_EXPOSE" | "TRUST_PROXY"> & {
+export type AppEnv = Omit<
+  z.infer<typeof envSchema>,
+  "COOKIE_SECURE" | "INVITE_TOKEN_EXPOSE" | "TRUST_PROXY" | "DATABASE_SOCKET_DIR"
+> & {
   COOKIE_SECURE: boolean;
   INVITE_TOKEN_EXPOSE: boolean;
   TRUST_PROXY: boolean;
+  DATABASE_SOCKET_DIR?: string;
 };
 
 export function ttlToMs(ttl: string): number {
@@ -51,8 +74,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       .join("; ");
     throw new Error(`Invalid environment configuration: ${issues}`);
   }
+  const { DATABASE_SOCKET_DIR: socketDir, ...rest } = parsed.data;
   return {
-    ...parsed.data,
+    ...rest,
+    ...(socketDir ? { DATABASE_SOCKET_DIR: socketDir } : {}),
     COOKIE_SECURE: parsed.data.COOKIE_SECURE ?? parsed.data.NODE_ENV === "production",
     INVITE_TOKEN_EXPOSE: parsed.data.INVITE_TOKEN_EXPOSE ?? false,
     TRUST_PROXY: parsed.data.TRUST_PROXY ?? parsed.data.NODE_ENV === "production",

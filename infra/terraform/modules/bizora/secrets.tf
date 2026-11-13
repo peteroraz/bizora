@@ -1,5 +1,7 @@
-# The database password and the full DATABASE_URL are in this secret version
-# and in Terraform state. The state bucket is sensitive. See docs/deployment.md.
+# The database password and DATABASE_URL (localhost form, URL-encoded password)
+# are in this secret version and in Terraform state. The socket directory is a
+# plain Cloud Run env var, not part of the URL. The state bucket is sensitive.
+# See docs/deployment.md.
 
 resource "google_secret_manager_secret" "database_url" {
   project             = var.project_id

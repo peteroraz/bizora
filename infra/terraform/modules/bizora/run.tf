@@ -73,6 +73,10 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
       env {
+        name  = "DATABASE_SOCKET_DIR"
+        value = local.database_socket_dir
+      }
+      env {
         name = "JWT_SECRET"
         value_source {
           secret_key_ref {
@@ -221,6 +225,10 @@ resource "google_cloud_run_v2_job" "migrate" {
               version = "latest"
             }
           }
+        }
+        env {
+          name  = "DATABASE_SOCKET_DIR"
+          value = local.database_socket_dir
         }
 
         volume_mounts {

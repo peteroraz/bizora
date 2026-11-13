@@ -58,7 +58,7 @@ async function seedTenant(
 
 async function main() {
   const env = loadEnv();
-  const { db, client } = createPostgresDatabase(env.DATABASE_URL);
+  const { db, client } = createPostgresDatabase(env.DATABASE_URL, env.DATABASE_SOCKET_DIR);
 
   await seedTenant(db, {
     email: "alice@tenant-a.test",
