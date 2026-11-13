@@ -49,18 +49,16 @@ Tenant context is server-derived from the verified session. Do not send `X-Tenan
 
 ## Deploy (Google Cloud)
 
-See `docs/deployment.md`.
+See `docs/deployment.md` for the first-time runbook: state buckets, Terraform, the JWT secret, GitHub environments, deploy, rollback, and logs.
 
-1. Apply `infra/terraform` (enables Cloud Run, Cloud SQL, Secret Manager, Artifact Registry).
-2. Store `DATABASE_URL` and `JWT_SECRET` in Secret Manager — never in git.
-3. Build and push `apps/api/Dockerfile` and `apps/web/Dockerfile`.
-4. Apply `infra/cloudrun/*.yaml` with project, region and image names substituted.
-5. Run migrations against Cloud SQL before shifting traffic.
+Images are built from `apps/api/Dockerfile` and `apps/web/Dockerfile` and deployed by `.github/workflows/deploy.yml`. Do not apply `infra/cloudrun/*.yaml`.
 
 Set `TRUST_PROXY=true` in production. The API trusts **1 hop** (`X-Forwarded-For` from Cloud Run). If a Google external HTTPS load balancer is placed in front of Cloud Run, set trust to **2 hops**.
 
 ## Known limitations
 
-- Auth throttling (`@nestjs/throttler`) is **in-memory per Cloud Run instance**. Move it to Redis-backed storage before running more than one API instance, or limits can be bypassed by spraying requests across instances.
+- Auth throttling (`@nestjs/throttler`) is **in-memory per Cloud Run instance**. Terraform caps `bizora-api` at one instance until the throttler moves to Redis-backed storage. Limits can be bypassed if that cap is raised first.
+- There is no custom domain yet. The public URLs are the Cloud Run `run.app` hosts.
+- There is no email delivery yet. Invite tokens are returned by the API only when `INVITE_TOKEN_EXPOSE=true` (staging). Production leaves that off.
 - PostgreSQL RLS is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
 - CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.

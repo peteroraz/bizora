@@ -14,3 +14,17 @@ apps/api/drizzle/meta/_journal.json.bak
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Terraform local state and provider cache. Commit .terraform.lock.hcl.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.auto.tfvars
+*.auto.tfvars.json
