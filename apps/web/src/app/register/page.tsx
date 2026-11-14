@@ -1,56 +1,95 @@
 "use client";
 
-import { Button, Card, FormField, Input, Select } from "@bizora/ui";
+import { passwordRules } from "@bizora/contracts/password";
+import { Button, Card, Combobox, FormField, Input, Select } from "@bizora/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { PasswordWithConfirmation } from "../../components/password-fields";
+import { confirmPasswordError } from "../../lib/password";
 
-type Pack = { code: string; name: string; defaultCurrencyCode?: string; defaultTimezone?: string };
+type Country = { code: string; name: string; defaultCurrencyCode: string; timezones: string[] };
+type Pack = { code: string; name: string };
 
 export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [countries, setCountries] = useState<Pack[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
   const [industries, setIndustries] = useState<Pack[]>([]);
   const [countryCode, setCountryCode] = useState("NG");
   const [currency, setCurrency] = useState("NGN");
+  const [timezone, setTimezone] = useState("Africa/Lagos");
+  const [industryCode, setIndustryCode] = useState("general-retail");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const countryTouched = useRef(false);
 
   useEffect(() => {
     void Promise.all([
-      fetch("/api/v1/catalogs/country-packs").then((response) => response.json()),
+      fetch("/api/v1/public/reference/countries").then((response) => response.json()),
       fetch("/api/v1/catalogs/industry-packs").then((response) => response.json()),
     ]).then(([countryPayload, industryPayload]) => {
-      setCountries(countryPayload.data?.items ?? []);
+      const items = (countryPayload.data?.items ?? []) as Country[];
+      setCountries(items);
       setIndustries(industryPayload.data?.items ?? []);
+      if (countryTouched.current) return;
+      const nigeria = items.find((item) => item.code === "NG");
+      if (!nigeria) return;
+      setCurrency(nigeria.defaultCurrencyCode);
+      setTimezone(nigeria.timezones[0] ?? "Africa/Lagos");
     });
   }, []);
 
   function onCountryChange(code: string) {
+    countryTouched.current = true;
     setCountryCode(code);
-    const pack = countries.find((item) => item.code === code);
-    if (pack?.defaultCurrencyCode) setCurrency(pack.defaultCurrencyCode);
+    const country = countries.find((item) => item.code === code);
+    if (!country) return;
+    setCurrency(country.defaultCurrencyCode);
+    setTimezone(country.timezones[0] ?? "");
   }
+
+  const selected = countries.find((item) => item.code === countryCode);
+  const currencyItems = [...new Set(countries.map((item) => item.defaultCurrencyCode))]
+    .sort()
+    .map((code) => ({ value: code, label: code }));
+  if (currency && !currencyItems.some((item) => item.value === currency)) {
+    currencyItems.unshift({ value: currency, label: currency });
+  }
+  const timezoneItems = (selected?.timezones.length ? selected.timezones : timezone ? [timezone] : []).map((zone) => ({
+    value: zone,
+    label: zone,
+  }));
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (!event.currentTarget.reportValidity()) return;
+    const mismatchError = confirmPasswordError(password, confirmation);
+    const rulesMet = passwordRules.every((rule) => rule.met(password));
+    if (mismatchError || !rulesMet) {
+      setMismatch(mismatchError);
+      setError(rulesMet ? null : "Choose a password that meets every rule.");
+      return;
+    }
     setPending(true);
     setError(null);
-    const form = new FormData(event.currentTarget);
-    const country = countries.find((item) => item.code === countryCode);
+    setMismatch(null);
     const response = await fetch("/api/v1/auth/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
         email: form.get("email"),
-        password: form.get("password"),
+        password,
         displayName: form.get("displayName"),
         organizationName: form.get("organizationName"),
         countryCode,
         baseCurrencyCode: currency,
-        timezone: country?.defaultTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-        industryCode: form.get("industryCode"),
+        timezone,
+        industryCode,
       }),
     });
     const payload = await response.json();
@@ -74,22 +113,55 @@ export default function RegisterPage() {
             <Input id="organizationName" name="organizationName" required />
           </FormField>
           <FormField id="email" label="Email">
-            <Input id="email" name="email" type="email" required />
+            <Input id="email" name="email" type="email" autoComplete="email" required />
           </FormField>
-          <FormField id="password" label="Password" hint="At least 12 characters">
-            <Input id="password" name="password" type="password" minLength={12} required />
-          </FormField>
+          <PasswordWithConfirmation
+            passwordId="password"
+            confirmId="confirmPassword"
+            password={password}
+            confirmation={confirmation}
+            onPasswordChange={(value) => {
+              setPassword(value);
+              if (confirmation) setMismatch(confirmPasswordError(value, confirmation));
+            }}
+            onConfirmationChange={(value) => {
+              setConfirmation(value);
+              setMismatch(value ? confirmPasswordError(password, value) : null);
+            }}
+            mismatch={mismatch}
+          />
           <FormField id="country" label="Country">
-            <Select id="country" value={countryCode} onChange={(event) => onCountryChange(event.target.value)}>
-              {countries.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
+            <Combobox
+              id="country"
+              label="Country"
+              items={countries.map((item) => ({ value: item.code, label: item.name }))}
+              value={countryCode}
+              onValueChange={onCountryChange}
+              placeholder="Search countries"
+            />
+          </FormField>
+          <FormField id="currency" label="Currency">
+            <Combobox
+              id="currency"
+              label="Currency"
+              items={currencyItems}
+              value={currency}
+              onValueChange={setCurrency}
+              placeholder="Search currencies"
+            />
+          </FormField>
+          <FormField id="timezone" label="Timezone">
+            <Combobox
+              id="timezone"
+              label="Timezone"
+              items={timezoneItems}
+              value={timezone}
+              onValueChange={setTimezone}
+              placeholder="Search timezones"
+            />
           </FormField>
           <FormField id="industryCode" label="Industry">
-            <Select id="industryCode" name="industryCode" defaultValue="general-retail">
+            <Select id="industryCode" value={industryCode} onChange={(event) => setIndustryCode(event.target.value)}>
               {industries.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.name}
@@ -97,7 +169,6 @@ export default function RegisterPage() {
               ))}
             </Select>
           </FormField>
-          <p className="text-sm text-muted">Currency: {currency}</p>
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           <Button type="submit" disabled={pending} className="w-full">
             {pending ? "Creating…" : "Create workspace"}

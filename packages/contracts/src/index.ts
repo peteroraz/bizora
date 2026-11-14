@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { addressInputSchema, optionalPhoneSchema } from "./address.js";
+import { passwordSchema } from "./password.js";
+
+export { passwordRules, passwordSchema } from "./password.js";
 
 export { addressInputSchema, countryRule, optionalPhoneSchema, phoneE164Schema } from "./address.js";
 export type { AddressInput } from "./address.js";
@@ -88,12 +91,12 @@ export function success<T>(data: T, correlationId: string) {
 
 export const registerRequestSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(12).max(128),
+  password: passwordSchema,
   displayName: z.string().min(1).max(120),
   organizationName: z.string().min(1).max(160),
   countryCode: z.string().length(2).toUpperCase(),
-  baseCurrencyCode: z.string().length(3).toUpperCase(),
-  timezone: z.string().min(1),
+  baseCurrencyCode: z.string().length(3).toUpperCase().optional(),
+  timezone: z.string().min(1).optional(),
   industryCode: z.string().min(1).max(64).optional(),
 });
 
@@ -116,7 +119,7 @@ export const refreshRequestSchema = z.object({
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(12).max(128),
+  newPassword: passwordSchema,
 });
 
 export const tenantContextSchema = z.object({
@@ -220,7 +223,7 @@ export const createInvitationSchema = z.object({
 export const acceptInvitationSchema = z.object({
   token: z.string().min(16),
   displayName: z.string().min(1).max(120),
-  password: z.string().min(12).max(128).optional(),
+  password: passwordSchema.optional(),
 });
 
 export const createBranchSchema = z.object({

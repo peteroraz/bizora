@@ -13,6 +13,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@bizora/contracts": "workspace:*",
     "@bizora/money": "workspace:*",
     "@bizora/ui": "workspace:*",
     "geist": "^1.9.2",

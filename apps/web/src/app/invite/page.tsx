@@ -1,28 +1,43 @@
 "use client";
 
+import { passwordRules } from "@bizora/contracts/password";
 import { Button, Card, FormField, Input } from "@bizora/ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
+import { PasswordWithConfirmation } from "../../components/password-fields";
+import { confirmPasswordError } from "../../lib/password";
 
 function InviteForm() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
   const [error, setError] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (!event.currentTarget.reportValidity()) return;
+    const mismatchError = confirmPasswordError(password, confirmation);
+    const rulesMet = passwordRules.every((rule) => rule.met(password));
+    if (mismatchError || !rulesMet) {
+      setMismatch(mismatchError);
+      setError(rulesMet ? null : "Choose a password that meets every rule.");
+      return;
+    }
     setPending(true);
     setError(null);
-    const form = new FormData(event.currentTarget);
+    setMismatch(null);
     const response = await fetch("/api/v1/invitations/accept", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         token: form.get("token"),
         displayName: form.get("displayName"),
-        password: form.get("password"),
+        password,
       }),
     });
     const payload = await response.json();
@@ -35,7 +50,7 @@ function InviteForm() {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email: payload.data.user.email, password: form.get("password") }),
+      body: JSON.stringify({ email: payload.data.user.email, password }),
     });
     setPending(false);
     if (!login.ok) {
@@ -60,9 +75,21 @@ function InviteForm() {
           <FormField id="displayName" label="Your name">
             <Input id="displayName" name="displayName" required />
           </FormField>
-          <FormField id="password" label="Password" hint="At least 12 characters">
-            <Input id="password" name="password" type="password" minLength={12} required />
-          </FormField>
+          <PasswordWithConfirmation
+            passwordId="password"
+            confirmId="confirmPassword"
+            password={password}
+            confirmation={confirmation}
+            onPasswordChange={(value) => {
+              setPassword(value);
+              if (confirmation) setMismatch(confirmPasswordError(value, confirmation));
+            }}
+            onConfirmationChange={(value) => {
+              setConfirmation(value);
+              setMismatch(value ? confirmPasswordError(password, value) : null);
+            }}
+            mismatch={mismatch}
+          />
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           <Button type="submit" disabled={pending || !token} className="w-full">
             {pending ? "Joining…" : "Accept invitation"}

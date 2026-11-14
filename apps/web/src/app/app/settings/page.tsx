@@ -4,6 +4,7 @@ import { Button, Card, FormField, Input, PageHeader, Select, Tab, TabPanel, Tabs
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
+import { ChangePasswordForm } from "../../../components/change-password-form";
 import { api } from "../../../lib/api";
 import { persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
@@ -24,7 +25,7 @@ type Branch = { id: string; name: string; phoneE164: string | null; address: Add
 type BranchDraft = { name: string; phone: string; address: AddressValue };
 
 const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"];
-const tabs = ["organization", "business", "branches", "team", "appearance"];
+const tabs = ["organization", "business", "branches", "team", "appearance", "password"];
 
 function fromAddress(address: AddressValue | null, countryCode: string): AddressValue {
   if (!address) return emptyAddress(countryCode);
@@ -246,7 +247,7 @@ function SettingsScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="Organization, locations, team, and appearance." />
+      <PageHeader title="Settings" description="Organization, locations, team, appearance, and password." />
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       {notice ? <p className="break-all text-sm text-muted">{notice}</p> : null}
       <TabsRoot value={tab} onValueChange={setTab} label="Settings" tabs={tabs.map((item) => <Tab key={item} value={item}>{item[0]?.toUpperCase()}{item.slice(1)}</Tab>)}>
@@ -430,6 +431,9 @@ function SettingsScreen() {
               ))}
             </div>
           </Card>
+        </TabPanel>
+        <TabPanel value="password">
+          <ChangePasswordForm />
         </TabPanel>
       </TabsRoot>
     </div>
