@@ -47,7 +47,6 @@ function LoginForm() {
       return;
     }
     if (payload.data?.needsWorkspaceSelection) {
-      sessionStorage.setItem("bizora.workspaces", JSON.stringify(payload.data.workspaces ?? []));
       router.push("/select-workspace");
       return;
     }
