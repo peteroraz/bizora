@@ -60,6 +60,71 @@ resource "google_cloud_run_v2_service" "api" {
         value = local.web_origin
       }
       env {
+        name  = "PUBLIC_WEB_ORIGIN"
+        value = local.web_origin
+      }
+      env {
+        name  = "EMAIL_PROVIDER"
+        value = var.email_provider
+      }
+      dynamic "env" {
+        for_each = var.email_from == "" ? [] : [var.email_from]
+        content {
+          name  = "EMAIL_FROM"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.email_provider == "resend" ? [1] : []
+        content {
+          name = "EMAIL_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.email_api_key.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+      dynamic "env" {
+        for_each = var.google_oauth_client_id == "" ? [] : [var.google_oauth_client_id]
+        content {
+          name  = "GOOGLE_OAUTH_CLIENT_ID"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.google_oauth_client_id == "" ? [] : [1]
+        content {
+          name = "GOOGLE_OAUTH_CLIENT_SECRET"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.google_oauth_client_secret.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+      dynamic "env" {
+        for_each = var.microsoft_oauth_client_id == "" ? [] : [var.microsoft_oauth_client_id]
+        content {
+          name  = "MICROSOFT_OAUTH_CLIENT_ID"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.microsoft_oauth_client_id == "" ? [] : [1]
+        content {
+          name = "MICROSOFT_OAUTH_CLIENT_SECRET"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.microsoft_oauth_client_secret.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+      env {
         name  = "INVITE_TOKEN_EXPOSE"
         value = var.invite_token_expose ? "true" : "false"
       }
@@ -127,6 +192,9 @@ resource "google_cloud_run_v2_service" "api" {
     google_secret_manager_secret_version.database_url,
     google_secret_manager_secret_iam_member.api_database_url,
     google_secret_manager_secret_iam_member.api_jwt,
+    google_secret_manager_secret_iam_member.api_google_oauth,
+    google_secret_manager_secret_iam_member.api_microsoft_oauth,
+    google_secret_manager_secret_iam_member.api_email,
     google_project_iam_member.api_cloudsql,
     google_service_account_iam_member.deployer_api,
   ]

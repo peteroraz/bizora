@@ -297,11 +297,81 @@ If you add a Google external Application Load Balancer in front of Cloud Run, th
 
 Auth and invitation-accept routes use `@nestjs/throttler` with **in-memory** storage. That is safe for a single Cloud Run instance. Terraform sets `bizora-api` `max_instance_count` to 1 in both environments for this reason. Before scaling the API to more than one instance, switch the throttler to Redis-backed storage (`REDIS_URL` is already provisioned locally and should be used in GCP as well).
 
+## Email, Google, and Microsoft sign-in
+
+These features stay off until the values below exist. An empty client id does not mount that provider's secret, and `email_provider = "console"` does not mount the email key, so Cloud Run can start before any of the new secret versions exist.
+
+Set the non-secret values in the environment tfvars, then apply:
+
+```hcl
+email_provider            = "resend"
+email_from                = "Bizora <hello@your-domain>"
+google_oauth_client_id    = "GOOGLE_CLIENT_ID"
+microsoft_oauth_client_id = "MICROSOFT_CLIENT_ID"
+```
+
+`email_provider` may stay `"console"`. Resend requires `email_from` and a version of `bizora-email-api-key`.
+
+### Google OAuth client
+
+1. Open [Google Cloud Console → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent). Create an external app. Add the scopes `openid`, `email`, and `profile` (`.../auth/userinfo.email` and `.../auth/userinfo.profile`).
+2. Create an OAuth client ID of type Web application.
+3. Authorized redirect URIs. The staging host is the `bizora-web` Cloud Run URL (`https://bizora-web-PROJECT_NUMBER.REGION.run.app`):
+   - `http://localhost:3000/api/v1/auth/oauth/google/callback`
+   - `https://bizora-web-PROJECT_NUMBER.REGION.run.app/api/v1/auth/oauth/google/callback`
+4. Copy the client id into tfvars. Store the client secret as a secret version (PowerShell below). Do not put the secret in tfvars or git.
+
+### Microsoft Entra app
+
+1. In [Microsoft Entra admin center](https://entra.microsoft.com/) → App registrations → New registration.
+2. Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
+3. Redirect URI, platform Web, using the same hosts as Google:
+   - `http://localhost:3000/api/v1/auth/oauth/microsoft/callback`
+   - `https://bizora-web-PROJECT_NUMBER.REGION.run.app/api/v1/auth/oauth/microsoft/callback`
+4. Certificates & secrets → New client secret. Copy the secret value immediately.
+5. The API uses the `common` endpoint and checks the token issuer against `https://login.microsoftonline.com/{tid}/v2.0`.
+
+### Resend
+
+1. Create a Resend account and verify the sending domain (DNS records Resend shows for that domain).
+2. Create an API key restricted to sending.
+3. Set `email_from` to an address on that domain, set `email_provider = "resend"`, and add the key as a secret version.
+
+### Secret versions on Windows PowerShell
+
+Run these after Terraform has created the secret containers. Replace the project id for production. The values are read from prompts so they are not stored in shell history as command arguments.
+
+```powershell
+$project = "bizora-staging"
+$google = Read-Host "Google client secret" -AsSecureString
+$microsoft = Read-Host "Microsoft client secret" -AsSecureString
+$email = Read-Host "Resend API key" -AsSecureString
+
+function Add-SecretVersion($name, $secure) {
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  $file = New-TemporaryFile
+  try {
+    [IO.File]::WriteAllText($file, $plain)
+    gcloud secrets versions add $name --project=$project --data-file=$file
+  } finally {
+    Remove-Item $file -Force
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  }
+}
+
+Add-SecretVersion "bizora-google-oauth-client-secret" $google
+Add-SecretVersion "bizora-microsoft-oauth-client-secret" $microsoft
+Add-SecretVersion "bizora-email-api-key" $email
+```
+
+Apply again after the tfvars include the client ids and, for Resend, `email_provider` and `email_from`. Cloud Run then mounts `latest`.
+
 ## Known limitations
 
 - The API throttler is in-memory. Maximum instances stay at 1 until it moves to Redis. A second instance would give each copy its own counters.
 - There is no custom domain. Browsers use the Cloud Run `run.app` URLs.
-- There is no email delivery. Staging sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are returned by the API. Production sets it to `false`, so an invite cannot be delivered until email exists.
+- Outbound email uses the console provider until `email_provider` is `resend` and `bizora-email-api-key` has a version. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
 - CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.
 

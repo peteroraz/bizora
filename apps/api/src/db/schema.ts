@@ -92,10 +92,42 @@ export const organizations = pgTable(
 export const users = pgTable("users", {
   id: uuid("id").primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
-  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  passwordHash: varchar("password_hash", { length: 255 }),
   displayName: varchar("display_name", { length: 120 }).notNull(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   ...timestamps,
 });
+
+export const userIdentities = pgTable(
+  "user_identities",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerSubject: varchar("provider_subject", { length: 255 }).notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_identities_provider_subject_key").on(table.provider, table.providerSubject),
+    index("user_identities_user_id_idx").on(table.userId),
+  ],
+);
+
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    purpose: varchar("purpose", { length: 32 }).notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("auth_tokens_user_purpose_idx").on(table.userId, table.purpose)],
+);
 
 export const businesses = pgTable(
   "businesses",
@@ -320,6 +352,8 @@ export const schema = {
   invitations,
   sessions,
   auditEvents,
+  userIdentities,
+  authTokens,
 };
 
 export type DatabaseSchema = typeof schema;

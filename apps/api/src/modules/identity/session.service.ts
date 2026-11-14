@@ -13,7 +13,7 @@ import {
 import type { AppEnv } from "@bizora/config/env";
 import { ttlToMs } from "@bizora/config/env";
 import type { Role } from "@bizora/contracts";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import type { Request } from "express";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
@@ -77,6 +77,27 @@ export class SessionService {
       this.env.JWT_ACCESS_TTL,
     );
     return { sessionId, accessToken, refreshToken };
+  }
+
+  async listActive(userId: string) {
+    return this.db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())));
+  }
+
+  async revokeAllForUser(userId: string) {
+    await this.db
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+  }
+
+  async revokeOthers(userId: string, sessionId: string) {
+    await this.db
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), ne(sessions.id, sessionId)));
   }
 
   async revoke(sessionId: string, userId: string) {

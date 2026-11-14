@@ -6,6 +6,7 @@ import { CoreModule } from "./core.module.js";
 import type { AppDatabase } from "./db/database.js";
 import { AddressModule } from "./modules/addresses/address.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
+import { EmailModule } from "./modules/email/email.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { RbacModule } from "./modules/rbac/rbac.module.js";
@@ -25,6 +26,7 @@ export class AppModule {
       module: AppModule,
       imports: [
         CoreModule.forRoot(options),
+        EmailModule.register(),
         ThrottlerModule.forRoot({
           throttlers: [
             {

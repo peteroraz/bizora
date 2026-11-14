@@ -49,6 +49,35 @@ variable "invite_token_expose" {
   description = "When true, the API includes invite tokens in responses. Staging only."
 }
 
+variable "email_provider" {
+  type        = string
+  description = "Email adapter. console logs messages. resend sends them and requires the email API key secret version plus email_from."
+  default     = "console"
+
+  validation {
+    condition     = contains(["console", "resend"], var.email_provider)
+    error_message = "email_provider must be console or resend."
+  }
+}
+
+variable "email_from" {
+  type        = string
+  description = "From address for outbound email, for example Bizora <hello@example.com>. Required when email_provider is resend."
+  default     = ""
+}
+
+variable "google_oauth_client_id" {
+  type        = string
+  description = "Google OAuth client id. Empty disables Google sign-in and does not mount the client secret."
+  default     = ""
+}
+
+variable "microsoft_oauth_client_id" {
+  type        = string
+  description = "Microsoft OAuth client id. Empty disables Microsoft sign-in and does not mount the client secret."
+  default     = ""
+}
+
 variable "wif_mode" {
   type        = string
   description = "GitHub Actions identity allowed to impersonate the deployer. main_branch (staging) or production_environment (prod)."

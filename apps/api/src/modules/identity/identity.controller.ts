@@ -1,16 +1,17 @@
-import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { ThrottlerGuard } from "@nestjs/throttler";
-import { REFRESH_COOKIE, SESSION_COOKIE } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
-import { ttlToMs } from "@bizora/config/env";
 import { refreshRequestSchema, registerRequestSchema, success } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
-import type { CookieOptions, Request, Response } from "express";
+import type { Request, Response } from "express";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { APP_ENV } from "../../tokens.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
-import { IdentityService, type AuthPayload } from "./identity.service.js";
+import { AccountRecoveryService } from "./account-recovery.service.js";
+import { IdentityService } from "./identity.service.js";
+import { OauthService } from "./oauth.service.js";
 import { AUTH_IDENTITY_KEY, SessionGuard } from "./session.guard.js";
+import { applySession, clearSessionCookies, writeSessionCookies } from "./session-cookies.js";
 import { SessionService } from "./session.service.js";
 
 type AuthedRequest = Request & {
@@ -23,6 +24,8 @@ export class IdentityController {
   constructor(
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
+    @Inject(OauthService) private readonly oauth: OauthService,
     @Inject(APP_ENV) private readonly env: AppEnv,
   ) {}
 
@@ -68,13 +71,71 @@ export class IdentityController {
     return success(tokens, req.correlationId ?? "unknown");
   }
 
+  @Get("providers")
+  providers(@Req() req: AuthedRequest) {
+    return success(this.oauth.enabled(), req.correlationId ?? "auth");
+  }
+
+  @Post("password/forgot")
+  @UseGuards(ThrottlerGuard)
+  async forgotPassword(@Body() body: unknown, @Req() req: AuthedRequest) {
+    return success(await this.recovery.requestPasswordReset(body), req.correlationId ?? "auth");
+  }
+
+  @Post("password/reset")
+  @UseGuards(ThrottlerGuard)
+  async resetPassword(@Body() body: unknown, @Req() req: AuthedRequest) {
+    return success(await this.recovery.resetPassword(body, this.meta(req)), req.correlationId ?? "auth");
+  }
+
+  @Post("email/verify")
+  @UseGuards(ThrottlerGuard)
+  async verifyEmail(@Body() body: unknown, @Req() req: AuthedRequest) {
+    return success(await this.recovery.confirmVerification(body, this.meta(req)), req.correlationId ?? "auth");
+  }
+
+  @Post("email/verification")
+  @UseGuards(ThrottlerGuard, SessionGuard)
+  async resendVerification(@Req() req: AuthedRequest) {
+    const identity = this.actor(req);
+    return success(await this.recovery.resendVerification(identity.userId), req.correlationId ?? "auth");
+  }
+
+  @Post("organization")
+  @UseGuards(SessionGuard)
+  async createOrganization(@Body() body: unknown, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    const identity = this.actor(req);
+    const session = await this.identity.createOrganization(identity.userId, body, this.meta(req));
+    applySession(res, this.env, session);
+    return success(session, req.correlationId ?? "unknown");
+  }
+
+  @Get("security")
+  @UseGuards(SessionGuard)
+  async security(@Req() req: AuthedRequest) {
+    const identity = this.actor(req);
+    return success(await this.identity.security(identity.userId, identity.sessionId), req.correlationId ?? "auth");
+  }
+
+  @Post("identities/:provider/unlink")
+  @UseGuards(ThrottlerGuard, SessionGuard)
+  async unlink(@Param("provider") provider: string, @Req() req: AuthedRequest) {
+    const identity = this.actor(req);
+    await this.identity.unlinkIdentity(identity.userId, provider, this.meta(req));
+    return success({ ok: true }, req.correlationId ?? "auth");
+  }
+
+  @Post("sessions/revoke-others")
+  @UseGuards(SessionGuard)
+  async revokeOthers(@Req() req: AuthedRequest) {
+    const identity = this.actor(req);
+    return success(await this.identity.revokeOtherSessions(identity.userId, identity.sessionId), req.correlationId ?? "auth");
+  }
+
   @Post("password")
   @UseGuards(ThrottlerGuard, SessionGuard)
   async changePassword(@Body() body: unknown, @Req() req: AuthedRequest) {
-    const identity = req[AUTH_IDENTITY_KEY];
-    if (!identity) {
-      throw new Error("Missing identity");
-    }
+    const identity = this.actor(req);
     await this.identity.changePassword(identity.userId, body);
     return success({ ok: true }, req.correlationId ?? "unknown");
   }
@@ -105,30 +166,21 @@ export class IdentityController {
     };
   }
 
-  private setAuthCookies(res: Response, session: AuthPayload) {
-    if (session.accessToken && session.refreshToken) {
-      this.writeCookies(res, session.accessToken, session.refreshToken);
-    }
+  private actor(req: AuthedRequest) {
+    const identity = req[AUTH_IDENTITY_KEY];
+    if (!identity) throw new Error("Missing identity");
+    return identity;
+  }
+
+  private setAuthCookies(res: Response, session: Parameters<typeof applySession>[2]) {
+    applySession(res, this.env, session);
   }
 
   private writeCookies(res: Response, accessToken: string, refreshToken: string) {
-    res.cookie(SESSION_COOKIE, accessToken, this.cookieOptions(ttlToMs(this.env.JWT_ACCESS_TTL)));
-    res.cookie(REFRESH_COOKIE, refreshToken, this.cookieOptions(ttlToMs(this.env.JWT_REFRESH_TTL)));
+    writeSessionCookies(res, this.env, accessToken, refreshToken);
   }
 
   private clearCookies(res: Response) {
-    const base = this.cookieOptions(0);
-    res.clearCookie(SESSION_COOKIE, base);
-    res.clearCookie(REFRESH_COOKIE, base);
-  }
-
-  private cookieOptions(maxAge: number): CookieOptions {
-    return {
-      httpOnly: true,
-      secure: this.env.COOKIE_SECURE,
-      sameSite: this.env.COOKIE_SAMESITE,
-      path: "/",
-      maxAge,
-    };
+    clearSessionCookies(res, this.env);
   }
 }

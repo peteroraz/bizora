@@ -118,8 +118,29 @@ export const refreshRequestSchema = z.object({
 });
 
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
+  currentPassword: z.string().min(1).optional(),
   newPassword: passwordSchema,
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(16),
+  password: passwordSchema,
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(16),
+});
+
+export const createOrganizationSchema = registerRequestSchema.pick({
+  organizationName: true,
+  countryCode: true,
+  baseCurrencyCode: true,
+  timezone: true,
+  industryCode: true,
 });
 
 export const tenantContextSchema = z.object({
