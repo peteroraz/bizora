@@ -1,13 +1,16 @@
 "use client";
 
-import { Button, Card, Input } from "@bizora/ui";
+import { Button, Card, FormField, Input } from "@bizora/ui";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState } from "react";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const params = useSearchParams();
+  const [error, setError] = useState<string | null>(
+    params.get("reason") === "session" ? "Your session expired or was revoked. Sign in again." : null,
+  );
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -19,10 +22,7 @@ export default function LoginPage() {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({
-        email: form.get("email"),
-        password: form.get("password"),
-      }),
+      body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
     });
     const payload = await response.json();
     setPending(false);
@@ -35,7 +35,7 @@ export default function LoginPage() {
       router.push("/select-workspace");
       return;
     }
-    const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((r) => r.json());
+    const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((result) => result.json());
     router.push(me.data?.onboardingCompleted === false ? "/app/onboarding" : "/app");
   }
 
@@ -44,23 +44,32 @@ export default function LoginPage() {
       <Card className="w-full">
         <h1 className="text-2xl font-semibold">Sign in to Bizora</h1>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <label className="block text-sm">
-            Email
-            <Input name="email" type="email" autoComplete="email" required className="mt-1" />
-          </label>
-          <label className="block text-sm">
-            Password
-            <Input name="password" type="password" autoComplete="current-password" required className="mt-1" />
-          </label>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <FormField id="email" label="Email">
+            <Input id="email" name="email" type="email" autoComplete="email" required />
+          </FormField>
+          <FormField id="password" label="Password">
+            <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          </FormField>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
           <Button type="submit" disabled={pending} className="w-full">
             {pending ? "Signing in…" : "Sign in"}
           </Button>
         </form>
         <p className="mt-4 text-sm">
-          New here? <Link href="/register">Create a workspace</Link>
+          New here?{" "}
+          <Link href="/register" className="font-medium text-primary">
+            Create a workspace
+          </Link>
         </p>
       </Card>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

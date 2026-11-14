@@ -51,6 +51,42 @@ jobs:
             terraform -chdir="infra/terraform/envs/${env}" validate
           done
 
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bizora
+          POSTGRES_PASSWORD: bizora
+          POSTGRES_DB: bizora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bizora"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @bizora/api db:migrate
+        env:
+          DATABASE_URL: postgres://bizora:bizora@localhost:5432/bizora
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: pnpm --filter @bizora/web e2e
+        env:
+          CI: "true"
+          DATABASE_URL: postgres://bizora:bizora@localhost:5432/bizora
+
   docker:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

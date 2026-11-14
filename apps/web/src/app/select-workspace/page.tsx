@@ -19,9 +19,7 @@ export default function SelectWorkspacePage() {
 
   useEffect(() => {
     const stored = sessionStorage.getItem("bizora.workspaces");
-    if (stored) {
-      setWorkspaces(JSON.parse(stored) as Workspace[]);
-    }
+    if (stored) setWorkspaces(JSON.parse(stored) as Workspace[]);
   }, []);
 
   async function choose(organizationId: string) {
@@ -38,7 +36,7 @@ export default function SelectWorkspacePage() {
       return;
     }
     sessionStorage.removeItem("bizora.workspaces");
-    const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((r) => r.json());
+    const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((result) => result.json());
     router.push(me.data?.onboardingCompleted === false ? "/app/onboarding" : "/app");
   }
 
@@ -46,9 +44,7 @@ export default function SelectWorkspacePage() {
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full">
         <h1 className="text-2xl font-semibold">Choose a workspace</h1>
-        <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-          Your account belongs to more than one organization.
-        </p>
+        <p className="mt-2 text-sm text-muted">Your account belongs to more than one organization.</p>
         <ul className="mt-6 space-y-3">
           {workspaces.map((workspace) => (
             <li key={workspace.organizationId}>
@@ -60,7 +56,7 @@ export default function SelectWorkspacePage() {
             </li>
           ))}
         </ul>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       </Card>
     </main>
   );

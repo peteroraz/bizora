@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Input } from "@bizora/ui";
+import { Button, Card, FormField, Input } from "@bizora/ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 
@@ -35,14 +35,17 @@ function InviteForm() {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({
-        email: payload.data.user.email,
-        password: form.get("password"),
-      }),
+      body: JSON.stringify({ email: payload.data.user.email, password: form.get("password") }),
     });
     setPending(false);
     if (!login.ok) {
       router.push("/login");
+      return;
+    }
+    const body = await login.json();
+    if (body.data?.needsWorkspaceSelection) {
+      sessionStorage.setItem("bizora.workspaces", JSON.stringify(body.data.workspaces ?? []));
+      router.push("/select-workspace");
       return;
     }
     router.push("/app");
@@ -54,15 +57,13 @@ function InviteForm() {
         <h1 className="text-2xl font-semibold">Join a Bizora workspace</h1>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <input type="hidden" name="token" value={token} />
-          <label className="block text-sm">
-            Your name
-            <Input name="displayName" required className="mt-1" />
-          </label>
-          <label className="block text-sm">
-            Password (12+ characters)
-            <Input name="password" type="password" minLength={12} required className="mt-1" />
-          </label>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <FormField id="displayName" label="Your name">
+            <Input id="displayName" name="displayName" required />
+          </FormField>
+          <FormField id="password" label="Password" hint="At least 12 characters">
+            <Input id="password" name="password" type="password" minLength={12} required />
+          </FormField>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
           <Button type="submit" disabled={pending || !token} className="w-full">
             {pending ? "Joining…" : "Accept invitation"}
           </Button>
