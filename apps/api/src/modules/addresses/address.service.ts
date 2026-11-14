@@ -27,62 +27,59 @@ export class AddressService {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  async create(tenant: TenantContext, raw: unknown) {
-    const payload = addressInputSchema.parse(raw);
+  /**
+   * Creates or updates the address row already linked to an owner.
+   * Callers resolve `existingId` from that owner and enforce their own permission.
+   * A client never supplies the address id.
+   */
+  async upsert(tenant: TenantContext, existingId: string | null, raw: unknown) {
+    const values = addressValues(addressInputSchema.parse(raw));
+    if (existingId) {
+      const existing = await this.find(tenant.tenantId, existingId);
+      if (!existing) {
+        throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
+      }
+      const [updated] = await this.db
+        .update(addresses)
+        .set({ ...values, updatedAt: new Date(), updatedBy: tenant.userId })
+        .where(and(eq(addresses.id, existingId), eq(addresses.tenantId, tenant.tenantId)))
+        .returning();
+      if (!updated) {
+        throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
+      }
+      await this.record(tenant, existingId, "address.updated");
+      return updated;
+    }
+
     const id = newId();
     const [created] = await this.db
       .insert(addresses)
       .values({
         id,
         tenantId: tenant.tenantId,
-        ...addressValues(payload),
+        ...values,
         createdBy: tenant.userId,
         updatedBy: tenant.userId,
       })
       .returning();
-    await this.audit.record({
-      tenantId: tenant.tenantId,
-      actorUserId: tenant.userId,
-      action: "address.created",
-      entityType: "address",
-      entityId: id,
-      correlationId: tenant.correlationId,
-      businessId: tenant.businessId,
-      branchId: tenant.branchId,
-    });
+    if (!created) {
+      throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
+    }
+    await this.record(tenant, id, "address.created");
     return created;
   }
 
-  async get(tenant: TenantContext, id: string) {
-    const address = await this.find(tenant.tenantId, id);
-    if (!address) {
-      throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
-    }
-    return address;
-  }
-
-  async update(tenant: TenantContext, id: string, raw: unknown) {
-    const existing = await this.find(tenant.tenantId, id);
-    if (!existing) {
-      throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
-    }
-    const payload = addressInputSchema.parse(raw);
-    const [updated] = await this.db
-      .update(addresses)
-      .set({ ...addressValues(payload), updatedAt: new Date(), updatedBy: tenant.userId })
-      .where(and(eq(addresses.id, id), eq(addresses.tenantId, tenant.tenantId)))
-      .returning();
+  private async record(tenant: TenantContext, id: string, action: "address.created" | "address.updated") {
     await this.audit.record({
       tenantId: tenant.tenantId,
       actorUserId: tenant.userId,
-      action: "address.updated",
+      action,
       entityType: "address",
       entityId: id,
       correlationId: tenant.correlationId,
       businessId: tenant.businessId,
       branchId: tenant.branchId,
     });
-    return updated;
   }
 
   private async find(tenantId: string, id: string) {

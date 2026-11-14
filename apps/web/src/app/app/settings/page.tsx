@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
 import { api } from "../../../lib/api";
-import { persistAddress } from "../../../lib/address-client";
+import { persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
 
 type Person = { membershipId: string; email: string | null; displayName: string | null; role: string };
@@ -18,11 +18,10 @@ type Business = {
   timezone: string;
   industryCode: string | null;
   phoneE164: string | null;
-  addressId: string | null;
   address: AddressValue | null;
 };
-type Branch = { id: string; name: string; phoneE164: string | null; addressId: string | null; address: AddressValue | null };
-type BranchDraft = { name: string; phone: string; addressId: string | null; address: AddressValue };
+type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null };
+type BranchDraft = { name: string; phone: string; address: AddressValue };
 
 const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"];
 const tabs = ["organization", "business", "branches", "team", "appearance"];
@@ -51,7 +50,6 @@ function SettingsScreen() {
   const [businessSubs, setBusinessSubs] = useState<SubdivisionOption[]>([]);
   const [orgName, setOrgName] = useState("");
   const [orgPhone, setOrgPhone] = useState("");
-  const [orgAddressId, setOrgAddressId] = useState<string | null>(null);
   const [orgAddress, setOrgAddress] = useState<AddressValue>(emptyAddress());
   const [business, setBusiness] = useState<Business | null>(null);
   const [businessAddress, setBusinessAddress] = useState<AddressValue>(emptyAddress());
@@ -85,7 +83,6 @@ function SettingsScreen() {
     if (organization) {
       setOrgName(organization.name ?? "");
       setOrgPhone(organization.phoneE164 ?? "");
-      setOrgAddressId(organization.addressId ?? null);
       const next = fromAddress(organization.address, organization.address?.countryCode ?? "NG");
       setOrgAddress(next);
       setOrgSubs(await subdivisionsFor(next.countryCode));
@@ -113,7 +110,6 @@ function SettingsScreen() {
       drafts[branch.id] = {
         name: branch.name,
         phone: branch.phoneE164 ?? "",
-        addressId: branch.addressId,
         address,
       };
       subs[branch.id] = await subdivisionsFor(address.countryCode || "NG");
@@ -132,10 +128,10 @@ function SettingsScreen() {
     event.preventDefault();
     setError(null);
     try {
-      const addressId = orgAddress.line1 ? await persistAddress(orgAddress, orgAddressId) : orgAddressId;
+      if (orgAddress.line1.trim()) await persistOwnerAddress({ kind: "organization" }, orgAddress);
       const response = await api("/api/v1/organizations/current", {
         method: "PATCH",
-        body: JSON.stringify({ name: orgName, phoneE164: orgPhone || null, addressId }),
+        body: JSON.stringify({ name: orgName, phoneE164: orgPhone || null }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? "Could not save the organization.");
@@ -151,7 +147,9 @@ function SettingsScreen() {
     if (!business) return;
     setError(null);
     try {
-      const addressId = businessAddress.line1 ? await persistAddress(businessAddress, business.addressId) : business.addressId;
+      if (businessAddress.line1.trim()) {
+        await persistOwnerAddress({ kind: "business", id: business.id }, businessAddress);
+      }
       const response = await api(`/api/v1/businesses/${business.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -161,7 +159,6 @@ function SettingsScreen() {
           timezone: business.timezone,
           industryCode: business.industryCode,
           phoneE164: business.phoneE164 || null,
-          addressId,
         }),
       });
       const payload = await response.json();
@@ -178,10 +175,10 @@ function SettingsScreen() {
     if (!draft) return;
     setError(null);
     try {
-      const addressId = draft.address.line1 ? await persistAddress(draft.address, draft.addressId) : draft.addressId;
+      if (draft.address.line1.trim()) await persistOwnerAddress({ kind: "branch", id: branchId }, draft.address);
       const response = await api(`/api/v1/branches/${branchId}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: draft.name, phoneE164: draft.phone || null, addressId }),
+        body: JSON.stringify({ name: draft.name, phoneE164: draft.phone || null }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? "Could not save the branch.");

@@ -1,7 +1,7 @@
 export const fontProposal = {
   family: "Geist Sans",
   mono: "Geist Mono",
-  source: "next/font/google, self-hosted at build time",
+  source: "geist npm package, self-hosted through next/font/local",
   fallback: "Segoe UI, Noto Sans, system-ui, sans-serif",
   reason:
     "Neutral grotesk with a high x-height, comfortable at 14px in dense product UI. Geist Mono is for invoice ids. Amounts stay in Geist Sans with tabular figures so the naira sign shares the text face.",

@@ -197,19 +197,16 @@ export const updateBusinessSchema = z.object({
   baseCurrencyCode: z.string().length(3).toUpperCase().optional(),
   timezone: z.string().min(1).optional(),
   industryCode: z.string().min(1).max(64).nullable().optional(),
-  addressId: z.string().uuid().nullable().optional(),
   phoneE164: optionalPhoneSchema,
 });
 
 export const updateBranchSchema = z.object({
   name: z.string().min(1).max(160).optional(),
-  addressId: z.string().uuid().nullable().optional(),
   phoneE164: optionalPhoneSchema,
 });
 
 export const updateOrganizationSchema = z.object({
   name: z.string().min(1).max(160).optional(),
-  addressId: z.string().uuid().nullable().optional(),
   phoneE164: optionalPhoneSchema,
 });
 

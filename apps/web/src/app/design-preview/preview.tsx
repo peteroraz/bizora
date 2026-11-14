@@ -1,28 +1,19 @@
 import type { CSSProperties } from "react";
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import { contrastPairs, palettes, studio } from "@/design/palettes";
 import { fontProposal, radii, shadows, spacingScale, typeScale } from "@/design/typography";
 import { PaletteSpecimen, RatioList } from "./specimen";
 
-const sans = Geist({
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const mono = Geist_Mono({
-  subsets: ["latin"],
-  display: "swap",
-});
-
 export function DesignPreview() {
   return (
     <div
-      className={sans.className}
+      className={GeistSans.className}
       style={{
         minHeight: "100vh",
         background: studio.canvas,
         color: studio.fg,
-        fontFamily: `${sans.style.fontFamily}, "Segoe UI", "Noto Sans", sans-serif`,
+        fontFamily: `${GeistSans.style.fontFamily}, "Segoe UI", "Noto Sans", sans-serif`,
       }}
     >
       <style>{`
@@ -110,7 +101,7 @@ export function DesignPreview() {
                 </p>
               </div>
             ))}
-            <p style={{ margin: "8px 0 0", fontFamily: mono.style.fontFamily, fontSize: 14, lineHeight: "20px" }}>
+            <p style={{ margin: "8px 0 0", fontFamily: GeistMono.style.fontFamily, fontSize: 14, lineHeight: "20px" }}>
               INV-1042 · Geist Mono
             </p>
           </div>

@@ -15,6 +15,7 @@
   "dependencies": {
     "@bizora/money": "workspace:*",
     "@bizora/ui": "workspace:*",
+    "geist": "^1.9.2",
     "lucide-react": "^0.511.0",
     "next": "^15.3.3",
     "react": "^19.1.0",

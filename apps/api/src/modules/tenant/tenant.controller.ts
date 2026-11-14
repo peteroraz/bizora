@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Put, UseGuards } from "@nestjs/common";
 import { Permission, createBranchSchema, success } from "@bizora/contracts";
 import { isBranchScope } from "../../common/tenant-scope.js";
 import { ApiError } from "../../common/errors.js";
@@ -36,6 +36,14 @@ export class TenantController {
   async currentOrganization(@CurrentTenant() tenant: TenantContext) {
     const organization = await this.withAddress(tenant.tenantId, await this.tenants.findOrganization(tenant.tenantId));
     return success({ organization, tenant }, tenant.correlationId);
+  }
+
+  @Put("organizations/current/address")
+  @UseGuards(TenantGuard, PermissionGuard)
+  @RequirePermissions(Permission.ORG_SETTINGS_MANAGE)
+  async putOrganizationAddress(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    const address = await this.onboarding.upsertOrganizationAddress(tenant, body);
+    return success({ address }, tenant.correlationId);
   }
 
   @Patch("organizations/current")
@@ -104,12 +112,28 @@ export class TenantController {
     return success({ branch }, tenant.correlationId);
   }
 
+  @Put("businesses/:id/address")
+  @UseGuards(TenantGuard, PermissionGuard)
+  @RequirePermissions(Permission.BUSINESS_SETTINGS_MANAGE)
+  async putBusinessAddress(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
+    const address = await this.onboarding.upsertBusinessAddress(tenant, id, body);
+    return success({ address }, tenant.correlationId);
+  }
+
   @Patch("businesses/:id")
   @UseGuards(TenantGuard, PermissionGuard)
   @RequirePermissions(Permission.BUSINESS_SETTINGS_MANAGE)
   async updateBusiness(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
     const business = await this.withAddress(tenant.tenantId, await this.onboarding.updateBusiness(tenant, id, body));
     return success({ business }, tenant.correlationId);
+  }
+
+  @Put("branches/:id/address")
+  @UseGuards(TenantGuard, PermissionGuard)
+  @RequirePermissions(Permission.BRANCH_SETTINGS_MANAGE)
+  async putBranchAddress(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
+    const address = await this.onboarding.upsertBranchAddress(tenant, id, body);
+    return success({ address }, tenant.correlationId);
   }
 
   @Patch("branches/:id")

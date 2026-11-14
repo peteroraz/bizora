@@ -18,6 +18,7 @@ import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase } from "../../db/database.js";
 import { addresses, branches, businesses, organizations } from "../../db/schema.js";
 import { DB, FINANCIAL_LEDGER } from "../../tokens.js";
+import { AddressService } from "../addresses/address.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import type { FinancialLedgerPort } from "./financial-ledger.port.js";
 import { TenantRepository } from "./tenant.repository.js";
@@ -29,6 +30,7 @@ export class OnboardingService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
     @Inject(FINANCIAL_LEDGER) private readonly ledger: FinancialLedgerPort,
+    @Inject(AddressService) private readonly addressesService: AddressService,
   ) {}
 
   async complete(tenant: TenantContext, raw: unknown) {
@@ -229,12 +231,6 @@ export class OnboardingService {
         throw new ApiError("COUNTRY_UNKNOWN", "That country is not available.", 400);
       }
     }
-    if (payload.addressId) {
-      const address = await this.tenants.findAddress(tenant.tenantId, payload.addressId);
-      if (!address) {
-        throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
-      }
-    }
     const [updated] = await this.db
       .update(businesses)
       .set({
@@ -243,7 +239,6 @@ export class OnboardingService {
         ...(payload.baseCurrencyCode ? { baseCurrencyCode: payload.baseCurrencyCode } : {}),
         ...(payload.timezone ? { timezone: payload.timezone } : {}),
         ...(payload.industryCode !== undefined ? { industryCode: payload.industryCode } : {}),
-        ...(payload.addressId !== undefined ? { addressId: payload.addressId } : {}),
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
         updatedBy: tenant.userId,
       })
@@ -264,17 +259,10 @@ export class OnboardingService {
     if (!canManageBranchSettings(tenant, branch)) {
       throw new ApiError("FORBIDDEN", "You cannot change this branch.", 403);
     }
-    if (payload.addressId) {
-      const address = await this.tenants.findAddress(tenant.tenantId, payload.addressId);
-      if (!address) {
-        throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
-      }
-    }
     const [updated] = await this.db
       .update(branches)
       .set({
         ...(payload.name ? { name: payload.name } : {}),
-        ...(payload.addressId !== undefined ? { addressId: payload.addressId } : {}),
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
         updatedBy: tenant.userId,
       })
@@ -291,17 +279,10 @@ export class OnboardingService {
       throw new ApiError("FORBIDDEN", "Organization settings require organization-wide authority.", 403);
     }
     const payload = updateOrganizationSchema.parse(raw);
-    if (payload.addressId) {
-      const address = await this.tenants.findAddress(tenant.tenantId, payload.addressId);
-      if (!address) {
-        throw new ApiError("ADDRESS_NOT_FOUND", "Address was not found.", 404);
-      }
-    }
     await this.db
       .update(organizations)
       .set({
         ...(payload.name ? { name: payload.name } : {}),
-        ...(payload.addressId !== undefined ? { addressId: payload.addressId } : {}),
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
         updatedBy: tenant.userId,
       })
@@ -315,5 +296,59 @@ export class OnboardingService {
       correlationId: tenant.correlationId,
     });
     return this.tenants.findOrganization(tenant.tenantId);
+  }
+
+  async upsertOrganizationAddress(tenant: TenantContext, raw: unknown) {
+    if (!canManageOrganizationSettings(tenant)) {
+      throw new ApiError("FORBIDDEN", "Organization settings require organization-wide authority.", 403);
+    }
+    const organization = await this.tenants.findOrganization(tenant.tenantId);
+    if (!organization) {
+      throw new ApiError("ORGANIZATION_NOT_FOUND", "Organization was not found.", 404);
+    }
+    const address = await this.addressesService.upsert(tenant, organization.addressId, raw);
+    if (organization.addressId !== address.id) {
+      await this.db
+        .update(organizations)
+        .set({ addressId: address.id, updatedBy: tenant.userId })
+        .where(eq(organizations.id, tenant.tenantId));
+    }
+    return address;
+  }
+
+  async upsertBusinessAddress(tenant: TenantContext, businessId: string, raw: unknown) {
+    if (!canManageBusinessSettings(tenant, businessId)) {
+      throw new ApiError("FORBIDDEN", "You cannot change business-level configuration.", 403);
+    }
+    const business = await this.tenants.findBusiness(tenant.tenantId, businessId);
+    if (!business) {
+      throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
+    }
+    const address = await this.addressesService.upsert(tenant, business.addressId, raw);
+    if (business.addressId !== address.id) {
+      await this.db
+        .update(businesses)
+        .set({ addressId: address.id, updatedBy: tenant.userId })
+        .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)));
+    }
+    return address;
+  }
+
+  async upsertBranchAddress(tenant: TenantContext, branchId: string, raw: unknown) {
+    const branch = await this.tenants.findBranch(tenant.tenantId, branchId);
+    if (!branch) {
+      throw new ApiError("BRANCH_NOT_FOUND", "Branch was not found.", 404);
+    }
+    if (!canManageBranchSettings(tenant, branch)) {
+      throw new ApiError("FORBIDDEN", "You cannot change this branch.", 403);
+    }
+    const address = await this.addressesService.upsert(tenant, branch.addressId, raw);
+    if (branch.addressId !== address.id) {
+      await this.db
+        .update(branches)
+        .set({ addressId: address.id, updatedBy: tenant.userId })
+        .where(and(eq(branches.id, branchId), eq(branches.tenantId, tenant.tenantId)));
+    }
+    return address;
   }
 }

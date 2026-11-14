@@ -8,6 +8,35 @@ const timestamps = {
   updatedBy: uuid("updated_by"),
 };
 
+export const countries = pgTable("countries", {
+  code: varchar("code", { length: 2 }).primaryKey(),
+  name: text("name").notNull(),
+  defaultCurrencyCode: varchar("default_currency_code", { length: 3 }).notNull(),
+  timezones: text("timezones").array().notNull(),
+  callingCode: varchar("calling_code", { length: 16 }),
+  subdivisionLabel: text("subdivision_label").notNull(),
+  subdivisionRequired: boolean("subdivision_required").notNull(),
+  postalCodeRequired: boolean("postal_code_required").notNull(),
+  postalCodeRegex: text("postal_code_regex"),
+});
+
+export const subdivisions = pgTable(
+  "subdivisions",
+  {
+    countryCode: varchar("country_code", { length: 2 }).notNull(),
+    code: varchar("code", { length: 16 }).notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.countryCode, table.code] }),
+    foreignKey({
+      name: "subdivisions_country_fk",
+      columns: [table.countryCode],
+      foreignColumns: [countries.code],
+    }),
+  ],
+);
+
 export const addresses = pgTable(
   "addresses",
   {
@@ -24,6 +53,16 @@ export const addresses = pgTable(
   (table) => [
     index("addresses_tenant_id_idx").on(table.tenantId),
     uniqueIndex("addresses_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "addresses_country_fk",
+      columns: [table.countryCode],
+      foreignColumns: [countries.code],
+    }),
+    foreignKey({
+      name: "addresses_subdivision_fk",
+      columns: [table.countryCode, table.subdivisionCode],
+      foreignColumns: [subdivisions.countryCode, subdivisions.code],
+    }),
   ],
 );
 
@@ -262,35 +301,6 @@ export const auditEvents = pgTable(
   (table) => [
     index("audit_events_tenant_id_idx").on(table.tenantId),
     index("audit_events_correlation_id_idx").on(table.correlationId),
-  ],
-);
-
-export const countries = pgTable("countries", {
-  code: varchar("code", { length: 2 }).primaryKey(),
-  name: text("name").notNull(),
-  defaultCurrencyCode: varchar("default_currency_code", { length: 3 }).notNull(),
-  timezones: text("timezones").array().notNull(),
-  callingCode: varchar("calling_code", { length: 16 }),
-  subdivisionLabel: text("subdivision_label").notNull(),
-  subdivisionRequired: boolean("subdivision_required").notNull(),
-  postalCodeRequired: boolean("postal_code_required").notNull(),
-  postalCodeRegex: text("postal_code_regex"),
-});
-
-export const subdivisions = pgTable(
-  "subdivisions",
-  {
-    countryCode: varchar("country_code", { length: 2 }).notNull(),
-    code: varchar("code", { length: 16 }).notNull(),
-    name: text("name").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.countryCode, table.code] }),
-    foreignKey({
-      name: "subdivisions_country_fk",
-      columns: [table.countryCode],
-      foreignColumns: [countries.code],
-    }),
   ],
 );
 

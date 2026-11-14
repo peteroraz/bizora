@@ -12,9 +12,17 @@ export function addressPayload(value: AddressValue) {
   };
 }
 
-export async function persistAddress(value: AddressValue, existingId?: string | null) {
-  const response = await api(existingId ? `/api/v1/addresses/${existingId}` : "/api/v1/addresses", {
-    method: existingId ? "PATCH" : "POST",
+type AddressOwner = { kind: "organization" } | { kind: "business"; id: string } | { kind: "branch"; id: string };
+
+export async function persistOwnerAddress(owner: AddressOwner, value: AddressValue) {
+  const path =
+    owner.kind === "organization"
+      ? "/api/v1/organizations/current/address"
+      : owner.kind === "business"
+        ? `/api/v1/businesses/${owner.id}/address`
+        : `/api/v1/branches/${owner.id}/address`;
+  const response = await api(path, {
+    method: "PUT",
     body: JSON.stringify(addressPayload(value)),
   });
   const payload = await response.json();
@@ -22,5 +30,4 @@ export async function persistAddress(value: AddressValue, existingId?: string | 
     const fieldError = payload.error?.fieldErrors?.[0]?.message as string | undefined;
     throw new Error(fieldError ?? payload.error?.message ?? "Could not save the address.");
   }
-  return payload.data.address.id as string;
 }
