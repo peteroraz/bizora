@@ -34,8 +34,19 @@ export class TenantController {
   @Get("organizations/current")
   @UseGuards(TenantGuard)
   async currentOrganization(@CurrentTenant() tenant: TenantContext) {
-    const organization = await this.tenants.findOrganization(tenant.tenantId);
+    const organization = await this.withAddress(tenant.tenantId, await this.tenants.findOrganization(tenant.tenantId));
     return success({ organization, tenant }, tenant.correlationId);
+  }
+
+  @Patch("organizations/current")
+  @UseGuards(TenantGuard, PermissionGuard)
+  @RequirePermissions(Permission.ORG_SETTINGS_MANAGE)
+  async updateOrganization(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    const organization = await this.withAddress(
+      tenant.tenantId,
+      await this.onboarding.updateOrganization(tenant, body),
+    );
+    return success({ organization }, tenant.correlationId);
   }
 
   @Patch("onboarding")
@@ -57,7 +68,8 @@ export class TenantController {
   @Get("businesses")
   @UseGuards(TenantGuard)
   async listBusinesses(@CurrentTenant() tenant: TenantContext) {
-    const items = await this.tenants.listBusinesses(tenant.tenantId, tenant.membershipBusinessId);
+    const rows = await this.tenants.listBusinesses(tenant.tenantId, tenant.membershipBusinessId);
+    const items = await Promise.all(rows.map((row) => this.withAddress(tenant.tenantId, row)));
     return success({ items }, tenant.correlationId);
   }
 
@@ -67,7 +79,7 @@ export class TenantController {
     if (tenant.membershipBusinessId && tenant.membershipBusinessId !== id) {
       throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
     }
-    const business = await this.tenants.findBusiness(tenant.tenantId, id);
+    const business = await this.withAddress(tenant.tenantId, await this.tenants.findBusiness(tenant.tenantId, id));
     if (!business) {
       throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
     }
@@ -77,14 +89,15 @@ export class TenantController {
   @Get("branches")
   @UseGuards(TenantGuard)
   async listBranches(@CurrentTenant() tenant: TenantContext) {
-    const items = await this.tenants.listBranches(tenant);
+    const rows = await this.tenants.listBranches(tenant);
+    const items = await Promise.all(rows.map((row) => this.withAddress(tenant.tenantId, row)));
     return success({ items }, tenant.correlationId);
   }
 
   @Get("branches/:id")
   @UseGuards(TenantGuard)
   async getBranch(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
-    const branch = await this.tenants.findVisibleBranch(tenant, id);
+    const branch = await this.withAddress(tenant.tenantId, await this.tenants.findVisibleBranch(tenant, id));
     if (!branch) {
       throw new ApiError("BRANCH_NOT_FOUND", "Branch was not found.", 404);
     }
@@ -95,7 +108,7 @@ export class TenantController {
   @UseGuards(TenantGuard, PermissionGuard)
   @RequirePermissions(Permission.BUSINESS_SETTINGS_MANAGE)
   async updateBusiness(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
-    const business = await this.onboarding.updateBusiness(tenant, id, body);
+    const business = await this.withAddress(tenant.tenantId, await this.onboarding.updateBusiness(tenant, id, body));
     return success({ business }, tenant.correlationId);
   }
 
@@ -103,7 +116,7 @@ export class TenantController {
   @UseGuards(TenantGuard, PermissionGuard)
   @RequirePermissions(Permission.BRANCH_SETTINGS_MANAGE)
   async updateBranch(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
-    const branch = await this.onboarding.updateBranch(tenant, id, body);
+    const branch = await this.withAddress(tenant.tenantId, await this.onboarding.updateBranch(tenant, id, body));
     return success({ branch }, tenant.correlationId);
   }
 
@@ -135,7 +148,13 @@ export class TenantController {
       createdBy: tenant.userId,
       updatedBy: tenant.userId,
     });
-    const branch = await this.tenants.findBranch(tenant.tenantId, id);
+    const branch = await this.withAddress(tenant.tenantId, await this.tenants.findBranch(tenant.tenantId, id));
     return success({ branch }, tenant.correlationId);
+  }
+
+  private async withAddress<T extends { addressId: string | null }>(tenantId: string, row: T | null) {
+    if (!row) return null;
+    const address = row.addressId ? await this.tenants.findAddress(tenantId, row.addressId) : null;
+    return { ...row, address };
   }
 }

@@ -15,6 +15,7 @@
     "db:generate": "pnpm --filter @bizora/api db:generate",
     "db:migrate": "pnpm --filter @bizora/api db:migrate",
     "db:seed": "pnpm --filter @bizora/api db:seed",
+    "geo:generate": "node --experimental-strip-types scripts/generate-geography-sql.ts",
     "audit": "pnpm audit --prod"
   },
   "devDependencies": {

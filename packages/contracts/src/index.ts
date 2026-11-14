@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { addressInputSchema, optionalPhoneSchema } from "./address.js";
+
+export { addressInputSchema, countryRule, optionalPhoneSchema, phoneE164Schema } from "./address.js";
+export type { AddressInput } from "./address.js";
 
 export const roleSchema = z.enum([
   "OWNER",
@@ -169,6 +173,16 @@ export const completeOnboardingSchema = z.object({
   primaryColor: hexColor.optional(),
   accentColor: hexColor.optional(),
   logoUrl: z.union([z.string().url().max(2048), z.literal("")]).optional(),
+  address: addressInputSchema.optional(),
+  phoneE164: optionalPhoneSchema,
+}).superRefine((value, ctx) => {
+  if (value.address && value.address.countryCode !== value.countryCode) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["address", "countryCode"],
+      message: "Address country must match the business country.",
+    });
+  }
 });
 
 export const updateBrandingSchema = z.object({
@@ -183,10 +197,20 @@ export const updateBusinessSchema = z.object({
   baseCurrencyCode: z.string().length(3).toUpperCase().optional(),
   timezone: z.string().min(1).optional(),
   industryCode: z.string().min(1).max(64).nullable().optional(),
+  addressId: z.string().uuid().nullable().optional(),
+  phoneE164: optionalPhoneSchema,
 });
 
 export const updateBranchSchema = z.object({
-  name: z.string().min(1).max(160),
+  name: z.string().min(1).max(160).optional(),
+  addressId: z.string().uuid().nullable().optional(),
+  phoneE164: optionalPhoneSchema,
+});
+
+export const updateOrganizationSchema = z.object({
+  name: z.string().min(1).max(160).optional(),
+  addressId: z.string().uuid().nullable().optional(),
+  phoneE164: optionalPhoneSchema,
 });
 
 export const createInvitationSchema = z.object({

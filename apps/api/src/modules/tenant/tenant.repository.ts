@@ -2,8 +2,10 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import type { PermissionCode } from "@bizora/contracts";
 import {
+  addresses,
   branches,
   businesses,
+  countries,
   countryPacks,
   industryPacks,
   memberships,
@@ -125,6 +127,20 @@ export class TenantRepository {
 
   listIndustryPacks() {
     return this.db.select().from(industryPacks);
+  }
+
+  async findAddress(tenantId: string, addressId: string) {
+    const [row] = await this.db
+      .select()
+      .from(addresses)
+      .where(and(eq(addresses.id, addressId), eq(addresses.tenantId, tenantId)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findCountry(code: string) {
+    const [row] = await this.db.select().from(countries).where(eq(countries.code, code)).limit(1);
+    return row ?? null;
   }
 
   async findCountryPack(code: string) {

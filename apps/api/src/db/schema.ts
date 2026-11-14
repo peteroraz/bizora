@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { char, check, foreignKey, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, char, check, foreignKey, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -8,16 +8,47 @@ const timestamps = {
   updatedBy: uuid("updated_by"),
 };
 
-export const organizations = pgTable("organizations", {
-  id: uuid("id").primaryKey(),
-  name: varchar("name", { length: 160 }).notNull(),
-  slug: varchar("slug", { length: 160 }).notNull().unique(),
-  logoUrl: varchar("logo_url", { length: 2048 }),
-  primaryColor: varchar("primary_color", { length: 7 }).notNull().default("#1D4ED8"),
-  accentColor: varchar("accent_color", { length: 7 }).notNull().default("#0F172A"),
-  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
-  ...timestamps,
-});
+export const addresses = pgTable(
+  "addresses",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    line1: varchar("line1", { length: 200 }).notNull(),
+    line2: varchar("line2", { length: 200 }),
+    city: varchar("city", { length: 120 }).notNull(),
+    subdivisionCode: varchar("subdivision_code", { length: 16 }),
+    postalCode: varchar("postal_code", { length: 32 }),
+    countryCode: varchar("country_code", { length: 2 }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("addresses_tenant_id_idx").on(table.tenantId),
+    uniqueIndex("addresses_tenant_id_id_key").on(table.tenantId, table.id),
+  ],
+);
+
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").primaryKey(),
+    name: varchar("name", { length: 160 }).notNull(),
+    slug: varchar("slug", { length: 160 }).notNull().unique(),
+    logoUrl: varchar("logo_url", { length: 2048 }),
+    primaryColor: varchar("primary_color", { length: 7 }).notNull().default("#1D4ED8"),
+    accentColor: varchar("accent_color", { length: 7 }).notNull().default("#0F172A"),
+    onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+    addressId: uuid("address_id"),
+    phoneE164: varchar("phone_e164", { length: 20 }),
+    ...timestamps,
+  },
+  (table) => [
+    foreignKey({
+      name: "organizations_address_fk",
+      columns: [table.id, table.addressId],
+      foreignColumns: [addresses.tenantId, addresses.id],
+    }),
+  ],
+);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey(),
@@ -37,11 +68,18 @@ export const businesses = pgTable(
     baseCurrencyCode: char("base_currency_code", { length: 3 }).notNull(),
     timezone: varchar("timezone", { length: 64 }).notNull(),
     industryCode: varchar("industry_code", { length: 64 }),
+    addressId: uuid("address_id"),
+    phoneE164: varchar("phone_e164", { length: 20 }),
     ...timestamps,
   },
   (table) => [
     index("businesses_tenant_id_idx").on(table.tenantId),
     uniqueIndex("businesses_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "businesses_address_fk",
+      columns: [table.tenantId, table.addressId],
+      foreignColumns: [addresses.tenantId, addresses.id],
+    }),
   ],
 );
 
@@ -52,12 +90,19 @@ export const branches = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     businessId: uuid("business_id").notNull(),
     name: varchar("name", { length: 160 }).notNull(),
+    addressId: uuid("address_id"),
+    phoneE164: varchar("phone_e164", { length: 20 }),
     ...timestamps,
   },
   (table) => [
     index("branches_tenant_id_idx").on(table.tenantId),
     index("branches_business_id_idx").on(table.businessId),
     uniqueIndex("branches_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "branches_address_fk",
+      columns: [table.tenantId, table.addressId],
+      foreignColumns: [addresses.tenantId, addresses.id],
+    }),
     foreignKey({
       name: "branches_tenant_business_fk",
       columns: [table.tenantId, table.businessId],
@@ -220,11 +265,43 @@ export const auditEvents = pgTable(
   ],
 );
 
+export const countries = pgTable("countries", {
+  code: varchar("code", { length: 2 }).primaryKey(),
+  name: text("name").notNull(),
+  defaultCurrencyCode: varchar("default_currency_code", { length: 3 }).notNull(),
+  timezones: text("timezones").array().notNull(),
+  callingCode: varchar("calling_code", { length: 16 }),
+  subdivisionLabel: text("subdivision_label").notNull(),
+  subdivisionRequired: boolean("subdivision_required").notNull(),
+  postalCodeRequired: boolean("postal_code_required").notNull(),
+  postalCodeRegex: text("postal_code_regex"),
+});
+
+export const subdivisions = pgTable(
+  "subdivisions",
+  {
+    countryCode: varchar("country_code", { length: 2 }).notNull(),
+    code: varchar("code", { length: 16 }).notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.countryCode, table.code] }),
+    foreignKey({
+      name: "subdivisions_country_fk",
+      columns: [table.countryCode],
+      foreignColumns: [countries.code],
+    }),
+  ],
+);
+
 export const schema = {
+  addresses,
   organizations,
   users,
   businesses,
   branches,
+  countries,
+  subdivisions,
   memberships,
   permissions,
   rolePermissions,

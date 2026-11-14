@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Input } from "@bizora/ui";
+import { Button, Card, FormField, Input, Select } from "@bizora/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
@@ -18,8 +18,8 @@ export default function RegisterPage() {
 
   useEffect(() => {
     void Promise.all([
-      fetch("/api/v1/catalogs/country-packs").then((r) => r.json()),
-      fetch("/api/v1/catalogs/industry-packs").then((r) => r.json()),
+      fetch("/api/v1/catalogs/country-packs").then((response) => response.json()),
+      fetch("/api/v1/catalogs/industry-packs").then((response) => response.json()),
     ]).then(([countryPayload, industryPayload]) => {
       setCountries(countryPayload.data?.items ?? []);
       setIndustries(industryPayload.data?.items ?? []);
@@ -67,58 +67,47 @@ export default function RegisterPage() {
       <Card className="w-full">
         <h1 className="text-2xl font-semibold">Create your Bizora workspace</h1>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <label className="block text-sm">
-            Your name
-            <Input name="displayName" required className="mt-1" />
-          </label>
-          <label className="block text-sm">
-            Business name
-            <Input name="organizationName" required className="mt-1" />
-          </label>
-          <label className="block text-sm">
-            Email
-            <Input name="email" type="email" required className="mt-1" />
-          </label>
-          <label className="block text-sm">
-            Password (12+ characters)
-            <Input name="password" type="password" minLength={12} required className="mt-1" />
-          </label>
-          <label className="block text-sm">
-            Country
-            <select
-              className="mt-1 flex h-10 w-full rounded-md border bg-transparent px-3 text-sm"
-              value={countryCode}
-              onChange={(event) => onCountryChange(event.target.value)}
-            >
+          <FormField id="displayName" label="Your name">
+            <Input id="displayName" name="displayName" required />
+          </FormField>
+          <FormField id="organizationName" label="Business name">
+            <Input id="organizationName" name="organizationName" required />
+          </FormField>
+          <FormField id="email" label="Email">
+            <Input id="email" name="email" type="email" required />
+          </FormField>
+          <FormField id="password" label="Password" hint="At least 12 characters">
+            <Input id="password" name="password" type="password" minLength={12} required />
+          </FormField>
+          <FormField id="country" label="Country">
+            <Select id="country" value={countryCode} onChange={(event) => onCountryChange(event.target.value)}>
               {countries.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            Industry
-            <select
-              name="industryCode"
-              className="mt-1 flex h-10 w-full rounded-md border bg-transparent px-3 text-sm"
-              defaultValue="general-retail"
-            >
+            </Select>
+          </FormField>
+          <FormField id="industryCode" label="Industry">
+            <Select id="industryCode" name="industryCode" defaultValue="general-retail">
               {industries.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">Currency: {currency}</p>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            </Select>
+          </FormField>
+          <p className="text-sm text-muted">Currency: {currency}</p>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
           <Button type="submit" disabled={pending} className="w-full">
             {pending ? "Creating…" : "Create workspace"}
           </Button>
         </form>
         <p className="mt-4 text-sm">
-          Already registered? <Link href="/login">Sign in</Link>
+          Already registered?{" "}
+          <Link href="/login" className="font-medium text-primary">
+            Sign in
+          </Link>
         </p>
       </Card>
     </main>

@@ -1,34 +1,24 @@
-import Link from "next/link";
-import { primaryNav } from "../../lib/nav";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { AppShell, type ShellProfile } from "./shell";
 
-export default function AppShellLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen md:grid md:grid-cols-[240px_1fr]">
-      <aside className="border-b bg-[hsl(var(--card))] md:border-b-0 md:border-r">
-        <div className="px-4 py-4 text-lg font-semibold">Bizora</div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-3 md:flex-col md:overflow-visible">
-          {primaryNav.map((item) =>
-            item.enabled ? (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="whitespace-nowrap rounded-md px-3 py-2 text-sm hover:bg-[hsl(var(--muted))]"
-              >
-                {item.label}
-              </Link>
-            ) : (
-              <span
-                key={item.href}
-                className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-[hsl(var(--muted-foreground))]"
-                title="Available in a later sprint"
-              >
-                {item.label}
-              </span>
-            ),
-          )}
-        </nav>
-      </aside>
-      <div className="px-4 py-6 md:px-8">{children}</div>
-    </div>
-  );
+const origin = process.env.API_ORIGIN ?? "http://localhost:3001";
+
+async function load(path: string, cookie: string) {
+  return fetch(`${origin}${path}`, { headers: { cookie }, cache: "no-store" });
+}
+
+export default async function AppShellLayout({ children }: { children: React.ReactNode }) {
+  const cookie = (await cookies()).toString();
+  const meResponse = await load("/api/v1/auth/me", cookie);
+  if (meResponse.status === 401) redirect("/login?reason=session");
+  if (!meResponse.ok) redirect("/login");
+  const me = (await meResponse.json()) as { data: Omit<ShellProfile, "businesses" | "branches"> };
+  const [businessResponse, branchResponse] = await Promise.all([
+    load("/api/v1/businesses", cookie),
+    load("/api/v1/branches", cookie),
+  ]);
+  const businesses = businessResponse.ok ? ((await businessResponse.json()).data?.items ?? []) : [];
+  const branches = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
+  return <AppShell profile={{ ...me.data, businesses, branches }}>{children}</AppShell>;
 }
