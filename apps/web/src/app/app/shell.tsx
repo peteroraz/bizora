@@ -1,5 +1,6 @@
 "use client";
 
+import type { AuthWorkspace } from "@bizora/contracts";
 import {
   Avatar,
   Badge,
@@ -34,6 +35,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { primaryNav } from "../../lib/nav";
+import { formatRole } from "../../lib/role-label";
 
 const icons = {
   home: Home,
@@ -64,6 +66,7 @@ export type ShellProfile = {
   membership?: { businessId: string | null; branchId: string | null } | null;
   businesses: ShellBusiness[];
   branches: ShellBranch[];
+  workspaces?: AuthWorkspace[];
 };
 
 function EmailVerificationBanner() {
@@ -96,6 +99,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const businessId = profile.tenant?.businessId ?? profile.businesses[0]?.id ?? "";
   const branchId = profile.tenant?.branchId ?? "";
   const visibleBranches = profile.branches.filter((branch) => !businessId || branch.businessId === businessId);
@@ -113,6 +117,24 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       window.localStorage.setItem("bizora-sidebar", current ? "expanded" : "collapsed");
       return !current;
     });
+  }
+
+  const workspaces = profile.workspaces ?? [];
+  const currentOrganizationId = profile.tenant?.tenantId;
+  const organizationName = profile.organization?.name ?? "Workspace";
+
+  async function switchWorkspace(organizationId: string) {
+    setSwitchError(null);
+    const response = await api("/api/v1/auth/select-context", {
+      method: "POST",
+      body: JSON.stringify({ organizationId }),
+    });
+    if (response.ok) {
+      window.location.assign("/app");
+      return;
+    }
+    const payload = await response.json().catch(() => null);
+    setSwitchError(payload?.error?.message ?? "Unable to switch workspace.");
   }
 
   async function selectContext(nextBusinessId: string, nextBranchId?: string) {
@@ -174,7 +196,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
         <div className="px-2">{navigation(collapsed)}</div>
       </aside>
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-card px-4 py-3">
+        <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
           <div className="md:hidden">
             <Sheet
               open={menuOpen}
@@ -189,10 +211,16 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               {navigation(false)}
             </Sheet>
           </div>
-          <div className="hidden min-w-0 items-center gap-2 md:flex">
-            <Building2 className="h-4 w-4 text-muted" aria-hidden="true" />
-            <span className="truncate text-sm font-medium">{profile.organization?.name ?? "Workspace"}</span>
+          <div className="flex min-w-0 max-w-56 items-center gap-2">
+            <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <p className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-primary">Current workspace</span>
+              <span className="block truncate text-sm font-semibold">{organizationName}</span>
+            </p>
           </div>
+          {profile.tenant?.role ? (
+            <Badge className="border-primary bg-sidebar-active text-sidebar-active-fg">{formatRole(profile.tenant.role)}</Badge>
+          ) : null}
           {profile.businesses.length > 0 ? (
             <Select
               aria-label="Business"
@@ -243,6 +271,28 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                   {theme === choice ? " · current" : ""}
                 </DropdownItem>
               ))}
+              {workspaces.length > 1 ? (
+                <>
+                  <DropdownLabel>Switch workspace</DropdownLabel>
+                  {workspaces.map((workspace) => {
+                    const current = workspace.organizationId === currentOrganizationId;
+                    return (
+                      <DropdownItem
+                        key={workspace.organizationId}
+                        onSelect={() => {
+                          if (!current) void switchWorkspace(workspace.organizationId);
+                        }}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Building2 className="h-4 w-4" aria-hidden="true" />
+                          {workspace.organizationName}
+                          {current ? " · current" : ""}
+                        </span>
+                      </DropdownItem>
+                    );
+                  })}
+                </>
+              ) : null}
               <DropdownItem onSelect={() => void logout()}>
                 <span className="inline-flex items-center gap-2">
                   <LogOut className="h-4 w-4" aria-hidden="true" /> Log out
@@ -250,6 +300,11 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               </DropdownItem>
             </DropdownMenu>
           </div>
+          {switchError ? (
+            <p className="basis-full text-sm text-danger" role="alert">
+              {switchError}
+            </p>
+          ) : null}
         </header>
         {profile.user?.emailVerifiedAt === null ? <EmailVerificationBanner /> : null}
         <main className="px-4 py-6 md:px-8">{children}</main>

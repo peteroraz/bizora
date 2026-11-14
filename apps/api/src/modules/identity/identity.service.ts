@@ -7,6 +7,7 @@ import {
   loginRequestSchema,
   registerRequestSchema,
   selectContextRequestSchema,
+  type AuthWorkspace,
   type RegisterRequest,
   type Role,
   type WorkspaceOption,
@@ -381,6 +382,22 @@ export class IdentityService {
       });
     }
     return result;
+  }
+
+  async listAuthWorkspaces(userId: string): Promise<AuthWorkspace[]> {
+    const workspaces = await this.listWorkspaces(userId);
+    return workspaces
+      .map((workspace) => ({
+        organizationId: workspace.organizationId,
+        organizationName: workspace.organizationName,
+        role: workspace.role,
+        businessName: workspace.businessName,
+        branchName: workspace.branchName,
+      }))
+      .sort(
+        (left, right) =>
+          left.organizationName.localeCompare(right.organizationName) || left.role.localeCompare(right.role),
+      );
   }
 
   async createOrganization(userId: string, raw: unknown, meta: AuthMeta): Promise<AuthPayload> {

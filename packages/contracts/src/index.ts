@@ -167,6 +167,11 @@ export const workspaceOptionSchema = z.object({
 
 export type WorkspaceOption = z.infer<typeof workspaceOptionSchema>;
 
+export type AuthWorkspace = Pick<
+  WorkspaceOption,
+  "organizationId" | "organizationName" | "role" | "businessName" | "branchName"
+>;
+
 export const Permission = {
   TENANT_READ: "tenant.read",
   TENANT_MANAGE: "tenant.manage",

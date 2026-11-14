@@ -108,6 +108,46 @@ describe("tenant isolation", () => {
     expect(response.headers["x-correlation-id"]).toBeTruthy();
   });
 
+  it("never lists another user's organizations from GET /auth/workspaces", async () => {
+    const me = await request(app.getHttpServer())
+      .get("/api/v1/auth/me")
+      .set("authorization", `Bearer ${tenantAToken}`)
+      .expect(200);
+    const aliceOrgId = me.body.data.tenant.tenantId as string;
+
+    const alice = await request(app.getHttpServer())
+      .get("/api/v1/auth/workspaces")
+      .set("authorization", `Bearer ${tenantAToken}`)
+      .set("x-organization-id", "00000000-0000-4000-8000-000000000099")
+      .set("x-tenant-id", "00000000-0000-4000-8000-000000000099")
+      .expect(200);
+
+    expect(alice.body.data).toEqual([
+      expect.objectContaining({
+        organizationId: aliceOrgId,
+        organizationName: "Tenant A Foods",
+        role: "OWNER",
+        businessName: null,
+        branchName: null,
+      }),
+    ]);
+    expect(JSON.stringify(alice.body.data)).not.toContain("Tenant B Studio");
+
+    const bob = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "bob@tenant-b.test", password: "LocalOnly!Passw0rd" })
+      .expect(201);
+    const bobList = await request(app.getHttpServer())
+      .get("/api/v1/auth/workspaces")
+      .set("authorization", `Bearer ${bob.body.data.accessToken}`)
+      .expect(200);
+
+    expect(bobList.body.data).toEqual([
+      expect.objectContaining({ organizationName: "Tenant B Studio", role: "OWNER" }),
+    ]);
+    expect(bobList.body.data.map((item: { organizationId: string }) => item.organizationId)).not.toContain(aliceOrgId);
+  });
+
   it("returns 404 when Tenant A requests Tenant B business by id", async () => {
     const response = await request(app.getHttpServer())
       .get(`/api/v1/businesses/${tenantBBusinessId}`)

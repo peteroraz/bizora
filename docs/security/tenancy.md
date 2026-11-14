@@ -20,7 +20,7 @@ Login considers **ACTIVE** memberships only.
 
 - 0 → `NO_MEMBERSHIP`
 - 1 → session issued for that workspace
-- 2+ → `needsWorkspaceSelection` with safe workspace metadata; `/select-workspace` calls `POST /api/v1/auth/select-context`
+- 2+ → preauth session and `needsWorkspaceSelection`. `/select-workspace` loads `GET /api/v1/auth/workspaces` (that caller's ACTIVE memberships only; a preauth or access session both work) and then calls `POST /api/v1/auth/select-context`
 
 Switching to an organization without an active membership returns 403.
 

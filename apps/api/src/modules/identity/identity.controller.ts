@@ -58,6 +58,13 @@ export class IdentityController {
     return success(session, req.correlationId ?? "unknown");
   }
 
+  @Get("workspaces")
+  @UseGuards(SessionGuard)
+  async workspaces(@Req() req: AuthedRequest) {
+    const identity = this.actor(req);
+    return success(await this.identity.listAuthWorkspaces(identity.userId), req.correlationId ?? "auth");
+  }
+
   @Post("refresh")
   @UseGuards(ThrottlerGuard)
   async refresh(@Body() body: unknown, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {

@@ -60,7 +60,6 @@ function InviteForm() {
     }
     const body = await login.json();
     if (body.data?.needsWorkspaceSelection) {
-      sessionStorage.setItem("bizora.workspaces", JSON.stringify(body.data.workspaces ?? []));
       router.push("/select-workspace");
       return;
     }
