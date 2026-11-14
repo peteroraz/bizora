@@ -69,13 +69,6 @@ resource "google_secret_manager_secret_iam_member" "api_google_oauth" {
   member    = "serviceAccount:${google_service_account.api.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "api_microsoft_oauth" {
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.microsoft_oauth_client_secret.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.api.email}"
-}
-
 resource "google_secret_manager_secret_iam_member" "api_email" {
   project   = var.project_id
   secret_id = google_secret_manager_secret.email_api_key.secret_id

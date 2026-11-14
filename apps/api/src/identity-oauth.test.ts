@@ -13,14 +13,13 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./bootstrap.js";
 import { schema, auditEvents, authTokens, sessions, userIdentities, users } from "./db/schema.js";
-import { loadMigrationSql } from "./db/sql.js";
+import { applySqlBatches, loadMigrationSql } from "./db/sql.js";
 import { newId } from "./common/ids.js";
 import { createLogger } from "./logging.js";
 import { ConsoleEmailAdapter } from "./modules/email/console-email.adapter.js";
 import { EMAIL } from "./tokens.js";
 
 const password = "LocalOnly!Passw0rd";
-const tid = "11111111-1111-4111-8111-111111111111";
 
 type PendingCode = {
   challenge: string;
@@ -32,7 +31,6 @@ type PendingCode = {
   used: boolean;
   omitEmail: boolean;
   preferredUsername: string;
-  xmsEdov: boolean;
 };
 
 describe("email recovery and OIDC sign-in", () => {
@@ -89,9 +87,6 @@ describe("email recovery and OIDC sign-in", () => {
       GOOGLE_OAUTH_CLIENT_ID: "google-test-client",
       GOOGLE_OAUTH_CLIENT_SECRET: "google-test-secret",
       GOOGLE_OAUTH_ISSUER: issuer,
-      MICROSOFT_OAUTH_CLIENT_ID: "microsoft-test-client",
-      MICROSOFT_OAUTH_CLIENT_SECRET: "microsoft-test-secret",
-      MICROSOFT_OAUTH_ISSUER: issuer,
     };
     app = await createApp(env, db, createLogger("error"));
     await app.init();
@@ -141,7 +136,6 @@ describe("email recovery and OIDC sign-in", () => {
         used: false,
         omitEmail: url.searchParams.get("omit_email") === "1",
         preferredUsername: url.searchParams.get("preferred_username") ?? "",
-        xmsEdov: url.searchParams.get("xms") === "1",
       });
       const redirect = new URL(url.searchParams.get("redirect_uri") ?? `${issuer}callback`);
       redirect.searchParams.set("code", code);
@@ -166,10 +160,8 @@ describe("email recovery and OIDC sign-in", () => {
       const idToken = await new SignJWT({
         ...(pending.omitEmail ? {} : { email: pending.email, email_verified: pending.verified }),
         ...(pending.preferredUsername ? { preferred_username: pending.preferredUsername } : {}),
-        ...(pending.xmsEdov ? { xms_edov: true } : {}),
         name: "Ada Lovelace",
         nonce: pending.fault === "nonce" ? "not-the-nonce" : pending.nonce,
-        tid,
       })
         .setProtectedHeader({ alg: "RS256", kid: "test" })
         .setIssuer(issuer)
@@ -200,13 +192,13 @@ describe("email recovery and OIDC sign-in", () => {
     return response.body.data as { accessToken: string; refreshToken: string };
   }
 
-  async function start(provider: "google" | "microsoft", query: Record<string, string>) {
+  async function start(provider: "google", query: Record<string, string>) {
     const response = await request(app.getHttpServer()).get(`/api/v1/auth/oauth/${provider}/start`).query(query);
     return response;
   }
 
   async function complete(
-    provider: "google" | "microsoft",
+    provider: "google",
     query: Record<string, string>,
     claims: {
       email: string;
@@ -228,7 +220,6 @@ describe("email recovery and OIDC sign-in", () => {
     else authorize.searchParams.set("email", claims.email);
     if (claims.preferredUsername) authorize.searchParams.set("preferred_username", claims.preferredUsername);
     if (claims.verified === false) authorize.searchParams.set("verified", "0");
-    if (provider === "microsoft" && claims.verified !== false && !claims.omitEmail) authorize.searchParams.set("xms", "1");
     if (claims.fault) authorize.searchParams.set("fault", claims.fault);
     const redirected = await fetch(authorize, { redirect: "manual" });
     const callback = new URL(redirected.headers.get("location") ?? "");
@@ -285,7 +276,7 @@ describe("email recovery and OIDC sign-in", () => {
     await db.insert(userIdentities).values({
       id: newId(),
       userId: attacker!.id,
-      provider: "microsoft",
+      provider: "planted",
       providerSubject: "planted-attacker-subject",
       email: "preempted@bizora.test",
     });
@@ -317,8 +308,8 @@ describe("email recovery and OIDC sign-in", () => {
     expect(refresh.status).toBe(401);
   });
 
-  it("does not treat a Microsoft preferred_username as a verified email", async () => {
-    const created = await complete("microsoft", { returnTo: "/app" }, {
+  it("does not treat preferred_username as a verified email", async () => {
+    const created = await complete("google", { returnTo: "/app" }, {
       email: "unused@bizora.test",
       omitEmail: true,
       preferredUsername: "display-only@bizora.test",
@@ -332,10 +323,14 @@ describe("email recovery and OIDC sign-in", () => {
     expect(byEmail).toHaveLength(0);
   });
 
-  it("signs in with Microsoft and sends a new user to organization setup", async () => {
-    const result = await complete("microsoft", { returnTo: "/app" }, { email: "ms@bizora.test", sub: nextSub("ms") });
-    expect(result.finished.status).toBe(302);
-    expect(result.finished.headers.location).toBe("/setup");
+  it("returns 404 for the removed Microsoft sign-in route", async () => {
+    const response = await request(app.getHttpServer()).get("/api/v1/auth/oauth/microsoft/start").query({ returnTo: "/app" });
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("OAUTH_DISABLED");
+    const callback = await request(app.getHttpServer()).get("/api/v1/auth/oauth/microsoft/callback");
+    expect(callback.status).toBe(404);
+    const providers = await request(app.getHttpServer()).get("/api/v1/auth/providers");
+    expect(providers.body.data).toEqual({ google: true });
   });
 
   it("does not auto-link an unverified email and does auto-link a verified one", async () => {
@@ -478,6 +473,37 @@ describe("email recovery and OIDC sign-in", () => {
     const allowed = await start("google", { returnTo: "/app" });
     expect(allowed.status).toBe(302);
     expect(String(allowed.headers.location)).toContain("127.0.0.1");
+  });
+});
+
+describe("microsoft identity migration", () => {
+  it("stops when a microsoft identity exists and leaves the row in place", async () => {
+    const db = new PGlite();
+    try {
+      const migrations = await loadMigrationSql();
+      const migration = migrations.find((entry) => entry.id.startsWith("0010"));
+      expect(migration).toBeTruthy();
+      for (const prior of migrations.filter((entry) => entry.id < "0010")) {
+        await applySqlBatches((statement) => db.exec(statement), prior.sql);
+      }
+      await db.exec(
+        `INSERT INTO users (id, email, password_hash, display_name) VALUES ('77777777-7777-4777-8777-777777777777', 'ms@bizora.test', 'hash', 'Ms User')`,
+      );
+      await db.exec(
+        `INSERT INTO user_identities (id, user_id, provider, provider_subject, email) VALUES ('88888888-8888-4888-8888-888888888888', '77777777-7777-4777-8777-777777777777', 'microsoft', 'ms-subject', 'ms@bizora.test')`,
+      );
+
+      await db.exec("BEGIN");
+      await expect(applySqlBatches((statement) => db.exec(statement), migration!.sql)).rejects.toThrow(
+        /microsoft identities exist and were not deleted/,
+      );
+      await db.exec("ROLLBACK");
+
+      const rows = await db.query<{ provider: string }>(`SELECT provider FROM user_identities`);
+      expect(rows.rows.map((row) => row.provider)).toEqual(["microsoft"]);
+    } finally {
+      await db.close();
+    }
   });
 });
 

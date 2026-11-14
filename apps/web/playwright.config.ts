@@ -32,8 +32,6 @@ export default defineConfig({
         PUBLIC_WEB_ORIGIN: "",
         GOOGLE_OAUTH_CLIENT_ID: "",
         GOOGLE_OAUTH_CLIENT_SECRET: "",
-        MICROSOFT_OAUTH_CLIENT_ID: "",
-        MICROSOFT_OAUTH_CLIENT_SECRET: "",
       },
     },
     {

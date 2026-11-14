@@ -60,9 +60,6 @@ const envSchema = z
     GOOGLE_OAUTH_CLIENT_ID: optionalText,
     GOOGLE_OAUTH_CLIENT_SECRET: optionalText,
     GOOGLE_OAUTH_ISSUER: optionalUrl,
-    MICROSOFT_OAUTH_CLIENT_ID: optionalText,
-    MICROSOFT_OAUTH_CLIENT_SECRET: optionalText,
-    MICROSOFT_OAUTH_ISSUER: optionalUrl,
   })
   .superRefine((value, ctx) => {
     if (value.EMAIL_PROVIDER === "resend") {
@@ -77,9 +74,6 @@ const envSchema = z
     }
     if (Boolean(value.GOOGLE_OAUTH_CLIENT_ID) !== Boolean(value.GOOGLE_OAUTH_CLIENT_SECRET)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["GOOGLE_OAUTH_CLIENT_ID"], message: "client id and secret must both be set" });
-    }
-    if (Boolean(value.MICROSOFT_OAUTH_CLIENT_ID) !== Boolean(value.MICROSOFT_OAUTH_CLIENT_SECRET)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["MICROSOFT_OAUTH_CLIENT_ID"], message: "client id and secret must both be set" });
     }
   });
 
@@ -96,9 +90,6 @@ export type AppEnv = Omit<
   | "GOOGLE_OAUTH_CLIENT_ID"
   | "GOOGLE_OAUTH_CLIENT_SECRET"
   | "GOOGLE_OAUTH_ISSUER"
-  | "MICROSOFT_OAUTH_CLIENT_ID"
-  | "MICROSOFT_OAUTH_CLIENT_SECRET"
-  | "MICROSOFT_OAUTH_ISSUER"
 > & {
   COOKIE_SECURE: boolean;
   INVITE_TOKEN_EXPOSE: boolean;
@@ -111,9 +102,6 @@ export type AppEnv = Omit<
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_ISSUER?: string;
-  MICROSOFT_OAUTH_CLIENT_ID?: string;
-  MICROSOFT_OAUTH_CLIENT_SECRET?: string;
-  MICROSOFT_OAUTH_ISSUER?: string;
 };
 
 export function publicWebOrigin(env: { PUBLIC_WEB_ORIGIN?: string; WEB_ORIGIN: string }): string {

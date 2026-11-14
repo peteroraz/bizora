@@ -264,7 +264,7 @@ export class InvitationService {
 
   async acceptWithProvider(
     token: string,
-    profile: { provider: "google" | "microsoft"; subject: string; email: string; emailVerified: boolean; displayName: string },
+    profile: { provider: "google"; subject: string; email: string; emailVerified: boolean; displayName: string },
     correlationId: string,
   ) {
     const tokenHash = sha256Hex(token);

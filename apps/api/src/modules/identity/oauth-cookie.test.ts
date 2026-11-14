@@ -29,6 +29,14 @@ describe("oauth transaction cookie", () => {
     expect(opened?.iat).toEqual(expect.any(Number));
   });
 
+  it("rejects a Microsoft transaction", () => {
+    const sealed = sealOauthTransaction(
+      { ...transaction(Date.now()), provider: "microsoft" as OauthTransaction["provider"] },
+      secret,
+    );
+    expect(openOauthTransaction(sealed, secret)).toBeNull();
+  });
+
   it("rejects a transaction older than 10 minutes and one with no issued-at time", () => {
     expect(openOauthTransaction(sealOauthTransaction(transaction(Date.now() - 11 * 60 * 1000), secret), secret)).toBeNull();
     const { iat: _iat, ...withoutIssuedAt } = transaction(Date.now());

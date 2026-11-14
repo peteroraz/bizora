@@ -3,7 +3,7 @@
 import { buttonVariants } from "@bizora/ui";
 import { useEffect, useState } from "react";
 
-type Providers = { google: boolean; microsoft: boolean };
+type Providers = { google: boolean };
 
 export function OauthButtons({
   returnTo,
@@ -19,33 +19,22 @@ export function OauthButtons({
   useEffect(() => {
     void fetch("/api/v1/auth/providers")
       .then((response) => response.json())
-      .then((payload: { data?: Providers }) => setProviders(payload.data ?? { google: false, microsoft: false }))
-      .catch(() => setProviders({ google: false, microsoft: false }));
+      .then((payload: { data?: Providers }) => setProviders(payload.data ?? { google: false }))
+      .catch(() => setProviders({ google: false }));
   }, []);
 
-  if (!providers?.google && !providers?.microsoft) return null;
+  if (!providers?.google) return null;
 
-  function href(provider: "google" | "microsoft") {
-    const params = new URLSearchParams({ returnTo });
-    if (intent) params.set("intent", intent);
-    if (token) params.set("token", token);
-    return `/api/v1/auth/oauth/${provider}/start?${params.toString()}`;
-  }
+  const params = new URLSearchParams({ returnTo });
+  if (intent) params.set("intent", intent);
+  if (token) params.set("token", token);
 
   return (
     <div className="space-y-2">
-      {providers.google ? (
-        <a className={`${buttonVariants({ variant: "secondary" })} w-full`} href={href("google")}>
-          <img src="/providers/google.svg" alt="" width={18} height={18} />
-          Continue with Google
-        </a>
-      ) : null}
-      {providers.microsoft ? (
-        <a className={`${buttonVariants({ variant: "secondary" })} w-full`} href={href("microsoft")}>
-          <img src="/providers/microsoft.svg" alt="" width={18} height={18} />
-          Continue with Microsoft
-        </a>
-      ) : null}
+      <a className={`${buttonVariants({ variant: "secondary" })} w-full`} href={`/api/v1/auth/oauth/google/start?${params.toString()}`}>
+        <img src="/providers/google.svg" alt="" width={18} height={18} />
+        Continue with Google
+      </a>
       <p className="text-center text-xs text-muted">or</p>
     </div>
   );

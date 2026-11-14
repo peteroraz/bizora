@@ -315,18 +315,18 @@ DNS is on Cloudflare:
 
 `WEB_ORIGIN` and `PUBLIC_WEB_ORIGIN` are `https://bizora-staging.baseportals.app` when the custom domain is set. Cookies, CORS, OAuth redirect URIs, and email links use that origin. The API stays on its run.app URL.
 
-## Email, Google, and Microsoft sign-in
+## Email and Google sign-in
 
-An empty client id does not mount that provider's secret. `email_provider = "console"` does not mount the email key. Staging tfvars turn Resend on:
+An empty Google client id does not mount the client secret. `email_provider = "console"` does not mount the email key. Staging tfvars turn Resend on and set the Google client id:
 
 ```hcl
 email_provider = "resend"
 email_from     = "Bizora <no-reply@mail.baseportals.app>"
 ```
 
-Add a version of `bizora-email-api-key` before the apply that sets `email_provider = "resend"`. Cloud Run mounts `latest` and a missing version stops the new revision. Production stays on `console` until it has its own from-address and secret version.
+`google_oauth_client_id` is set in `infra/terraform/envs/staging/terraform.tfvars`. Add a version of `bizora-email-api-key` before the apply that sets `email_provider = "resend"`. Add a version of `bizora-google-oauth-client-secret` before applying that client id. Cloud Run mounts `latest` and a missing version stops the new revision. Production stays on `console` until it has its own from-address and secret version, and leaves the Google client id empty.
 
-OAuth client ids, when you have them, go in the same tfvars. Do not put client secrets in tfvars or git.
+Do not put client secrets in tfvars or git.
 
 ### Google OAuth client
 
@@ -335,17 +335,7 @@ OAuth client ids, when you have them, go in the same tfvars. Do not put client s
 3. Authorized redirect URIs:
    - `http://localhost:3000/api/v1/auth/oauth/google/callback`
    - `https://bizora-staging.baseportals.app/api/v1/auth/oauth/google/callback`
-4. Copy the client id into tfvars. Store the client secret as a secret version (PowerShell below).
-
-### Microsoft Entra app
-
-1. In [Microsoft Entra admin center](https://entra.microsoft.com/) → App registrations → New registration.
-2. Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
-3. Redirect URI, platform Web:
-   - `http://localhost:3000/api/v1/auth/oauth/microsoft/callback`
-   - `https://bizora-staging.baseportals.app/api/v1/auth/oauth/microsoft/callback`
-4. Certificates & secrets → New client secret. Copy the secret value immediately.
-5. The API uses the `common` endpoint and checks the token issuer against `https://login.microsoftonline.com/{tid}/v2.0`. Microsoft email is taken only from the `email` claim, and only when `xms_edov` is true.
+4. Staging already sets `google_oauth_client_id` in `infra/terraform/envs/staging/terraform.tfvars`. Store the client secret as a secret version (PowerShell below) before applying that id. Production leaves the variable empty until its own OAuth client exists.
 
 ### Resend
 
@@ -368,7 +358,6 @@ Run these after Terraform has created the secret containers. Replace the project
 ```powershell
 $project = "bizora-staging"
 $google = Read-Host "Google client secret" -AsSecureString
-$microsoft = Read-Host "Microsoft client secret" -AsSecureString
 $email = Read-Host "Resend API key" -AsSecureString
 
 function Add-SecretVersion($name, $secure) {
@@ -385,11 +374,10 @@ function Add-SecretVersion($name, $secure) {
 }
 
 Add-SecretVersion "bizora-google-oauth-client-secret" $google
-Add-SecretVersion "bizora-microsoft-oauth-client-secret" $microsoft
 Add-SecretVersion "bizora-email-api-key" $email
 ```
 
-Apply after the Resend key version exists. Cloud Run then mounts `latest`. Add the OAuth secret versions before setting the matching client id, because a client id mounts that secret.
+Apply after the Resend key version and the Google client-secret version exist. Cloud Run then mounts `latest`. Setting `google_oauth_client_id` mounts that secret.
 
 ## Known limitations
 

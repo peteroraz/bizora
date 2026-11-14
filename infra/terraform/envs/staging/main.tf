@@ -12,4 +12,5 @@ module "bizora" {
   custom_domain             = var.custom_domain
   email_provider            = var.email_provider
   email_from                = var.email_from
+  google_oauth_client_id    = var.google_oauth_client_id
 }
