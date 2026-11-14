@@ -9,8 +9,12 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await page.getByLabel("Your name").fill("Alice Adeyemi");
   await page.getByLabel("Business name").fill(organization);
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByLabel("Country").selectOption("NG");
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm password", { exact: true }).fill(password);
+  const registrationCountry = page.getByRole("combobox", { name: "Country" });
+  await registrationCountry.click();
+  await registrationCountry.fill("Kenya");
+  await page.getByRole("option", { name: "Kenya", exact: true }).click();
   await page.getByRole("button", { name: "Create workspace" }).click();
   await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
 

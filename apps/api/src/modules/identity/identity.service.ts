@@ -54,6 +54,9 @@ export class IdentityService {
       throw new ApiError("EMAIL_IN_USE", "An account with this email already exists.", 409);
     }
 
+    const defaults = await this.countryDefaults(payload.countryCode);
+    const baseCurrencyCode = payload.baseCurrencyCode ?? defaults.baseCurrencyCode;
+    const timezone = payload.timezone ?? defaults.timezone;
     const userId = newId();
     const tenantId = newId();
     const businessId = newId();
@@ -83,8 +86,8 @@ export class IdentityService {
         tenantId,
         name: payload.organizationName,
         countryCode: payload.countryCode,
-        baseCurrencyCode: payload.baseCurrencyCode,
-        timezone: payload.timezone,
+        baseCurrencyCode,
+        timezone,
         industryCode: payload.industryCode ?? null,
         createdBy: userId,
         updatedBy: userId,
@@ -134,6 +137,28 @@ export class IdentityService {
       role: "OWNER",
       meta,
     });
+  }
+
+  private async countryDefaults(code: string) {
+    const country = await this.tenants.findCountry(code);
+    if (!country) {
+      throw new ApiError("COUNTRY_UNKNOWN", "That country is not available.", 400);
+    }
+    const pack = await this.tenants.findCountryPack(code);
+    if (pack) {
+      return {
+        baseCurrencyCode: pack.defaultCurrencyCode.trim(),
+        timezone: pack.defaultTimezone,
+      };
+    }
+    const timezone = country.timezones[0];
+    if (!timezone) {
+      throw new ApiError("COUNTRY_UNKNOWN", "That country is not available.", 400);
+    }
+    return {
+      baseCurrencyCode: country.defaultCurrencyCode.trim(),
+      timezone,
+    };
   }
 
   async login(raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
