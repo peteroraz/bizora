@@ -24,6 +24,16 @@ export default defineConfig({
         INVITE_TOKEN_EXPOSE: "true",
         THROTTLE_AUTH_LIMIT: "200",
         API_PORT: "3001",
+        // CI inherits the runner environment. Pin the Sprint 3C settings so an
+        // unset provider stays on the console adapter and OAuth stays hidden.
+        EMAIL_PROVIDER: "console",
+        EMAIL_API_KEY: "",
+        EMAIL_FROM: "",
+        PUBLIC_WEB_ORIGIN: "",
+        GOOGLE_OAUTH_CLIENT_ID: "",
+        GOOGLE_OAUTH_CLIENT_SECRET: "",
+        MICROSOFT_OAUTH_CLIENT_ID: "",
+        MICROSOFT_OAUTH_CLIENT_SECRET: "",
       },
     },
     {

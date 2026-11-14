@@ -49,8 +49,11 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await expect(page.getByText("Continue with Google")).toHaveCount(0);
   await expect(page.getByText("Continue with Microsoft")).toHaveCount(0);
   await page.getByRole("link", { name: "Forgot password" }).click();
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+  const sendReset = page.getByRole("button", { name: "Send reset link" });
+  await expect(sendReset).toBeEnabled();
   await page.getByLabel("Email").fill(email);
-  await page.getByRole("button", { name: "Send reset link" }).click();
+  await sendReset.click();
   await expect(page.getByText("If an account exists for that email, a reset link is on its way.")).toBeVisible();
   await page.goto("/login");
 

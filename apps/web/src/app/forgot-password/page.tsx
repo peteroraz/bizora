@@ -2,12 +2,16 @@
 
 import { Button, Card, FormField, Input } from "@bizora/ui";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 export default function ForgotPasswordPage() {
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Disabled until the client submit handler is attached. A click before that
+  // would native-submit the form and reload the page.
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +43,7 @@ export default function ForgotPasswordPage() {
               <Input id="email" name="email" type="email" autoComplete="email" required />
             </FormField>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" disabled={pending} className="w-full">
+            <Button type="submit" disabled={pending || !ready} className="w-full">
               {pending ? "Sending…" : "Send reset link"}
             </Button>
           </form>
