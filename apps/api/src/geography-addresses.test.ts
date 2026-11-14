@@ -147,6 +147,92 @@ describe("geography and addresses", () => {
     ]);
   });
 
+  it("publishes the country list without a session and registers any country in that list", async () => {
+    const http = app.getHttpServer();
+    const published = await request(http).get("/api/v1/public/reference/countries").expect(200);
+    expect(published.headers["cache-control"]).toContain("public");
+    expect(published.headers["cache-control"]).toContain("max-age=86400");
+    const items = published.body.data.items as {
+      code: string;
+      defaultCurrencyCode: string;
+      timezones: string[];
+      postalCodeRegex?: string;
+    }[];
+    expect(items.length).toBeGreaterThanOrEqual(249);
+    expect(items.some((item) => "postalCodeRegex" in item)).toBe(false);
+    const nigeria = items.find((item) => item.code === "NG");
+    expect(nigeria?.defaultCurrencyCode).toBe("NGN");
+    expect(nigeria?.timezones[0]).toBe("Africa/Lagos");
+
+    for (const [index, code] of ["KE", "BR", "DE"].entries()) {
+      const created = await request(http)
+        .post("/api/v1/auth/register")
+        .send({
+          email: `${code.toLowerCase()}.${index}.${Date.now()}@geo.test`,
+          password: "LocalOnly!Passw0rd",
+          displayName: code,
+          organizationName: `${code} Foods`,
+          countryCode: code,
+          baseCurrencyCode: "USD",
+          timezone: "UTC",
+        })
+        .expect(201);
+      const businesses = await request(http)
+        .get("/api/v1/businesses")
+        .set("authorization", `Bearer ${created.body.data.accessToken}`)
+        .expect(200);
+      expect(String(businesses.body.data.items[0].countryCode).trim()).toBe(code);
+    }
+
+    await request(http)
+      .post("/api/v1/auth/register")
+      .send({
+        email: `zz.${Date.now()}@geo.test`,
+        password: "LocalOnly!Passw0rd",
+        displayName: "ZZ",
+        organizationName: "ZZ Foods",
+        countryCode: "ZZ",
+        baseCurrencyCode: "USD",
+        timezone: "UTC",
+      })
+      .expect(400);
+
+    const kenya = await request(http)
+      .post("/api/v1/auth/register")
+      .send({
+        email: `kenya-defaults.${Date.now()}@geo.test`,
+        password: "LocalOnly!Passw0rd",
+        displayName: "Kenya Defaults",
+        organizationName: "Kenya Defaults",
+        countryCode: "KE",
+      })
+      .expect(201);
+    const kenyaBusiness = await request(http)
+      .get("/api/v1/businesses")
+      .set("authorization", `Bearer ${kenya.body.data.accessToken}`)
+      .expect(200);
+    expect(String(kenyaBusiness.body.data.items[0].baseCurrencyCode).trim()).toBe("KES");
+    expect(kenyaBusiness.body.data.items[0].timezone).toBe("Africa/Nairobi");
+
+    const brazil = items.find((item) => item.code === "BR");
+    const brazilRegister = await request(http)
+      .post("/api/v1/auth/register")
+      .send({
+        email: `brazil-defaults.${Date.now()}@geo.test`,
+        password: "LocalOnly!Passw0rd",
+        displayName: "Brazil Defaults",
+        organizationName: "Brazil Defaults",
+        countryCode: "BR",
+      })
+      .expect(201);
+    const brazilBusiness = await request(http)
+      .get("/api/v1/businesses")
+      .set("authorization", `Bearer ${brazilRegister.body.data.accessToken}`)
+      .expect(200);
+    expect(String(brazilBusiness.body.data.items[0].baseCurrencyCode).trim()).toBe(brazil?.defaultCurrencyCode);
+    expect(brazilBusiness.body.data.items[0].timezone).toBe(brazil?.timezones[0]);
+  });
+
   it("rejects a subdivision or postal code that does not match the country", async () => {
     await request(app.getHttpServer())
       .put("/api/v1/organizations/current/address")

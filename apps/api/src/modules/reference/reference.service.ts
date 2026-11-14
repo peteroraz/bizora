@@ -13,6 +13,24 @@ function trimCode(value: string): string {
 export class ReferenceService {
   constructor(@Inject(DB) private readonly db: AppDatabase) {}
 
+  async listPublicCountries() {
+    const rows = await this.db
+      .select({
+        code: countries.code,
+        name: countries.name,
+        defaultCurrencyCode: countries.defaultCurrencyCode,
+        timezones: countries.timezones,
+      })
+      .from(countries)
+      .orderBy(asc(countries.name));
+    return rows.map((row) => ({
+      code: trimCode(row.code),
+      name: row.name,
+      defaultCurrencyCode: trimCode(row.defaultCurrencyCode),
+      timezones: row.timezones,
+    }));
+  }
+
   async listCountries() {
     const rows = await this.db.select().from(countries).orderBy(asc(countries.name));
     return rows.map((row) => ({

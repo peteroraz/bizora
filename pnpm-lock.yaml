@@ -105,6 +105,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@bizora/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@bizora/money':
         specifier: workspace:*
         version: link:../../packages/money
