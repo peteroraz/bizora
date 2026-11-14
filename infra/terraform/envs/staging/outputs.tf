@@ -33,6 +33,16 @@ output "web_origin" {
   value       = module.bizora.web_origin
 }
 
+output "web_run_origin" {
+  description = "run.app origin that keeps serving during the custom-domain cutover."
+  value       = module.bizora.web_run_origin
+}
+
+output "custom_domain_dns_records" {
+  description = "Cloudflare DNS records for the staging web hostname. Set each to DNS only."
+  value       = module.bizora.custom_domain_dns_records
+}
+
 output "cloud_sql_connection_name" {
   description = "Cloud SQL connection name."
   value       = module.bizora.cloud_sql_connection_name

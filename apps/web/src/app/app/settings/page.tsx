@@ -4,7 +4,7 @@ import { Button, Card, FormField, Input, PageHeader, Select, Tab, TabPanel, Tabs
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
-import { ChangePasswordForm } from "../../../components/change-password-form";
+import { SecurityPanel } from "../../../components/security-panel";
 import { api } from "../../../lib/api";
 import { persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
@@ -25,7 +25,7 @@ type Branch = { id: string; name: string; phoneE164: string | null; address: Add
 type BranchDraft = { name: string; phone: string; address: AddressValue };
 
 const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"];
-const tabs = ["organization", "business", "branches", "team", "appearance", "password"];
+const tabs = ["organization", "business", "branches", "team", "appearance", "security"];
 
 function fromAddress(address: AddressValue | null, countryCode: string): AddressValue {
   if (!address) return emptyAddress(countryCode);
@@ -41,7 +41,7 @@ function fromAddress(address: AddressValue | null, countryCode: string): Address
 
 function SettingsScreen() {
   const params = useSearchParams();
-  const requested = params.get("tab") ?? "organization";
+  const requested = params.get("tab") === "password" ? "security" : (params.get("tab") ?? "organization");
   const { theme, setTheme } = useTheme();
   const [tab, setTab] = useState(tabs.includes(requested) ? requested : "organization");
   const [error, setError] = useState<string | null>(null);
@@ -247,7 +247,7 @@ function SettingsScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="Organization, locations, team, appearance, and password." />
+      <PageHeader title="Settings" description="Organization, locations, team, appearance, and security." />
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       {notice ? <p className="break-all text-sm text-muted">{notice}</p> : null}
       <TabsRoot value={tab} onValueChange={setTab} label="Settings" tabs={tabs.map((item) => <Tab key={item} value={item}>{item[0]?.toUpperCase()}{item.slice(1)}</Tab>)}>
@@ -432,8 +432,8 @@ function SettingsScreen() {
             </div>
           </Card>
         </TabPanel>
-        <TabPanel value="password">
-          <ChangePasswordForm />
+        <TabPanel value="security">
+          <SecurityPanel />
         </TabPanel>
       </TabsRoot>
     </div>

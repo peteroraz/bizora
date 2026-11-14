@@ -6,7 +6,7 @@ import { FormEvent, useState } from "react";
 import { confirmPasswordError } from "../lib/password";
 import { CurrentPasswordField, PasswordWithConfirmation } from "./password-fields";
 
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ hasPassword = true }: { hasPassword?: boolean }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -33,7 +33,7 @@ export function ChangePasswordForm() {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ currentPassword, newPassword: password }),
+      body: JSON.stringify(hasPassword ? { currentPassword, newPassword: password } : { newPassword: password }),
     });
     const payload = await response.json();
     setPending(false);
@@ -50,7 +50,7 @@ export function ChangePasswordForm() {
   return (
     <Card>
       <form className="space-y-4" onSubmit={onSubmit}>
-        <CurrentPasswordField id="currentPassword" value={currentPassword} onChange={setCurrentPassword} />
+        {hasPassword ? <CurrentPasswordField id="currentPassword" value={currentPassword} onChange={setCurrentPassword} /> : null}
         <PasswordWithConfirmation
           passwordId="newPassword"
           confirmId="confirmNewPassword"
@@ -71,7 +71,7 @@ export function ChangePasswordForm() {
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {notice ? <p className="text-sm text-muted">{notice}</p> : null}
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving…" : "Change password"}
+          {pending ? "Saving…" : hasPassword ? "Change password" : "Set password"}
         </Button>
       </form>
     </Card>

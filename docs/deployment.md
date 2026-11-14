@@ -163,7 +163,7 @@ Record the outputs:
 terraform output
 ```
 
-You need `wif_provider`, `deployer_service_account`, `api_url`, `web_url`, and `cloud_sql_connection_name`. `api_origin` and `web_origin` are the deterministic URLs Terraform injects (`https://SERVICE-PROJECT_NUMBER.europe-west1.run.app`). Cloud Run `status.url` is a different hash host. Deploy curls the deterministic origins and builds the web image with them.
+You need `wif_provider`, `deployer_service_account`, `api_url`, `web_url`, `web_origin`, `web_run_origin`, and `cloud_sql_connection_name`. Staging also prints `custom_domain_dns_records`. `api_origin` stays the deterministic API run.app URL. `web_origin` is the public browser origin: `https://bizora-staging.baseportals.app` on staging, and the run.app host when `custom_domain` is empty. `web_run_origin` is always the run.app host and keeps serving during the cutover. Cloud Run `status.url` is a different hash host. Deploy checks the run.app origins before it ships an image and builds the web image with the API origin.
 
 ## GitHub
 
@@ -186,6 +186,7 @@ Variables:
 | `GCP_REGION` | `europe-west1` |
 | `GCP_WIF_PROVIDER` | staging output `wif_provider` |
 | `GCP_DEPLOYER_SA` | staging output `deployer_service_account` |
+| `WEB_CUSTOM_DOMAIN` | `bizora-staging.baseportals.app`, added only after the name resolves and the managed certificate is active. Until then the smoke test uses the run.app origin. |
 
 ### `production`
 
@@ -297,11 +298,104 @@ If you add a Google external Application Load Balancer in front of Cloud Run, th
 
 Auth and invitation-accept routes use `@nestjs/throttler` with **in-memory** storage. That is safe for a single Cloud Run instance. Terraform sets `bizora-api` `max_instance_count` to 1 in both environments for this reason. Before scaling the API to more than one instance, switch the throttler to Redis-backed storage (`REDIS_URL` is already provisioned locally and should be used in GCP as well).
 
+## Custom domain
+
+Staging serves the web app at `https://bizora-staging.baseportals.app`. Production stays on its run.app URL. A global external HTTPS load balancer for `https://bizora.baseportals.app` is not part of this setup.
+
+`.app` is on the HSTS preload list, so browsers will only use HTTPS. Google's managed certificate can take from 15 minutes to 24 hours after the DNS record exists. The run.app URL keeps answering during that wait. Set the GitHub variable `WEB_CUSTOM_DOMAIN` only after `https://bizora-staging.baseportals.app/health` returns 200. The deploy smoke test uses that hostname when the variable is set, and the run.app origin otherwise.
+
+Staging tfvars set `custom_domain = "bizora-staging.baseportals.app"`. Terraform creates `google_cloud_run_domain_mapping` for `bizora-web` and prints `custom_domain_dns_records`. An empty `custom_domain` creates no mapping.
+
+DNS is on Cloudflare:
+
+1. Apply Terraform after the Cloud Run service exists. Domain mapping also requires the domain to be verified for the Google Cloud project.
+2. Read `terraform output custom_domain_dns_records`.
+3. Create each record in Cloudflare. The web name is a CNAME. Set the proxy status to **DNS only** (grey cloud). A proxied (orange cloud) record hides the Google target and the managed certificate will not issue.
+4. Wait until the certificate is active, then set `WEB_CUSTOM_DOMAIN=bizora-staging.baseportals.app` on the staging GitHub environment.
+
+`WEB_ORIGIN` and `PUBLIC_WEB_ORIGIN` are `https://bizora-staging.baseportals.app` when the custom domain is set. Cookies, CORS, OAuth redirect URIs, and email links use that origin. The API stays on its run.app URL.
+
+## Email, Google, and Microsoft sign-in
+
+An empty client id does not mount that provider's secret. `email_provider = "console"` does not mount the email key. Staging tfvars turn Resend on:
+
+```hcl
+email_provider = "resend"
+email_from     = "Bizora <no-reply@mail.baseportals.app>"
+```
+
+Add a version of `bizora-email-api-key` before the apply that sets `email_provider = "resend"`. Cloud Run mounts `latest` and a missing version stops the new revision. Production stays on `console` until it has its own from-address and secret version.
+
+OAuth client ids, when you have them, go in the same tfvars. Do not put client secrets in tfvars or git.
+
+### Google OAuth client
+
+1. Open [Google Cloud Console → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent). Create an external app. Add the scopes `openid`, `email`, and `profile` (`.../auth/userinfo.email` and `.../auth/userinfo.profile`).
+2. Create an OAuth client ID of type Web application.
+3. Authorized redirect URIs:
+   - `http://localhost:3000/api/v1/auth/oauth/google/callback`
+   - `https://bizora-staging.baseportals.app/api/v1/auth/oauth/google/callback`
+4. Copy the client id into tfvars. Store the client secret as a secret version (PowerShell below).
+
+### Microsoft Entra app
+
+1. In [Microsoft Entra admin center](https://entra.microsoft.com/) → App registrations → New registration.
+2. Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
+3. Redirect URI, platform Web:
+   - `http://localhost:3000/api/v1/auth/oauth/microsoft/callback`
+   - `https://bizora-staging.baseportals.app/api/v1/auth/oauth/microsoft/callback`
+4. Certificates & secrets → New client secret. Copy the secret value immediately.
+5. The API uses the `common` endpoint and checks the token issuer against `https://login.microsoftonline.com/{tid}/v2.0`. Microsoft email is taken only from the `email` claim, and only when `xms_edov` is true.
+
+### Resend
+
+The web hostname is a CNAME, so it cannot also carry the mail records. Sending uses the separate subdomain `mail.baseportals.app`.
+
+1. In Resend, add the domain `mail.baseportals.app`.
+2. In Cloudflare, create the records Resend shows. They are typically:
+   - SPF: a TXT record on `mail.baseportals.app`
+   - DKIM: one or more CNAME records under `mail.baseportals.app`
+   - DMARC: a TXT record on `_dmarc.mail.baseportals.app`
+3. Set every one of those records to **DNS only** (grey cloud). Do not proxy them.
+4. Wait until Resend marks the domain verified.
+5. Create an API key restricted to sending, and add it as a version of `bizora-email-api-key` before applying the Resend env values.
+6. `EMAIL_FROM` is `Bizora <no-reply@mail.baseportals.app>`.
+
+### Secret versions on Windows PowerShell
+
+Run these after Terraform has created the secret containers. Replace the project id for production. The values are read from prompts so they are not stored in shell history as command arguments.
+
+```powershell
+$project = "bizora-staging"
+$google = Read-Host "Google client secret" -AsSecureString
+$microsoft = Read-Host "Microsoft client secret" -AsSecureString
+$email = Read-Host "Resend API key" -AsSecureString
+
+function Add-SecretVersion($name, $secure) {
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  $file = New-TemporaryFile
+  try {
+    [IO.File]::WriteAllText($file, $plain)
+    gcloud secrets versions add $name --project=$project --data-file=$file
+  } finally {
+    Remove-Item $file -Force
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  }
+}
+
+Add-SecretVersion "bizora-google-oauth-client-secret" $google
+Add-SecretVersion "bizora-microsoft-oauth-client-secret" $microsoft
+Add-SecretVersion "bizora-email-api-key" $email
+```
+
+Apply after the Resend key version exists. Cloud Run then mounts `latest`. Add the OAuth secret versions before setting the matching client id, because a client id mounts that secret.
+
 ## Known limitations
 
 - The API throttler is in-memory. Maximum instances stay at 1 until it moves to Redis. A second instance would give each copy its own counters.
-- There is no custom domain. Browsers use the Cloud Run `run.app` URLs.
-- There is no email delivery. Staging sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are returned by the API. Production sets it to `false`, so an invite cannot be delivered until email exists.
+- Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
+- Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
 - CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.
 

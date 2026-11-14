@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { hashPassword, sha256Hex } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
+import { publicWebOrigin } from "@bizora/config/env";
 import {
   acceptInvitationSchema,
   createInvitationSchema,
@@ -14,10 +15,13 @@ import { newId } from "../../common/ids.js";
 import { resolveAssignableScope } from "../../common/tenant-scope.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase } from "../../db/database.js";
-import { invitations, memberships, users } from "../../db/schema.js";
-import { APP_ENV, DB } from "../../tokens.js";
+import { invitations, memberships, userIdentities, users } from "../../db/schema.js";
+import { APP_ENV, DB, EMAIL, LOGGER } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
+import type { EmailPort } from "../email/email.port.js";
+import { renderEmail } from "../email/templates.js";
 import { TenantRepository } from "../tenant/tenant.repository.js";
+import type { Logger } from "pino";
 
 @Injectable()
 export class InvitationService {
@@ -26,6 +30,8 @@ export class InvitationService {
     @Inject(APP_ENV) private readonly env: AppEnv,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
+    @Inject(EMAIL) private readonly email: EmailPort,
+    @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
   async invite(tenant: TenantContext, raw: unknown) {
@@ -87,6 +93,7 @@ export class InvitationService {
       metadata: { email, role: payload.role },
     });
 
+    await this.deliverInvitation(email, token);
     return this.publicInvitation({ id, email, role: payload.role, businessId, branchId }, token);
   }
 
@@ -150,6 +157,7 @@ export class InvitationService {
       businessId: updated.businessId,
       branchId: updated.branchId,
     });
+    await this.deliverInvitation(updated.email, token);
     return this.publicInvitation(
       { id: updated.id, email: updated.email, role: updated.role, businessId: updated.businessId, branchId: updated.branchId },
       token,
@@ -190,6 +198,7 @@ export class InvitationService {
           email: invitation.email,
           passwordHash,
           displayName: payload.displayName,
+          emailVerifiedAt: new Date(),
           createdBy: userId,
           updatedBy: userId,
         });
@@ -253,6 +262,121 @@ export class InvitationService {
     });
   }
 
+  async acceptWithProvider(
+    token: string,
+    profile: { provider: "google" | "microsoft"; subject: string; email: string; emailVerified: boolean; displayName: string },
+    correlationId: string,
+  ) {
+    const tokenHash = sha256Hex(token);
+    const [pending] = await this.db
+      .select()
+      .from(invitations)
+      .where(and(eq(invitations.tokenHash, tokenHash), eq(invitations.status, "PENDING"), gt(invitations.expiresAt, new Date())))
+      .limit(1);
+    if (!pending) {
+      throw new ApiError("INVITATION_INVALID", "Invitation is invalid, expired, or already used.", 400);
+    }
+    if (!profile.emailVerified || profile.email.toLowerCase() !== pending.email.toLowerCase()) {
+      throw new ApiError("INVITE_EMAIL_MISMATCH", "The sign-in email does not match this invitation.", 400);
+    }
+
+    const result = await this.db.transaction(async (tx) => {
+      const [invitation] = await tx
+        .update(invitations)
+        .set({ status: "ACCEPTED", updatedAt: new Date() })
+        .where(and(eq(invitations.id, pending.id), eq(invitations.status, "PENDING")))
+        .returning();
+      if (!invitation) {
+        throw new ApiError("INVITATION_INVALID", "Invitation is invalid, expired, or already used.", 400);
+      }
+      let user = (await tx.select().from(users).where(eq(users.email, invitation.email)).limit(1))[0];
+      if (!user) {
+        const userId = newId();
+        await tx.insert(users).values({
+          id: userId,
+          email: invitation.email,
+          passwordHash: null,
+          displayName: profile.displayName,
+          emailVerifiedAt: new Date(),
+          createdBy: userId,
+          updatedBy: userId,
+        });
+        user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      } else if (!user.emailVerifiedAt) {
+        await tx.update(users).set({ emailVerifiedAt: new Date(), updatedBy: user.id }).where(eq(users.id, user.id));
+      }
+      if (!user) throw new ApiError("USER_CREATE_FAILED", "Unable to create the invited user.", 500);
+
+      const [identity] = await tx
+        .select()
+        .from(userIdentities)
+        .where(and(eq(userIdentities.provider, profile.provider), eq(userIdentities.providerSubject, profile.subject)))
+        .limit(1);
+      if (identity && identity.userId !== user.id) {
+        throw new ApiError("IDENTITY_IN_USE", "That sign-in method is already used by another account.", 409);
+      }
+      if (!identity) {
+        await tx.insert(userIdentities).values({
+          id: newId(),
+          userId: user.id,
+          provider: profile.provider,
+          providerSubject: profile.subject,
+          email: profile.email.toLowerCase(),
+        });
+      } else {
+        await tx.update(userIdentities).set({ lastUsedAt: new Date(), email: profile.email.toLowerCase() }).where(eq(userIdentities.id, identity.id));
+      }
+
+      const [existingMembership] = await tx
+        .select()
+        .from(memberships)
+        .where(and(eq(memberships.tenantId, invitation.tenantId), eq(memberships.userId, user.id)))
+        .limit(1);
+      if (existingMembership) {
+        throw new ApiError("ALREADY_MEMBER", "That user already belongs to this workspace.", 409);
+      }
+      const membershipId = newId();
+      await tx.insert(memberships).values({
+        id: membershipId,
+        tenantId: invitation.tenantId,
+        userId: user.id,
+        role: invitation.role,
+        businessId: invitation.businessId,
+        branchId: invitation.branchId,
+        status: "ACTIVE",
+        createdBy: user.id,
+        updatedBy: user.id,
+      });
+      await tx
+        .update(invitations)
+        .set({ acceptedBy: user.id, updatedBy: user.id })
+        .where(eq(invitations.id, invitation.id));
+      return { user, membershipId, invitation };
+    });
+
+    await this.audit.record({
+      tenantId: result.invitation.tenantId,
+      actorUserId: result.user.id,
+      action: "invitation.accepted",
+      entityType: "membership",
+      entityId: result.membershipId,
+      correlationId,
+      businessId: result.invitation.businessId,
+      branchId: result.invitation.branchId,
+      metadata: { method: profile.provider },
+    });
+    await this.audit.record({
+      tenantId: result.invitation.tenantId,
+      actorUserId: result.user.id,
+      action: "identity.linked",
+      entityType: "user",
+      entityId: result.user.id,
+      correlationId,
+      metadata: { provider: profile.provider },
+    });
+    return result.user;
+  }
+
   async listPeople(tenantId: string) {
     const rows = await this.tenants.listMemberships(tenantId);
     const result = [];
@@ -270,6 +394,21 @@ export class InvitationService {
       });
     }
     return result;
+  }
+
+  private async deliverInvitation(email: string, token: string) {
+    const link = `${publicWebOrigin(this.env)}/invite?token=${encodeURIComponent(token)}`;
+    const rendered = renderEmail({
+      title: "You're invited to a Bizora workspace",
+      paragraphs: ["Use the link to join. It expires in 7 days and works once."],
+      actionLabel: "Accept invitation",
+      actionUrl: link,
+    });
+    try {
+      await this.email.send({ to: email, subject: "Join a Bizora workspace", ...rendered });
+    } catch (error) {
+      this.logger.error({ email, err: error }, "invitation email was not sent");
+    }
   }
 
   private publicInvitation(

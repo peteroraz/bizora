@@ -31,10 +31,11 @@ Switching to an organization without an active membership returns 403.
 - Short-lived access JWT (`bizora_session`) and rotating refresh token (`bizora_refresh`).
 - Refresh tokens are stored hashed. Logout sets `revoked_at`. Reuse of a rotated refresh token revokes the family.
 - Protected routes load membership from the database. JWT `role` is never trusted for authorization.
+- Password reset revokes every session for that user. Google and Microsoft sign-in reuse this same session issuance. A verified provider sign-in that matches an unverified password account also revokes every session and clears that password. See `docs/adr/ADR-008-oidc-sign-in.md`.
 
 ## Invite lifecycle
 
-Pending invites are unique per tenant+email. Accept is a single `PENDING` → `ACCEPTED` update. Revoke and resend exist. Tokens appear in API responses only when `INVITE_TOKEN_EXPOSE=true`.
+Pending invites are unique per tenant+email. Accept is a single `PENDING` → `ACCEPTED` update. Revoke and resend exist. Tokens appear in API responses only when `INVITE_TOKEN_EXPOSE=true`. The accept link is always included in the invitation email.
 
 ## Currency locking
 

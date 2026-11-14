@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
 import {
   changePasswordSchema,
+  createOrganizationSchema,
   loginRequestSchema,
   registerRequestSchema,
   selectContextRequestSchema,
@@ -10,14 +11,16 @@ import {
   type Role,
   type WorkspaceOption,
 } from "@bizora/contracts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId, slugify } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
-import { branches, businesses, memberships, organizations, users } from "../../db/schema.js";
+import { branches, businesses, memberships, organizations, sessions, userIdentities, users } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { TenantRepository } from "../tenant/tenant.repository.js";
+import { AccountRecoveryService } from "./account-recovery.service.js";
+import type { OauthProfile } from "./oauth.service.js";
 import { SessionService, type IssuedTokens } from "./session.service.js";
 
 export type AuthMeta = { correlationId: string; ip?: string | null; userAgent?: string | null };
@@ -25,6 +28,7 @@ export type AuthMeta = { correlationId: string; ip?: string | null; userAgent?: 
 export type AuthPayload = {
   user: { id: string; email: string; displayName: string };
   needsWorkspaceSelection: boolean;
+  needsOrganizationSetup: boolean;
   workspaces: WorkspaceOption[];
   accessToken: string | null;
   refreshToken: string | null;
@@ -45,6 +49,7 @@ export class IdentityService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
     @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
   ) {}
 
   async register(input: RegisterRequest, meta: AuthMeta): Promise<AuthPayload> {
@@ -126,7 +131,7 @@ export class IdentityService {
       userAgent: meta.userAgent,
     });
 
-    return this.issueWorkspaceSession({
+    const session = await this.issueWorkspaceSession({
       userId,
       email: payload.email.toLowerCase(),
       displayName: payload.displayName,
@@ -137,6 +142,8 @@ export class IdentityService {
       role: "OWNER",
       meta,
     });
+    await this.recovery.sendVerification(userId, payload.email.toLowerCase());
+    return session;
   }
 
   private async countryDefaults(code: string) {
@@ -164,26 +171,47 @@ export class IdentityService {
   async login(raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
     const payload = loginRequestSchema.parse(raw);
     const user = await this.findUserByEmail(payload.email);
-    if (!user || !(await verifyPassword(user.passwordHash, payload.password))) {
+    if (!user?.passwordHash || !(await verifyPassword(user.passwordHash, payload.password))) {
       throw new ApiError("INVALID_CREDENTIALS", "Email or password is incorrect.", 401);
     }
+    return this.establishSession(user, meta, "password");
+  }
 
+  async establishSession(
+    user: { id: string; email: string; displayName: string },
+    meta: AuthMeta,
+    method: "password" | "google" | "microsoft",
+    allowSetup = false,
+  ): Promise<AuthPayload> {
     const workspaces = await this.listWorkspaces(user.id);
     if (workspaces.length === 0) {
-      throw new ApiError("NO_MEMBERSHIP", "This user has no tenant membership.", 403);
+      if (!allowSetup) {
+        throw new ApiError("NO_MEMBERSHIP", "This user has no tenant membership.", 403);
+      }
+      await this.auditLogin(user.id, null, meta, method);
+      const tokens = await this.sessions.issue({
+        userId: user.id,
+        tenantId: null,
+        membershipId: null,
+        businessId: null,
+        branchId: null,
+        typ: "preauth",
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
+      return {
+        user: { id: user.id, email: user.email, displayName: user.displayName },
+        needsWorkspaceSelection: false,
+        needsOrganizationSetup: true,
+        workspaces: [],
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        tenant: null,
+      };
     }
 
     const only = workspaces[0];
-    await this.audit.record({
-      tenantId: workspaces.length === 1 && only ? only.organizationId : null,
-      actorUserId: user.id,
-      action: "identity.login",
-      entityType: "user",
-      entityId: user.id,
-      correlationId: meta.correlationId,
-      ip: meta.ip,
-      userAgent: meta.userAgent,
-    });
+    await this.auditLogin(user.id, workspaces.length === 1 && only ? only.organizationId : null, meta, method);
 
     if (workspaces.length > 1) {
       const tokens = await this.sessions.issue({
@@ -199,6 +227,7 @@ export class IdentityService {
       return {
         user: { id: user.id, email: user.email, displayName: user.displayName },
         needsWorkspaceSelection: true,
+        needsOrganizationSetup: false,
         workspaces,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -292,8 +321,13 @@ export class IdentityService {
   async changePassword(userId: string, raw: unknown) {
     const payload = changePasswordSchema.parse(raw);
     const user = await this.findUserById(userId);
-    if (!user || !(await verifyPassword(user.passwordHash, payload.currentPassword))) {
+    if (!user) {
       throw new ApiError("INVALID_CREDENTIALS", "Current password is incorrect.", 401);
+    }
+    if (user.passwordHash) {
+      if (!payload.currentPassword || !(await verifyPassword(user.passwordHash, payload.currentPassword))) {
+        throw new ApiError("INVALID_CREDENTIALS", "Current password is incorrect.", 401);
+      }
     }
     await this.db
       .update(users)
@@ -306,7 +340,14 @@ export class IdentityService {
     const organization = await this.tenants.findOrganization(tenantId);
     const membership = await this.tenants.findMembership(tenantId, userId);
     return {
-      user: user ? { id: user.id, email: user.email, displayName: user.displayName } : null,
+      user: user
+        ? {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+          }
+        : null,
       organization,
       membership,
       workspaces: await this.listWorkspaces(userId),
@@ -342,6 +383,205 @@ export class IdentityService {
     return result;
   }
 
+  async createOrganization(userId: string, raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
+    const payload = createOrganizationSchema.parse(raw);
+    const user = await this.findUserById(userId);
+    if (!user) throw new ApiError("UNAUTHENTICATED", "User was not found.", 401);
+    const existing = await this.listWorkspaces(userId);
+    if (existing.length > 0) {
+      throw new ApiError("WORKSPACE_EXISTS", "This account already belongs to a workspace.", 409);
+    }
+    const defaults = await this.countryDefaults(payload.countryCode);
+    const baseCurrencyCode = payload.baseCurrencyCode ?? defaults.baseCurrencyCode;
+    const timezone = payload.timezone ?? defaults.timezone;
+    const tenantId = newId();
+    const businessId = newId();
+    const branchId = newId();
+    const membershipId = newId();
+    const slug = `${slugify(payload.organizationName) || "org"}-${tenantId.slice(0, 8)}`;
+    await this.db.transaction(async (tx) => {
+      await tx.insert(organizations).values({
+        id: tenantId,
+        name: payload.organizationName,
+        slug,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+      await tx.insert(businesses).values({
+        id: businessId,
+        tenantId,
+        name: payload.organizationName,
+        countryCode: payload.countryCode,
+        baseCurrencyCode,
+        timezone,
+        industryCode: payload.industryCode ?? null,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+      await tx.insert(branches).values({
+        id: branchId,
+        tenantId,
+        businessId,
+        name: "Main",
+        createdBy: userId,
+        updatedBy: userId,
+      });
+      await tx.insert(memberships).values({
+        id: membershipId,
+        tenantId,
+        userId,
+        role: "OWNER",
+        businessId: null,
+        branchId: null,
+        status: "ACTIVE",
+        createdBy: userId,
+        updatedBy: userId,
+      });
+    });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: "identity.workspace_created",
+      entityType: "organization",
+      entityId: tenantId,
+      correlationId: meta.correlationId,
+      businessId,
+      branchId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+    return this.issueWorkspaceSession({
+      userId,
+      email: user.email,
+      displayName: user.displayName,
+      tenantId,
+      businessId,
+      branchId,
+      membershipId,
+      role: "OWNER",
+      meta,
+    });
+  }
+
+  async resolveOauthUser(profile: OauthProfile, meta: AuthMeta) {
+    const identity = await this.findIdentity(profile.provider, profile.subject);
+    if (identity) {
+      await this.db.update(userIdentities).set({ lastUsedAt: new Date(), email: profile.email }).where(eq(userIdentities.id, identity.id));
+      const user = await this.findUserById(identity.userId);
+      if (!user) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
+      return user;
+    }
+    const existing = await this.findUserByEmail(profile.email);
+    if (existing) {
+      if (!profile.emailVerified) {
+        throw new ApiError("OAUTH_LINK_REQUIRED", "Sign in with your password, then link this provider from Settings.", 409);
+      }
+      if (!existing.emailVerifiedAt) {
+        await this.claimUnverifiedAccount(existing.id, profile, meta);
+        const claimed = await this.findUserById(existing.id);
+        if (!claimed) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
+        return claimed;
+      }
+      await this.insertIdentity(existing.id, profile);
+      await this.auditLink(existing.id, profile, meta);
+      return existing;
+    }
+    if (!profile.emailVerified) {
+      throw new ApiError(
+        "OAUTH_EMAIL_UNVERIFIED",
+        "Your provider didn't confirm this email; register with email and password instead",
+        400,
+      );
+    }
+    const userId = newId();
+    await this.db.insert(users).values({
+      id: userId,
+      email: profile.email,
+      passwordHash: null,
+      displayName: profile.displayName,
+      emailVerifiedAt: new Date(),
+      createdBy: userId,
+      updatedBy: userId,
+    });
+    await this.insertIdentity(userId, profile);
+    await this.auditLink(userId, profile, meta);
+    const created = await this.findUserById(userId);
+    if (!created) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
+    return created;
+  }
+
+  async linkIdentity(userId: string, profile: OauthProfile, meta: AuthMeta) {
+    if (!profile.emailVerified) {
+      throw new ApiError("OAUTH_REJECTED", "That provider did not confirm the email address.", 400);
+    }
+    const identity = await this.findIdentity(profile.provider, profile.subject);
+    if (identity && identity.userId !== userId) {
+      throw new ApiError("IDENTITY_IN_USE", "That sign-in method is already used by another account.", 409);
+    }
+    if (identity) {
+      await this.db.update(userIdentities).set({ lastUsedAt: new Date(), email: profile.email }).where(eq(userIdentities.id, identity.id));
+      return;
+    }
+    await this.insertIdentity(userId, profile);
+    await this.auditLink(userId, profile, meta);
+  }
+
+  async unlinkIdentity(userId: string, provider: string, meta: AuthMeta) {
+    if (provider !== "google" && provider !== "microsoft") {
+      throw new ApiError("IDENTITY_NOT_FOUND", "That sign-in method is not linked.", 404);
+    }
+    const user = await this.findUserById(userId);
+    if (!user) throw new ApiError("UNAUTHENTICATED", "User was not found.", 401);
+    const identities = await this.db.select().from(userIdentities).where(eq(userIdentities.userId, userId));
+    const target = identities.find((item) => item.provider === provider);
+    if (!target) throw new ApiError("IDENTITY_NOT_FOUND", "That sign-in method is not linked.", 404);
+    const methods = identities.length + (user.passwordHash ? 1 : 0);
+    if (methods <= 1) {
+      throw new ApiError("LAST_SIGN_IN_METHOD", "Keep at least one way to sign in.", 400);
+    }
+    await this.db.delete(userIdentities).where(eq(userIdentities.id, target.id));
+    await this.audit.record({
+      actorUserId: userId,
+      action: "identity.unlinked",
+      entityType: "user_identity",
+      entityId: target.id,
+      correlationId: meta.correlationId,
+      metadata: { provider },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+  }
+
+  async security(userId: string, sessionId: string) {
+    const user = await this.findUserById(userId);
+    if (!user) throw new ApiError("UNAUTHENTICATED", "User was not found.", 401);
+    const identities = await this.db.select().from(userIdentities).where(eq(userIdentities.userId, userId));
+    const active = await this.sessions.listActive(userId);
+    return {
+      hasPassword: Boolean(user.passwordHash),
+      emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+      identities: identities.map((item) => ({
+        id: item.id,
+        provider: item.provider,
+        email: item.email,
+        lastUsedAt: item.lastUsedAt.toISOString(),
+      })),
+      sessions: active.map((item) => ({
+        id: item.id,
+        createdAt: item.createdAt.toISOString(),
+        lastUsedAt: item.lastUsedAt.toISOString(),
+        userAgent: item.userAgent,
+        ip: item.ip,
+        current: item.id === sessionId,
+      })),
+    };
+  }
+
+  async revokeOtherSessions(userId: string, sessionId: string) {
+    await this.sessions.revokeOthers(userId, sessionId);
+    return { ok: true };
+  }
+
   private async issueWorkspaceSession(input: {
     userId: string;
     email: string;
@@ -366,6 +606,7 @@ export class IdentityService {
     return {
       user: { id: input.userId, email: input.email, displayName: input.displayName },
       needsWorkspaceSelection: false,
+      needsOrganizationSetup: false,
       workspaces: await this.listWorkspaces(input.userId),
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -400,6 +641,86 @@ export class IdentityService {
       }
     }
     return { businessId, branchId };
+  }
+
+  private async auditLogin(userId: string, tenantId: string | null, meta: AuthMeta, method: string) {
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: "identity.login",
+      entityType: "user",
+      entityId: userId,
+      correlationId: meta.correlationId,
+      metadata: { method },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+  }
+
+  private async auditLink(userId: string, profile: OauthProfile, meta: AuthMeta) {
+    await this.audit.record({
+      actorUserId: userId,
+      action: "identity.linked",
+      entityType: "user",
+      entityId: userId,
+      correlationId: meta.correlationId,
+      metadata: { provider: profile.provider, subject: profile.subject },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+  }
+
+  private async claimUnverifiedAccount(userId: string, profile: OauthProfile, meta: AuthMeta) {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({ emailVerifiedAt: new Date(), passwordHash: null, updatedBy: userId })
+        .where(eq(users.id, userId));
+      await tx.delete(userIdentities).where(eq(userIdentities.userId, userId));
+      await tx.insert(userIdentities).values({
+        id: newId(),
+        userId,
+        provider: profile.provider,
+        providerSubject: profile.subject,
+        email: profile.email,
+      });
+      await tx
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          action: "identity.takeover_protection",
+          entityType: "user",
+          entityId: userId,
+          correlationId: meta.correlationId,
+          metadata: { provider: profile.provider, subject: profile.subject },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        tx,
+      );
+    });
+  }
+
+  private async findIdentity(provider: string, subject: string) {
+    const [row] = await this.db
+      .select()
+      .from(userIdentities)
+      .where(and(eq(userIdentities.provider, provider), eq(userIdentities.providerSubject, subject)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  private async insertIdentity(userId: string, profile: OauthProfile) {
+    await this.db.insert(userIdentities).values({
+      id: newId(),
+      userId,
+      provider: profile.provider,
+      providerSubject: profile.subject,
+      email: profile.email,
+    });
   }
 
   private async findUserByEmail(email: string) {

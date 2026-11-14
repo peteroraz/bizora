@@ -4,6 +4,7 @@ import { passwordRules } from "@bizora/contracts/password";
 import { Button, Card, FormField, Input } from "@bizora/ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
+import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
 import { confirmPasswordError } from "../../lib/password";
 
@@ -70,7 +71,10 @@ function InviteForm() {
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full">
         <h1 className="text-2xl font-semibold">Join a Bizora workspace</h1>
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+        <div className="mt-6">
+          <OauthButtons returnTo={`/invite?token=${encodeURIComponent(token)}`} intent="invite" token={token} />
+        </div>
+        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
           <input type="hidden" name="token" value={token} />
           <FormField id="displayName" label="Your name">
             <Input id="displayName" name="displayName" required />

@@ -5,6 +5,7 @@ import { Button, Card, Combobox, FormField, Input, Select } from "@bizora/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
 import { confirmPasswordError } from "../../lib/password";
 
@@ -105,7 +106,10 @@ export default function RegisterPage() {
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4 py-8">
       <Card className="w-full">
         <h1 className="text-2xl font-semibold">Create your Bizora workspace</h1>
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+        <div className="mt-6">
+          <OauthButtons returnTo="/setup" />
+        </div>
+        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
           <FormField id="displayName" label="Your name">
             <Input id="displayName" name="displayName" required />
           </FormField>

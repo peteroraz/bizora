@@ -35,9 +35,27 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await page.getByRole("menuitem", { name: /^Dark/ }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
 
+  await expect(page.getByText("Verify your email to finish securing this account.")).toBeVisible();
+  await page.goto("/app/settings?tab=security");
+  await expect(page.getByRole("heading", { name: "Sign-in methods" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Log out other devices" })).toBeVisible();
+  await expect(page.getByText("Password: Set")).toBeVisible();
+
+  const providers = page.waitForResponse((response) => response.url().includes("/api/v1/auth/providers"));
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(page.getByRole("heading", { name: "Sign in to Bizora" })).toBeVisible();
+  await providers;
+  await expect(page.getByText("Continue with Google")).toHaveCount(0);
+  await expect(page.getByText("Continue with Microsoft")).toHaveCount(0);
+  await page.getByRole("link", { name: "Forgot password" }).click();
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+  const sendReset = page.getByRole("button", { name: "Send reset link" });
+  await expect(sendReset).toBeEnabled();
+  await page.getByLabel("Email").fill(email);
+  await sendReset.click();
+  await expect(page.getByText("If an account exists for that email, a reset link is on its way.")).toBeVisible();
+  await page.goto("/login");
 
   const bob = await request.newContext({ baseURL: "http://localhost:3000" });
   const registered = await bob.post("/api/v1/auth/register", {

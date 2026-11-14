@@ -37,3 +37,18 @@ variable "wif_mode" {
   type        = string
   description = "GitHub identity allowed to deploy. main_branch or production_environment."
 }
+
+variable "custom_domain" {
+  type        = string
+  description = "Public web hostname without a scheme. bizora-staging.baseportals.app for staging."
+}
+
+variable "email_provider" {
+  type        = string
+  description = "Email adapter. Staging uses resend."
+}
+
+variable "email_from" {
+  type        = string
+  description = "From address for outbound email."
+}

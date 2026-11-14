@@ -23,8 +23,8 @@ export class AuditService {
     source?: string | null;
     ip?: string | null;
     userAgent?: string | null;
-  }) {
-    await this.db.insert(auditEvents).values({
+  }, store: Pick<AppDatabase, "insert"> = this.db) {
+    await store.insert(auditEvents).values({
       id: newId(),
       tenantId: input.tenantId ?? null,
       actorUserId: input.actorUserId ?? null,

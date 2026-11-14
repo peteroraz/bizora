@@ -52,7 +52,7 @@ export type ShellBusiness = { id: string; name: string };
 export type ShellBranch = { id: string; name: string; businessId: string };
 
 export type ShellProfile = {
-  user?: { displayName: string; email: string } | null;
+  user?: { displayName: string; email: string; emailVerifiedAt?: string | null } | null;
   organization?: { name: string } | null;
   tenant?: {
     role: string;
@@ -65,6 +65,26 @@ export type ShellProfile = {
   businesses: ShellBusiness[];
   branches: ShellBranch[];
 };
+
+function EmailVerificationBanner() {
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function resend() {
+    const response = await api("/api/v1/auth/email/verification", { method: "POST" });
+    const payload = await response.json();
+    setNotice(response.ok ? "Verification email sent." : (payload.error?.message ?? "Could not send the verification email."));
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-warning-bg px-4 py-3 text-sm text-fg">
+      <p>Verify your email to finish securing this account. You can keep using Bizora in the meantime.</p>
+      <button type="button" className="font-medium text-primary" onClick={() => void resend()}>
+        Resend email
+      </button>
+      {notice ? <span>{notice}</span> : null}
+    </div>
+  );
+}
 
 function isActive(href: string, pathname: string) {
   if (href === "/app") return pathname === "/app";
@@ -231,6 +251,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             </DropdownMenu>
           </div>
         </header>
+        {profile.user?.emailVerifiedAt === null ? <EmailVerificationBanner /> : null}
         <main className="px-4 py-6 md:px-8">{children}</main>
       </div>
     </div>

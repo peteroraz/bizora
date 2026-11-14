@@ -143,15 +143,25 @@ jobs:
       - name: Smoke test
         env:
           WEB_URL: ${{ steps.urls.outputs.web }}
+          WEB_CUSTOM_DOMAIN: ${{ vars.WEB_CUSTOM_DOMAIN }}
         run: |
           set -euo pipefail
+          # WEB_CUSTOM_DOMAIN is the hostname only, for example bizora-staging.baseportals.app.
+          # Leave it unset until that name resolves and the managed certificate is active.
+          # The run.app origin above is still checked before the image is deployed.
+          if [[ -n "${WEB_CUSTOM_DOMAIN:-}" ]]; then
+            target="https://${WEB_CUSTOM_DOMAIN}"
+          else
+            target="$WEB_URL"
+          fi
+          echo "Smoke test target: $target"
           code=""
           for attempt in 1 2 3 4 5 6; do
-            code="$(curl --silent --show-error --output /tmp/health-body --write-out '%{http_code}' "$WEB_URL/health" || true)"
+            code="$(curl --silent --show-error --output /tmp/health-body --write-out '%{http_code}' "$target/health" || true)"
             if [[ "$code" == "200" ]]; then
               exit 0
             fi
-            echo "GET $WEB_URL/health returned ${code:-none} (attempt ${attempt})"
+            echo "GET $target/health returned ${code:-none} (attempt ${attempt})"
             sleep 10
           done
           echo "Smoke test failed. Last status: ${code:-none}"

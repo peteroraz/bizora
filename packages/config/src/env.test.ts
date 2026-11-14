@@ -20,6 +20,24 @@ describe("DATABASE_SOCKET_DIR", () => {
     expect(socketDirFromEnv(socketDir)).toBe(socketDir);
   });
 
+  it("keeps email and OAuth off until both halves of a provider are configured", () => {
+    expect(loadEnv(base).EMAIL_PROVIDER).toBe("console");
+    expect(loadEnv(base).GOOGLE_OAUTH_CLIENT_ID).toBeUndefined();
+    expect(loadEnv({ ...base, GOOGLE_OAUTH_CLIENT_ID: "" }).GOOGLE_OAUTH_CLIENT_ID).toBeUndefined();
+    expect(() => loadEnv({ ...base, EMAIL_PROVIDER: "resend" })).toThrow(/EMAIL_API_KEY/);
+    expect(() => loadEnv({ ...base, GOOGLE_OAUTH_CLIENT_ID: "google-client" })).toThrow(/client id and secret/);
+    expect(
+      loadEnv({
+        ...base,
+        EMAIL_PROVIDER: "resend",
+        EMAIL_API_KEY: "re_test",
+        EMAIL_FROM: "Bizora <hello@bizora.test>",
+        GOOGLE_OAUTH_CLIENT_ID: "google-client",
+        GOOGLE_OAUTH_CLIENT_SECRET: "google-secret",
+      }).EMAIL_FROM,
+    ).toBe("Bizora <hello@bizora.test>");
+  });
+
   it("rejects a relative path", () => {
     expect(() => loadEnv({ ...base, DATABASE_SOCKET_DIR: "cloudsql/instance" })).toThrow(/absolute path/);
     expect(() => socketDirFromEnv("cloudsql/instance")).toThrow(/absolute path/);
