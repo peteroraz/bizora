@@ -9,4 +9,7 @@ module "bizora" {
   web_min_instances         = var.web_min_instances
   invite_token_expose       = var.invite_token_expose
   wif_mode                  = var.wif_mode
+  custom_domain             = var.custom_domain
+  email_provider            = var.email_provider
+  email_from                = var.email_from
 }

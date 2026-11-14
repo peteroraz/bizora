@@ -7,8 +7,11 @@ locals {
   # DNS label (service name + project number) is at most 63 characters.
   # CI builds the web image with this origin. status.url is the hash host
   # and is not compared; deploy curls this host instead.
-  api_origin = "https://bizora-api-${data.google_project.current.number}.${var.region}.run.app"
-  web_origin = "https://bizora-web-${data.google_project.current.number}.${var.region}.run.app"
+  api_origin         = "https://bizora-api-${data.google_project.current.number}.${var.region}.run.app"
+  run_app_web_origin = "https://bizora-web-${data.google_project.current.number}.${var.region}.run.app"
+  # Cookies, CORS, OAuth redirects, and email links use the custom domain when it is set.
+  # The run.app host stays assigned to the service during the cutover.
+  web_origin = var.custom_domain == "" ? local.run_app_web_origin : "https://${var.custom_domain}"
 
   artifact_registry_url = "${var.region}-docker.pkg.dev/${var.project_id}/bizora"
 

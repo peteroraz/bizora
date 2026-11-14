@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const OAUTH_COOKIE = "bizora_oauth";
+export const OAUTH_TRANSACTION_TTL_MS = 10 * 60 * 1000;
 
 export type OauthIntent = "login" | "link" | "invite";
 export type OauthProviderName = "google" | "microsoft";
@@ -12,12 +13,14 @@ export type OauthTransaction = {
   codeVerifier: string;
   returnTo: string;
   intent: OauthIntent;
+  iat: number;
   inviteToken?: string;
   userId?: string;
 };
 
-export function sealOauthTransaction(payload: OauthTransaction, secret: string): string {
-  const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+export function sealOauthTransaction(payload: Omit<OauthTransaction, "iat"> & { iat?: number }, secret: string): string {
+  const issued: OauthTransaction = { ...payload, iat: payload.iat ?? Date.now() };
+  const body = Buffer.from(JSON.stringify(issued), "utf8").toString("base64url");
   const signature = createHmac("sha256", secret).update(body).digest("base64url");
   return `${body}.${signature}`;
 }
@@ -34,6 +37,8 @@ export function openOauthTransaction(token: string, secret: string): OauthTransa
   try {
     const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as OauthTransaction;
     if (!parsed.state || !parsed.nonce || !parsed.codeVerifier || !parsed.provider) return null;
+    if (typeof parsed.iat !== "number" || !Number.isFinite(parsed.iat)) return null;
+    if (Date.now() - parsed.iat > OAUTH_TRANSACTION_TTL_MS) return null;
     return parsed;
   } catch {
     return null;

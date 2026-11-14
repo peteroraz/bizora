@@ -11,11 +11,11 @@ import {
   type Role,
   type WorkspaceOption,
 } from "@bizora/contracts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId, slugify } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
-import { branches, businesses, memberships, organizations, userIdentities, users } from "../../db/schema.js";
+import { branches, businesses, memberships, organizations, sessions, userIdentities, users } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { TenantRepository } from "../tenant/tenant.repository.js";
@@ -476,12 +476,22 @@ export class IdentityService {
       if (!profile.emailVerified) {
         throw new ApiError("OAUTH_LINK_REQUIRED", "Sign in with your password, then link this provider from Settings.", 409);
       }
-      await this.insertIdentity(existing.id, profile);
       if (!existing.emailVerifiedAt) {
-        await this.db.update(users).set({ emailVerifiedAt: new Date(), updatedBy: existing.id }).where(eq(users.id, existing.id));
+        await this.claimUnverifiedAccount(existing.id, profile, meta);
+        const claimed = await this.findUserById(existing.id);
+        if (!claimed) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
+        return claimed;
       }
+      await this.insertIdentity(existing.id, profile);
       await this.auditLink(existing.id, profile, meta);
       return existing;
+    }
+    if (!profile.emailVerified) {
+      throw new ApiError(
+        "OAUTH_EMAIL_UNVERIFIED",
+        "Your provider didn't confirm this email; register with email and password instead",
+        400,
+      );
     }
     const userId = newId();
     await this.db.insert(users).values({
@@ -489,7 +499,7 @@ export class IdentityService {
       email: profile.email,
       passwordHash: null,
       displayName: profile.displayName,
-      emailVerifiedAt: profile.emailVerified ? new Date() : null,
+      emailVerifiedAt: new Date(),
       createdBy: userId,
       updatedBy: userId,
     });
@@ -657,6 +667,40 @@ export class IdentityService {
       metadata: { provider: profile.provider, subject: profile.subject },
       ip: meta.ip,
       userAgent: meta.userAgent,
+    });
+  }
+
+  private async claimUnverifiedAccount(userId: string, profile: OauthProfile, meta: AuthMeta) {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({ emailVerifiedAt: new Date(), passwordHash: null, updatedBy: userId })
+        .where(eq(users.id, userId));
+      await tx.delete(userIdentities).where(eq(userIdentities.userId, userId));
+      await tx.insert(userIdentities).values({
+        id: newId(),
+        userId,
+        provider: profile.provider,
+        providerSubject: profile.subject,
+        email: profile.email,
+      });
+      await tx
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          action: "identity.takeover_protection",
+          entityType: "user",
+          entityId: userId,
+          correlationId: meta.correlationId,
+          metadata: { provider: profile.provider, subject: profile.subject },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        tx,
+      );
     });
   }
 

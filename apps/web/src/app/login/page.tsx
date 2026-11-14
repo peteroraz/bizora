@@ -19,7 +19,9 @@ function LoginForm() {
           ? "Sign-in could not be completed."
           : reason === "invite"
             ? "That sign-in email does not match the invitation."
-            : null,
+            : reason === "email"
+              ? "Your provider didn't confirm this email; register with email and password instead"
+              : null,
   );
   const [pending, setPending] = useState(false);
 

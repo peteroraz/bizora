@@ -127,12 +127,13 @@ export class OauthService {
     const email = emailFrom(claims);
     if (!email) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
     const name = typeof claims.name === "string" ? claims.name.trim().slice(0, 120) : "";
+    const preferred = typeof claims.preferred_username === "string" ? claims.preferred_username.trim().slice(0, 120) : "";
     return {
       provider: transaction.provider,
       subject: claims.sub,
       email,
-      emailVerified: claims.email_verified === true || claims.xms_edov === true,
-      displayName: name || email.split("@")[0] || "Member",
+      emailVerified: transaction.provider === "microsoft" ? claims.xms_edov === true : claims.email_verified === true,
+      displayName: name || preferred || email.split("@")[0] || "Member",
     };
   }
 
@@ -163,8 +164,5 @@ export class OauthService {
 
 function emailFrom(claims: { [key: string]: unknown }): string {
   if (typeof claims.email === "string" && claims.email.includes("@")) return claims.email.toLowerCase();
-  if (typeof claims.preferred_username === "string" && claims.preferred_username.includes("@")) {
-    return claims.preferred_username.toLowerCase();
-  }
   return "";
 }

@@ -66,6 +66,17 @@ variable "email_from" {
   default     = ""
 }
 
+variable "custom_domain" {
+  type        = string
+  description = "Public web hostname without a scheme. Empty keeps the run.app origin. Staging uses bizora-staging.baseportals.app. Production load balancing is not created here."
+  default     = ""
+
+  validation {
+    condition     = var.custom_domain == "" || can(regex("^[a-z0-9][a-z0-9.-]+[a-z0-9]$", var.custom_domain))
+    error_message = "custom_domain must be a lowercase hostname without a scheme or path."
+  }
+}
+
 variable "google_oauth_client_id" {
   type        = string
   description = "Google OAuth client id. Empty disables Google sign-in and does not mount the client secret."

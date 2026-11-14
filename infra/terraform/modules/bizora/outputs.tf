@@ -29,8 +29,26 @@ output "api_origin" {
 }
 
 output "web_origin" {
-  description = "Browser origin injected into bizora-api as WEB_ORIGIN."
+  description = "Browser origin injected into bizora-api as WEB_ORIGIN and PUBLIC_WEB_ORIGIN."
   value       = local.web_origin
+}
+
+output "web_run_origin" {
+  description = "Deterministic run.app origin for bizora-web. It keeps serving during a custom-domain cutover."
+  value       = local.run_app_web_origin
+}
+
+output "custom_domain_dns_records" {
+  description = "DNS records for custom_domain. Create each one in Cloudflare as DNS only (grey cloud)."
+  value = var.custom_domain == "" ? [] : flatten([
+    for status in google_cloud_run_domain_mapping.web[0].status : [
+      for record in status.resource_records : {
+        name   = record.name
+        type   = record.type
+        rrdata = record.rrdata
+      }
+    ]
+  ])
 }
 
 output "cloud_sql_connection_name" {

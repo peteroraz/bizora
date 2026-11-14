@@ -6,7 +6,7 @@ import { ApiError } from "../../common/errors.js";
 import type { Request, Response } from "express";
 import { APP_ENV } from "../../tokens.js";
 import { readCookieValue } from "@bizora/auth";
-import { OAUTH_COOKIE, openOauthTransaction, type OauthIntent } from "./oauth-cookie.js";
+import { OAUTH_COOKIE, OAUTH_TRANSACTION_TTL_MS, openOauthTransaction, type OauthIntent } from "./oauth-cookie.js";
 import { isOauthProvider, OauthService } from "./oauth.service.js";
 import { applySession } from "./session-cookies.js";
 import { SessionService } from "./session.service.js";
@@ -56,7 +56,7 @@ export class OauthController {
       secure: this.env.COOKIE_SECURE,
       sameSite: "lax",
       path: "/api/v1/auth/oauth",
-      maxAge: 10 * 60 * 1000,
+      maxAge: OAUTH_TRANSACTION_TTL_MS,
     });
     res.redirect(started.location);
   }
@@ -83,6 +83,10 @@ export class OauthController {
       applySession(res, this.env, finished.session);
       res.redirect(finished.location);
     } catch (error) {
+      if (error instanceof ApiError && error.code === "OAUTH_EMAIL_UNVERIFIED") {
+        res.redirect("/login?reason=email");
+        return;
+      }
       if (error instanceof ApiError && error.code === "OAUTH_LINK_REQUIRED") {
         res.redirect("/login?reason=link");
         return;

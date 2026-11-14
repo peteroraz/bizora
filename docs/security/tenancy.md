@@ -31,7 +31,7 @@ Switching to an organization without an active membership returns 403.
 - Short-lived access JWT (`bizora_session`) and rotating refresh token (`bizora_refresh`).
 - Refresh tokens are stored hashed. Logout sets `revoked_at`. Reuse of a rotated refresh token revokes the family.
 - Protected routes load membership from the database. JWT `role` is never trusted for authorization.
-- Password reset revokes every session for that user. Google and Microsoft sign-in reuse this same session issuance. See `docs/adr/ADR-008-oidc-sign-in.md`.
+- Password reset revokes every session for that user. Google and Microsoft sign-in reuse this same session issuance. A verified provider sign-in that matches an unverified password account also revokes every session and clears that password. See `docs/adr/ADR-008-oidc-sign-in.md`.
 
 ## Invite lifecycle
 

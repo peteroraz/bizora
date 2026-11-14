@@ -9,3 +9,6 @@ api_min_instances         = 0
 web_min_instances         = 0
 invite_token_expose       = true
 wif_mode                  = "main_branch"
+custom_domain             = "bizora-staging.baseportals.app"
+email_provider            = "resend"
+email_from                = "Bizora <no-reply@mail.baseportals.app>"

@@ -5,15 +5,16 @@ import type { AddressInfo } from "node:net";
 import { PGlite } from "@electric-sql/pglite";
 import { sha256Hex } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { exportJWK, generateKeyPair, SignJWT, type CryptoKey } from "jose";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./bootstrap.js";
-import { schema, authTokens } from "./db/schema.js";
+import { schema, auditEvents, authTokens, sessions, userIdentities, users } from "./db/schema.js";
 import { loadMigrationSql } from "./db/sql.js";
+import { newId } from "./common/ids.js";
 import { createLogger } from "./logging.js";
 import { ConsoleEmailAdapter } from "./modules/email/console-email.adapter.js";
 import { EMAIL } from "./tokens.js";
@@ -29,6 +30,9 @@ type PendingCode = {
   sub: string;
   fault: string;
   used: boolean;
+  omitEmail: boolean;
+  preferredUsername: string;
+  xmsEdov: boolean;
 };
 
 describe("email recovery and OIDC sign-in", () => {
@@ -135,6 +139,9 @@ describe("email recovery and OIDC sign-in", () => {
         sub: url.searchParams.get("sub") ?? "subject-default",
         fault: url.searchParams.get("fault") ?? "",
         used: false,
+        omitEmail: url.searchParams.get("omit_email") === "1",
+        preferredUsername: url.searchParams.get("preferred_username") ?? "",
+        xmsEdov: url.searchParams.get("xms") === "1",
       });
       const redirect = new URL(url.searchParams.get("redirect_uri") ?? `${issuer}callback`);
       redirect.searchParams.set("code", code);
@@ -157,8 +164,9 @@ describe("email recovery and OIDC sign-in", () => {
       const expired = pending.fault === "expired";
       const exp = expired ? now - 3600 : now + 600;
       const idToken = await new SignJWT({
-        email: pending.email,
-        email_verified: pending.verified,
+        ...(pending.omitEmail ? {} : { email: pending.email, email_verified: pending.verified }),
+        ...(pending.preferredUsername ? { preferred_username: pending.preferredUsername } : {}),
+        ...(pending.xmsEdov ? { xms_edov: true } : {}),
         name: "Ada Lovelace",
         nonce: pending.fault === "nonce" ? "not-the-nonce" : pending.nonce,
         tid,
@@ -200,7 +208,14 @@ describe("email recovery and OIDC sign-in", () => {
   async function complete(
     provider: "google" | "microsoft",
     query: Record<string, string>,
-    claims: { email: string; verified?: boolean; sub: string; fault?: string },
+    claims: {
+      email: string;
+      verified?: boolean;
+      sub: string;
+      fault?: string;
+      omitEmail?: boolean;
+      preferredUsername?: string;
+    },
     mutate?: (callback: URL) => void,
   ) {
     const started = await start(provider, query);
@@ -208,9 +223,12 @@ describe("email recovery and OIDC sign-in", () => {
     const cookie = cookiePair(started.headers["set-cookie"], "bizora_oauth");
     expect(cookie).toBeTruthy();
     const authorize = new URL(started.headers.location as string);
-    authorize.searchParams.set("email", claims.email);
     authorize.searchParams.set("sub", claims.sub);
+    if (claims.omitEmail) authorize.searchParams.set("omit_email", "1");
+    else authorize.searchParams.set("email", claims.email);
+    if (claims.preferredUsername) authorize.searchParams.set("preferred_username", claims.preferredUsername);
     if (claims.verified === false) authorize.searchParams.set("verified", "0");
+    if (provider === "microsoft" && claims.verified !== false && !claims.omitEmail) authorize.searchParams.set("xms", "1");
     if (claims.fault) authorize.searchParams.set("fault", claims.fault);
     const redirected = await fetch(authorize, { redirect: "manual" });
     const callback = new URL(redirected.headers.get("location") ?? "");
@@ -248,6 +266,72 @@ describe("email recovery and OIDC sign-in", () => {
     expect(second.headers.location).toContain("/login?reason=oauth");
   });
 
+  it("rejects an unverified provider instead of creating an account", async () => {
+    const created = await complete("google", { returnTo: "/app" }, {
+      email: "unverified-new@bizora.test",
+      verified: false,
+      sub: nextSub("unverified-new"),
+    });
+    expect(created.finished.status).toBe(302);
+    expect(created.finished.headers.location).toContain("/login?reason=email");
+    const rows = await db.select().from(users).where(eq(users.email, "unverified-new@bizora.test"));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("clears a pre-registered password and revokes that user's sessions when a verified provider takes the email", async () => {
+    const registered = await register("preempted@bizora.test", "Preempted Foods");
+    const [attacker] = await db.select().from(users).where(eq(users.email, "preempted@bizora.test"));
+    expect(attacker?.passwordHash).toBeTruthy();
+    await db.insert(userIdentities).values({
+      id: newId(),
+      userId: attacker!.id,
+      provider: "microsoft",
+      providerSubject: "planted-attacker-subject",
+      email: "preempted@bizora.test",
+    });
+
+    const taken = await complete("google", { returnTo: "/app" }, {
+      email: "preempted@bizora.test",
+      sub: nextSub("victim"),
+    });
+    expect(taken.finished.headers.location).toBe("/app");
+
+    const [user] = await db.select().from(users).where(eq(users.email, "preempted@bizora.test"));
+    expect(user?.passwordHash).toBeNull();
+    expect(user?.emailVerifiedAt).toBeTruthy();
+    const identities = await db.select().from(userIdentities).where(eq(userIdentities.userId, attacker!.id));
+    expect(identities.map((item) => item.provider)).toEqual(["google"]);
+    const revoked = await db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.userId, attacker!.id), isNull(sessions.revokedAt)));
+    expect(revoked).toHaveLength(1);
+    const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, "identity.takeover_protection"));
+    expect(audit?.entityId).toBe(attacker!.id);
+
+    const passwordLogin = await request(app.getHttpServer())
+      .post("/api/v1/auth/login")
+      .send({ email: "preempted@bizora.test", password });
+    expect(passwordLogin.status).toBe(401);
+    const refresh = await request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: registered.refreshToken });
+    expect(refresh.status).toBe(401);
+  });
+
+  it("does not treat a Microsoft preferred_username as a verified email", async () => {
+    const created = await complete("microsoft", { returnTo: "/app" }, {
+      email: "unused@bizora.test",
+      omitEmail: true,
+      preferredUsername: "display-only@bizora.test",
+      sub: nextSub("preferred"),
+    });
+    expect(created.finished.status).toBe(302);
+    expect(created.finished.headers.location).toContain("/login?reason=oauth");
+    const byName = await db.select().from(users).where(eq(users.email, "display-only@bizora.test"));
+    const byEmail = await db.select().from(users).where(eq(users.email, "unused@bizora.test"));
+    expect(byName).toHaveLength(0);
+    expect(byEmail).toHaveLength(0);
+  });
+
   it("signs in with Microsoft and sends a new user to organization setup", async () => {
     const result = await complete("microsoft", { returnTo: "/app" }, { email: "ms@bizora.test", sub: nextSub("ms") });
     expect(result.finished.status).toBe(302);
@@ -256,6 +340,11 @@ describe("email recovery and OIDC sign-in", () => {
 
   it("does not auto-link an unverified email and does auto-link a verified one", async () => {
     await register("linked@bizora.test");
+    const verifyMessage = email.delivered.find((message) => message.to === "linked@bizora.test" && message.subject.includes("Verify"));
+    const verifyToken = new URL(verifyMessage?.text.match(/https?:\/\/\S+/)?.[0] ?? "http://localhost/missing").searchParams.get("token");
+    const verifiedEmail = await request(app.getHttpServer()).post("/api/v1/auth/email/verify").send({ token: verifyToken });
+    expect(verifiedEmail.status).toBe(201);
+
     const unverified = await complete("google", { returnTo: "/app" }, {
       email: "linked@bizora.test",
       verified: false,
@@ -280,6 +369,8 @@ describe("email recovery and OIDC sign-in", () => {
       .set("authorization", `Bearer ${login.body.data.accessToken}`);
     expect(after.body.data.identities).toHaveLength(1);
     expect(after.body.data.identities[0].provider).toBe("google");
+    const stillPassword = await request(app.getHttpServer()).post("/api/v1/auth/login").send({ email: "linked@bizora.test", password });
+    expect(stillPassword.status).toBe(201);
   });
 
   it("rejects an invitation when the provider email does not match", async () => {

@@ -306,14 +306,16 @@ export class OnboardingService {
     if (!organization) {
       throw new ApiError("ORGANIZATION_NOT_FOUND", "Organization was not found.", 404);
     }
-    const address = await this.addressesService.upsert(tenant, organization.addressId, raw);
-    if (organization.addressId !== address.id) {
-      await this.db
-        .update(organizations)
-        .set({ addressId: address.id, updatedBy: tenant.userId })
-        .where(eq(organizations.id, tenant.tenantId));
-    }
-    return address;
+    return this.db.transaction(async (tx) => {
+      const address = await this.addressesService.upsert(tenant, organization.addressId, raw, tx);
+      if (organization.addressId !== address.id) {
+        await tx
+          .update(organizations)
+          .set({ addressId: address.id, updatedBy: tenant.userId })
+          .where(eq(organizations.id, tenant.tenantId));
+      }
+      return address;
+    });
   }
 
   async upsertBusinessAddress(tenant: TenantContext, businessId: string, raw: unknown) {
@@ -324,14 +326,16 @@ export class OnboardingService {
     if (!business) {
       throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
     }
-    const address = await this.addressesService.upsert(tenant, business.addressId, raw);
-    if (business.addressId !== address.id) {
-      await this.db
-        .update(businesses)
-        .set({ addressId: address.id, updatedBy: tenant.userId })
-        .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)));
-    }
-    return address;
+    return this.db.transaction(async (tx) => {
+      const address = await this.addressesService.upsert(tenant, business.addressId, raw, tx);
+      if (business.addressId !== address.id) {
+        await tx
+          .update(businesses)
+          .set({ addressId: address.id, updatedBy: tenant.userId })
+          .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)));
+      }
+      return address;
+    });
   }
 
   async upsertBranchAddress(tenant: TenantContext, branchId: string, raw: unknown) {
@@ -342,13 +346,15 @@ export class OnboardingService {
     if (!canManageBranchSettings(tenant, branch)) {
       throw new ApiError("FORBIDDEN", "You cannot change this branch.", 403);
     }
-    const address = await this.addressesService.upsert(tenant, branch.addressId, raw);
-    if (branch.addressId !== address.id) {
-      await this.db
-        .update(branches)
-        .set({ addressId: address.id, updatedBy: tenant.userId })
-        .where(and(eq(branches.id, branchId), eq(branches.tenantId, tenant.tenantId)));
-    }
-    return address;
+    return this.db.transaction(async (tx) => {
+      const address = await this.addressesService.upsert(tenant, branch.addressId, raw, tx);
+      if (branch.addressId !== address.id) {
+        await tx
+          .update(branches)
+          .set({ addressId: address.id, updatedBy: tenant.userId })
+          .where(and(eq(branches.id, branchId), eq(branches.tenantId, tenant.tenantId)));
+      }
+      return address;
+    });
   }
 }
