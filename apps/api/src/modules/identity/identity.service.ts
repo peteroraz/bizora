@@ -180,7 +180,7 @@ export class IdentityService {
   async establishSession(
     user: { id: string; email: string; displayName: string },
     meta: AuthMeta,
-    method: "password" | "google" | "microsoft",
+    method: "password" | "google",
     allowSetup = false,
   ): Promise<AuthPayload> {
     const workspaces = await this.listWorkspaces(user.id);
@@ -527,7 +527,7 @@ export class IdentityService {
   }
 
   async unlinkIdentity(userId: string, provider: string, meta: AuthMeta) {
-    if (provider !== "google" && provider !== "microsoft") {
+    if (provider !== "google") {
       throw new ApiError("IDENTITY_NOT_FOUND", "That sign-in method is not linked.", 404);
     }
     const user = await this.findUserById(userId);
@@ -560,12 +560,14 @@ export class IdentityService {
     return {
       hasPassword: Boolean(user.passwordHash),
       emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
-      identities: identities.map((item) => ({
-        id: item.id,
-        provider: item.provider,
-        email: item.email,
-        lastUsedAt: item.lastUsedAt.toISOString(),
-      })),
+      identities: identities
+        .filter((item) => item.provider === "google")
+        .map((item) => ({
+          id: item.id,
+          provider: item.provider,
+          email: item.email,
+          lastUsedAt: item.lastUsedAt.toISOString(),
+        })),
       sessions: active.map((item) => ({
         id: item.id,
         createdAt: item.createdAt.toISOString(),

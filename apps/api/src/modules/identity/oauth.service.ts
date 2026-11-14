@@ -8,7 +8,7 @@ import { InvitationService } from "../rbac/invitation.service.js";
 import type { AuthMeta, AuthPayload } from "./identity.service.js";
 import { IdentityService } from "./identity.service.js";
 import { sealOauthTransaction, type OauthIntent, type OauthProviderName, type OauthTransaction } from "./oauth-cookie.js";
-import { microsoftIssuer, safeReturnTo } from "./return-to.js";
+import { safeReturnTo } from "./return-to.js";
 
 export type OauthProfile = {
   provider: OauthProviderName;
@@ -18,7 +18,7 @@ export type OauthProfile = {
   displayName: string;
 };
 
-const providers = ["google", "microsoft"] as const;
+const providers = ["google"] as const;
 
 export function isOauthProvider(value: string): value is OauthProviderName {
   return providers.includes(value as OauthProviderName);
@@ -37,7 +37,6 @@ export class OauthService {
   enabled() {
     return {
       google: Boolean(this.env.GOOGLE_OAUTH_CLIENT_ID && this.env.GOOGLE_OAUTH_CLIENT_SECRET),
-      microsoft: Boolean(this.env.MICROSOFT_OAUTH_CLIENT_ID && this.env.MICROSOFT_OAUTH_CLIENT_SECRET),
     };
   }
 
@@ -120,10 +119,6 @@ export class OauthService {
     }
     const claims = tokens.claims() as { sub?: string; iss?: string; [key: string]: unknown } | undefined;
     if (!claims?.sub || !claims.iss) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
-    if (transaction.provider === "microsoft") {
-      const expected = microsoftIssuer(config.serverMetadata().issuer, claims.tid);
-      if (claims.iss !== expected) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
-    }
     const email = emailFrom(claims);
     if (!email) throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
     const name = typeof claims.name === "string" ? claims.name.trim().slice(0, 120) : "";
@@ -132,7 +127,7 @@ export class OauthService {
       provider: transaction.provider,
       subject: claims.sub,
       email,
-      emailVerified: transaction.provider === "microsoft" ? claims.xms_edov === true : claims.email_verified === true,
+      emailVerified: claims.email_verified === true,
       displayName: name || preferred || email.split("@")[0] || "Member",
     };
   }
@@ -144,22 +139,31 @@ export class OauthService {
   private async configuration(provider: OauthProviderName): Promise<client.Configuration> {
     const cached = this.configurations.get(provider);
     if (cached) return cached;
-    const clientId = provider === "google" ? this.env.GOOGLE_OAUTH_CLIENT_ID : this.env.MICROSOFT_OAUTH_CLIENT_ID;
-    const clientSecret = provider === "google" ? this.env.GOOGLE_OAUTH_CLIENT_SECRET : this.env.MICROSOFT_OAUTH_CLIENT_SECRET;
+    const settings = providerCredentials(this.env, provider);
+    const clientId = settings.clientId;
+    const clientSecret = settings.clientSecret;
     if (!clientId || !clientSecret) {
       throw new ApiError("OAUTH_DISABLED", "That sign-in method is not available.", 404);
     }
-    const issuer = new URL(
-      provider === "google"
-        ? (this.env.GOOGLE_OAUTH_ISSUER ?? "https://accounts.google.com")
-        : (this.env.MICROSOFT_OAUTH_ISSUER ?? "https://login.microsoftonline.com/common/v2.0"),
-    );
+    const issuer = new URL(settings.issuer);
     const config = await client.discovery(issuer, clientId, undefined, client.ClientSecretPost(clientSecret), {
       ...(issuer.protocol === "http:" ? { execute: [client.allowInsecureRequests] } : {}),
     });
     this.configurations.set(provider, config);
     return config;
   }
+}
+
+const providerSettings = {
+  google: (env: AppEnv) => ({
+    clientId: env.GOOGLE_OAUTH_CLIENT_ID,
+    clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+    issuer: env.GOOGLE_OAUTH_ISSUER ?? "https://accounts.google.com",
+  }),
+} satisfies Record<OauthProviderName, (env: AppEnv) => { clientId?: string; clientSecret?: string; issuer: string }>;
+
+function providerCredentials(env: AppEnv, provider: OauthProviderName) {
+  return providerSettings[provider](env);
 }
 
 function emailFrom(claims: { [key: string]: unknown }): string {

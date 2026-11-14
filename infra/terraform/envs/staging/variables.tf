@@ -52,3 +52,8 @@ variable "email_from" {
   type        = string
   description = "From address for outbound email."
 }
+
+variable "google_oauth_client_id" {
+  type        = string
+  description = "Google OAuth client id. Empty leaves Google sign-in off."
+}

@@ -4,7 +4,7 @@ export const OAUTH_COOKIE = "bizora_oauth";
 export const OAUTH_TRANSACTION_TTL_MS = 10 * 60 * 1000;
 
 export type OauthIntent = "login" | "link" | "invite";
-export type OauthProviderName = "google" | "microsoft";
+export type OauthProviderName = "google";
 
 export type OauthTransaction = {
   provider: OauthProviderName;
@@ -36,7 +36,7 @@ export function openOauthTransaction(token: string, secret: string): OauthTransa
   if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return null;
   try {
     const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as OauthTransaction;
-    if (!parsed.state || !parsed.nonce || !parsed.codeVerifier || !parsed.provider) return null;
+    if (parsed.provider !== "google" || !parsed.state || !parsed.nonce || !parsed.codeVerifier) return null;
     if (typeof parsed.iat !== "number" || !Number.isFinite(parsed.iat)) return null;
     if (Date.now() - parsed.iat > OAUTH_TRANSACTION_TTL_MS) return null;
     return parsed;

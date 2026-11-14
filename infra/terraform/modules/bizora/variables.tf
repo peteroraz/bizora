@@ -83,12 +83,6 @@ variable "google_oauth_client_id" {
   default     = ""
 }
 
-variable "microsoft_oauth_client_id" {
-  type        = string
-  description = "Microsoft OAuth client id. Empty disables Microsoft sign-in and does not mount the client secret."
-  default     = ""
-}
-
 variable "wif_mode" {
   type        = string
   description = "GitHub Actions identity allowed to impersonate the deployer. main_branch (staging) or production_environment (prod)."

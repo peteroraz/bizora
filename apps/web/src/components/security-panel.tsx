@@ -60,16 +60,16 @@ export function SecurityPanel() {
         <h2 className="text-lg font-semibold">Sign-in methods</h2>
         <ul className="space-y-2 text-sm">
           <li>Password: {security?.hasPassword ? "Set" : "Not set"}</li>
-          {(security?.identities ?? []).map((identity) => (
-            <li key={identity.id} className="flex flex-wrap items-center gap-2">
-              <span>
-                {identity.provider}: {identity.email}
-              </span>
-              <Button type="button" variant="ghost" size="sm" onClick={() => void unlink(identity.provider)}>
-                Unlink
-              </Button>
-            </li>
-          ))}
+          {(security?.identities ?? [])
+            .filter((identity) => identity.provider === "google")
+            .map((identity) => (
+              <li key={identity.id} className="flex flex-wrap items-center gap-2">
+                <span>Google: {identity.email}</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => void unlink(identity.provider)}>
+                  Unlink
+                </Button>
+              </li>
+            ))}
         </ul>
         <OauthButtons returnTo="/app/settings?tab=security" intent="link" />
       </Card>

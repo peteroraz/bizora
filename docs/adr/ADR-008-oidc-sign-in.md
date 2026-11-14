@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Sprint 3C.
+Accepted for Sprint 3C. The Microsoft provider in this decision is withdrawn by [ADR-009](ADR-009-sign-in-providers.md). Google sign-in, PKCE, linking, and takeover protection stay.
 
 ## Context
 

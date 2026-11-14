@@ -14,7 +14,7 @@ function LoginForm() {
     reason === "session"
       ? "Your session expired or was revoked. Sign in again."
       : reason === "link"
-        ? "Sign in with your password, then link Google or Microsoft from Settings."
+        ? "Sign in with your password, then link Google from Settings."
         : reason === "oauth"
           ? "Sign-in could not be completed."
           : reason === "invite"

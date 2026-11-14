@@ -37,13 +37,3 @@ export function safeReturnTo(value: unknown): string {
   }
   return decoded;
 }
-
-const tenantIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function microsoftIssuer(template: string, tid: unknown): string {
-  if (typeof tid !== "string" || !tenantIdPattern.test(tid)) {
-    throw new ApiError("OAUTH_REJECTED", "Sign-in could not be completed.", 400);
-  }
-  if (!template.includes("{tenantid}")) return template;
-  return template.replaceAll("{tenantid}", tid);
-}
