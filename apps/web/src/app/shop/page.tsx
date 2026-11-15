@@ -6,6 +6,7 @@ import { Delete } from "lucide-react";
 import Link from "next/link";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { purgeOfflinePages } from "../../lib/offline/sw-client";
 import { setShopMode } from "../../lib/shop-mode";
 
 type StaffOption = { id: string; displayName: string; role: string; lockedUntil: string | null };
@@ -45,6 +46,8 @@ export default function ShopModePage() {
   }
 
   useEffect(() => {
+    // A locked shop phone comes back here: forget the screens saved for whoever used it last.
+    purgeOfflinePages();
     void load();
   }, []);
 

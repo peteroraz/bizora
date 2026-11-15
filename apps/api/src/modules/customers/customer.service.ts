@@ -31,6 +31,7 @@ import {
   memberships,
   subdivisions,
   users,
+  sales,
 } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AddressService } from "../addresses/address.service.js";
@@ -106,7 +107,14 @@ export class CustomerService {
           href: "/app/staff",
         });
       }
-      if (has(Permission.SALES_CREATE)) checklist.push({ id: "record-sale", done: false, href: "/app/sales" });
+      if (has(Permission.SALES_CREATE)) {
+        const [firstSale] = await this.db
+          .select({ id: sales.id })
+          .from(sales)
+          .where(and(eq(sales.tenantId, tenant.tenantId), eq(sales.businessId, business.id)))
+          .limit(1);
+        checklist.push({ id: "record-sale", done: Boolean(firstSale), href: "/app/sales/new" });
+      }
     }
     return {
       customerCount,

@@ -15,7 +15,7 @@ export const idempotencyKeySchema = z
 export const uuidV7Schema = z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.");
 
 /** Operation types the server accepts from a device outbox. Sprints 4 and 5 add stock and sales operations. */
-export const SYNC_OPERATION_TYPES = ["customer.create", "stock.receive", "stock.count"] as const;
+export const SYNC_OPERATION_TYPES = ["customer.create", "stock.receive", "stock.count", "sale.create"] as const;
 export type SyncOperationType = (typeof SYNC_OPERATION_TYPES)[number];
 
 export const syncOperationSchema = z.object({

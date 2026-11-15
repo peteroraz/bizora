@@ -1,6 +1,6 @@
 export const primaryNav = [
   { id: "home", href: "/app", icon: "home", enabled: true },
-  { id: "sales", href: "/app/sales", icon: "sales", enabled: false },
+  { id: "sales", href: "/app/sales", icon: "sales", enabled: true },
   { id: "stock", href: "/app/stock", icon: "stock", enabled: true },
   { id: "customers", href: "/app/customers", icon: "customers", enabled: true },
   { id: "debtors", href: "/app/debtors", icon: "debtors", enabled: false },
@@ -13,7 +13,6 @@ export const primaryNav = [
 export const bottomNav = ["home", "sales", "customers", "debtors"] as const;
 
 export const comingSoonModules = {
-  sales: "sales",
   debtors: "debtors",
   money: "money",
   reports: "reports",

@@ -36,6 +36,7 @@ import { setShopMode } from "../../lib/shop-mode";
 import { navAllowed } from "../../lib/access";
 import { AccessProvider } from "../../lib/access-context";
 import { dismissRejected, subscribe, summary } from "../../lib/offline/outbox";
+import { signOutEverywhere } from "../../lib/offline/sw-client";
 import { startBackgroundSync } from "../../lib/offline/sync";
 import { refreshOfflineCatalog } from "../../lib/stock-client";
 import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
@@ -220,7 +221,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const staffMode = Boolean(profile.tenant?.deviceId);
 
   async function logout() {
-    await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" });
+    await signOutEverywhere();
     window.location.assign(staffMode ? "/shop" : "/login");
   }
 

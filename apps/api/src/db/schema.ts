@@ -908,6 +908,93 @@ export const stockCounts = pgTable(
   ],
 );
 
+export const sales = pgTable(
+  "sales",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    customerId: uuid("customer_id"),
+    saleNumber: varchar("sale_number", { length: 24 }),
+    provisionalNumber: varchar("provisional_number", { length: 24 }),
+    externalRef: varchar("external_ref", { length: 64 }),
+    status: varchar("status", { length: 10 }).notNull().default("completed"),
+    historyOnly: boolean("history_only").notNull().default(false),
+    source: varchar("source", { length: 10 }).notNull().default("pos"),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    subtotalMinor: bigint("subtotal_minor", { mode: "bigint" }).notNull(),
+    discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
+    totalMinor: bigint("total_minor", { mode: "bigint" }).notNull(),
+    paidMinor: bigint("paid_minor", { mode: "bigint" }).notNull(),
+    balanceMinor: bigint("balance_minor", { mode: "bigint" }).notNull(),
+    note: varchar("note", { length: 240 }),
+    receiptToken: varchar("receipt_token", { length: 64 }).notNull(),
+    journalEntryId: uuid("journal_entry_id"),
+    soldAt: timestamp("sold_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    membershipId: uuid("membership_id"),
+    deviceId: uuid("device_id"),
+    actorType: varchar("actor_type", { length: 16 }).notNull().default("HUMAN"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    voidReason: varchar("void_reason", { length: 240 }),
+  },
+  (table) => [
+    uniqueIndex("sales_tenant_id_id_key").on(table.tenantId, table.id),
+    uniqueIndex("sales_tenant_business_id_key").on(table.tenantId, table.businessId, table.id),
+    index("sales_branch_sold_idx").on(table.tenantId, table.branchId, table.soldAt),
+    foreignKey({ name: "sales_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "sales_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "sales_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+  ],
+);
+
+export const saleLines = pgTable(
+  "sale_lines",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    lineNo: smallint("line_no").notNull(),
+    productId: uuid("product_id"),
+    description: varchar("description", { length: 160 }).notNull(),
+    quantity: bigint("quantity", { mode: "bigint" }).notNull(),
+    enteredQuantity: bigint("entered_quantity", { mode: "bigint" }).notNull(),
+    enteredUnit: varchar("entered_unit", { length: 16 }).notNull(),
+    unitPriceMinor: bigint("unit_price_minor", { mode: "bigint" }).notNull(),
+    discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
+    lineTotalMinor: bigint("line_total_minor", { mode: "bigint" }).notNull(),
+    costMinor: bigint("cost_minor", { mode: "bigint" }),
+    stockMovementId: uuid("stock_movement_id"),
+  },
+  (table) => [
+    uniqueIndex("sale_lines_sale_line_key").on(table.saleId, table.lineNo),
+    foreignKey({ name: "sale_lines_sale_fk", columns: [table.tenantId, table.businessId, table.saleId], foreignColumns: [sales.tenantId, sales.businessId, sales.id] }),
+    foreignKey({ name: "sale_lines_product_fk", columns: [table.tenantId, table.businessId, table.productId], foreignColumns: [products.tenantId, products.businessId, products.id] }),
+  ],
+);
+
+export const salePayments = pgTable(
+  "sale_payments",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    method: varchar("method", { length: 10 }).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    reference: varchar("reference", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("sale_payments_sale_idx").on(table.tenantId, table.saleId),
+    foreignKey({ name: "sale_payments_sale_fk", columns: [table.tenantId, table.businessId, table.saleId], foreignColumns: [sales.tenantId, sales.businessId, sales.id] }),
+  ],
+);
+
 export const schema = {
   addresses,
   organizations,
@@ -945,6 +1032,9 @@ export const schema = {
   stockMovements,
   stockBalances,
   stockCounts,
+  sales,
+  saleLines,
+  salePayments,
 };
 
 export type DatabaseSchema = typeof schema;

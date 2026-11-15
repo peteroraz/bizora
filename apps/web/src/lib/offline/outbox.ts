@@ -1,4 +1,5 @@
 import { SYNC_MAX_BATCH, type SyncOperationResult, type SyncOperationType, uuidv7 } from "@bizora/contracts";
+import { purgeOfflinePages } from "./sw-client";
 
 /**
  * The device outbox (ADR-012): work done offline waits here in IndexedDB until the server accepts it.
@@ -201,6 +202,7 @@ export async function clearDevice() {
   if (!available()) return;
   const waiting = (await summary()).devicePending;
   if (waiting > 0) throw new OutboxNotEmptyError(waiting);
+  purgeOfflinePages();
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
     request.onsuccess = () => resolve();

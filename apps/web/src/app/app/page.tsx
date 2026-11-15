@@ -10,6 +10,7 @@ import { useAccess } from "../../lib/access-context";
 import { api } from "../../lib/api";
 import { useStockText } from "../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../i18n/format";
+import type { SaleSummary } from "../../lib/sales-client";
 
 type Check = { id: string; done: boolean; href: string };
 type Followup = { id: string; customerId: string; customerName: string; reason: string; dueAt: string };
@@ -33,6 +34,16 @@ export default function AppHomePage() {
   const stockText = useStockText();
   const seesStock = shown.includes("stock");
   const approvesStock = can(access, Permission.STOCK_ADJUST);
+  const seesSales = shown.includes("sales") || shown.includes("mySales");
+  const sells = can(access, Permission.SALES_CREATE);
+  const [sales, setSales] = useState<SaleSummary | null>(null);
+
+  useEffect(() => {
+    if (!seesSales) return;
+    void api("/api/v1/sales/summary")
+      .then(async (response) => (response.ok ? setSales((await response.json()).data) : undefined))
+      .catch(() => undefined);
+  }, [seesSales]);
 
   useEffect(() => {
     if (seesStock) {
@@ -107,6 +118,23 @@ export default function AppHomePage() {
               ) : (
                 <p className="mt-2 text-sm">{t("noLowStock")}</p>
               )
+            ) : (id === "sales" || id === "mySales") && sales && sales.count > 0 ? (
+              <>
+                <p className="mt-1 text-xl font-semibold tabular-nums" data-testid="home-sales-total">
+                  {formatCurrency(BigInt(sales.totalMinor), sales.currency, locale)}
+                </p>
+                <p className="text-sm text-muted">{t("salesCount", { count: sales.count })}</p>
+                <Link href="/app/sales" className="mt-2 inline-block text-sm text-primary">
+                  {t("seeSales")}
+                </Link>
+              </>
+            ) : (id === "sales" || id === "mySales") && sells ? (
+              <>
+                <p className="mt-2 text-sm">{t("noSalesToday")}</p>
+                <Link href="/app/sales/new" className="mt-2 inline-block text-sm font-medium text-primary">
+                  {t("recordSale")}
+                </Link>
+              </>
             ) : id === "approval" && countsToApprove > 0 ? (
               <Link href="/app/stock" className="mt-2 inline-block text-sm text-primary">
                 {t("approvalCounts", { count: countsToApprove })}

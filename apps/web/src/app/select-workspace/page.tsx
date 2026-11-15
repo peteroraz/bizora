@@ -5,6 +5,7 @@ import { Badge, Button, Card, EmptyState, Skeleton } from "@bizora/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { signOutEverywhere } from "../../lib/offline/sw-client";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -78,7 +79,7 @@ export default function SelectWorkspacePage() {
   }
 
   async function signOut() {
-    await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" });
+    await signOutEverywhere();
     router.push("/login");
   }
 
