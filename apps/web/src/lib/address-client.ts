@@ -1,6 +1,10 @@
 import { api } from "./api";
 import type { AddressValue } from "./reference";
 
+export function hasPlace(value: AddressValue) {
+  return Boolean(value.line1.trim() || value.marketOrPlaza.trim() || value.shopNumber.trim() || value.lineOrBlock.trim());
+}
+
 export function addressPayload(value: AddressValue) {
   return {
     line1: value.line1.trim(),
@@ -9,6 +13,9 @@ export function addressPayload(value: AddressValue) {
     subdivisionCode: value.subdivisionCode.trim() || null,
     postalCode: value.postalCode.trim() || null,
     countryCode: value.countryCode,
+    marketOrPlaza: value.marketOrPlaza.trim() || null,
+    lineOrBlock: value.lineOrBlock.trim() || null,
+    shopNumber: value.shopNumber.trim() || null,
   };
 }
 
@@ -28,6 +35,6 @@ export async function persistOwnerAddress(owner: AddressOwner, value: AddressVal
   const payload = await response.json();
   if (!response.ok) {
     const fieldError = payload.error?.fieldErrors?.[0]?.message as string | undefined;
-    throw new Error(fieldError ?? payload.error?.message ?? "Could not save the address.");
+    throw new Error(fieldError ?? payload.error?.message ?? "ADDRESS");
   }
 }

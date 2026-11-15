@@ -1,32 +1,34 @@
 "use client";
 
-import { Button, Card, FormField, Input } from "@bizora/ui";
+import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
+import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
+import { PublicFooter } from "../../components/public-footer";
 
 function LoginForm() {
+  const t = useTranslations("login");
   const router = useRouter();
   const params = useSearchParams();
   const reason = params.get("reason");
-  const [error, setError] = useState<string | null>(
+  const reasonMessage =
     reason === "session"
-      ? "Your session expired or was revoked. Sign in again."
+      ? t("session")
       : reason === "link"
-        ? "Sign in with your password, then link Google from Settings."
+        ? t("link")
         : reason === "oauth"
-          ? "Sign-in could not be completed."
+          ? t("oauth")
           : reason === "invite"
-            ? "That sign-in email does not match the invitation."
+            ? t("invite")
             : reason === "email"
-              ? "Your provider didn't confirm this email; register with email and password instead"
-              : null,
-  );
+              ? t("emailUnconfirmed")
+              : null;
+  const [error, setError] = useState<string | null>(reasonMessage);
   const [pending, setPending] = useState(false);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     setPending(true);
     setError(null);
     const form = new FormData(event.currentTarget);
@@ -39,7 +41,7 @@ function LoginForm() {
     const payload = await response.json();
     setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "Unable to sign in.");
+      setError(payload.error?.message ?? t("failed"));
       return;
     }
     if (payload.data?.needsOrganizationSetup) {
@@ -55,36 +57,37 @@ function LoginForm() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4">
       <Card className="w-full">
-        <h1 className="text-2xl font-semibold">Sign in to Bizora</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <div className="mt-6">
           <OauthButtons returnTo="/app" />
         </div>
-        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
-          <FormField id="email" label="Email">
+        <SafeForm className="mt-4 space-y-4" pending={pending} onSubmit={onSubmit}>
+          <FormField id="email" label={t("email")}>
             <Input id="email" name="email" type="email" autoComplete="email" required />
           </FormField>
-          <FormField id="password" label="Password">
+          <FormField id="password" label={t("password")}>
             <Input id="password" name="password" type="password" autoComplete="current-password" required />
           </FormField>
           {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" disabled={pending} className="w-full">
-            {pending ? "Signing in…" : "Sign in"}
-          </Button>
-        </form>
+          <SubmitButton pending={pending} pendingLabel={t("pending")} className="w-full">
+            {t("submit")}
+          </SubmitButton>
+        </SafeForm>
         <p className="mt-4 text-sm">
           <Link href="/forgot-password" className="font-medium text-primary">
-            Forgot password
+            {t("forgot")}
           </Link>
         </p>
         <p className="mt-4 text-sm">
-          New here?{" "}
+          {t("new")}{" "}
           <Link href="/register" className="font-medium text-primary">
-            Create a workspace
+            {t("create")}
           </Link>
         </p>
       </Card>
+      <PublicFooter />
     </main>
   );
 }

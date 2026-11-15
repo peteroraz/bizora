@@ -1,12 +1,21 @@
 "use client";
 
-import { Button, Card, FormField, Input, PageHeader, Select, Tab, TabPanel, TabsRoot, useTheme, type ThemeChoice } from "@bizora/ui";
+import {
+  ALWAYS_VISIBLE_MODULES,
+  TRADER_MODULES,
+  businessTypeSchema,
+  staffCountBandSchema,
+  type BusinessType,
+  type StaffCountBand,
+} from "@bizora/contracts";
+import { Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton, Tab, TabPanel, TabsRoot, useTheme, type ThemeChoice } from "@bizora/ui";
+import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { api } from "../../../lib/api";
-import { persistOwnerAddress } from "../../../lib/address-client";
+import { hasPlace, persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
 
 type Person = { membershipId: string; email: string | null; displayName: string | null; role: string };
@@ -17,18 +26,25 @@ type Business = {
   countryCode: string;
   baseCurrencyCode: string;
   timezone: string;
-  industryCode: string | null;
   phoneE164: string | null;
-  address: AddressValue | null;
+  businessType: BusinessType | null;
+  otherCurrencies: boolean;
+  staffCountBand: StaffCountBand | null;
+  branchCount: number | null;
+  whatYouSell: string | null;
+  staffFeaturesEnabled: boolean;
+  visibleModules: string[];
 };
 type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null };
 type BranchDraft = { name: string; phone: string; address: AddressValue };
 
-const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"];
-const tabs = ["organization", "business", "branches", "team", "appearance", "security"];
+const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"] as const;
+const tabs = ["organization", "business", "shop", "branches", "team", "appearance", "security"] as const;
+const locales = ["en-NG", "pcm", "ha", "ig", "yo"] as const;
 
-function fromAddress(address: AddressValue | null, countryCode: string): AddressValue {
-  if (!address) return emptyAddress(countryCode);
+function fromAddress(address: Partial<AddressValue> | null, countryCode: string): AddressValue {
+  const empty = emptyAddress(countryCode);
+  if (!address) return empty;
   return {
     line1: address.line1 ?? "",
     line2: address.line2 ?? "",
@@ -36,16 +52,28 @@ function fromAddress(address: AddressValue | null, countryCode: string): Address
     subdivisionCode: address.subdivisionCode ?? "",
     postalCode: address.postalCode ?? "",
     countryCode: address.countryCode || countryCode,
+    marketOrPlaza: address.marketOrPlaza ?? "",
+    lineOrBlock: address.lineOrBlock ?? "",
+    shopNumber: address.shopNumber ?? "",
   };
 }
 
 function SettingsScreen() {
+  const t = useTranslations("settings");
+  const common = useTranslations("common");
+  const nav = useTranslations("nav");
+  const roleLabels = useTranslations("roles");
+  const themeLabels = useTranslations("theme");
+  const localeLabels = useTranslations("locales");
+  const onboarding = useTranslations("onboarding");
+  const locale = useLocale();
   const params = useSearchParams();
   const requested = params.get("tab") === "password" ? "security" : (params.get("tab") ?? "organization");
   const { theme, setTheme } = useTheme();
-  const [tab, setTab] = useState(tabs.includes(requested) ? requested : "organization");
+  const [tab, setTab] = useState(tabs.includes(requested as (typeof tabs)[number]) ? requested : "organization");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [orgSubs, setOrgSubs] = useState<SubdivisionOption[]>([]);
   const [businessSubs, setBusinessSubs] = useState<SubdivisionOption[]>([]);
@@ -59,28 +87,35 @@ function SettingsScreen() {
   const [branchSubs, setBranchSubs] = useState<Record<string, SubdivisionOption[]>>({});
   const [people, setPeople] = useState<Person[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [industries, setIndustries] = useState<{ code: string; name: string }[]>([]);
+  const [businessType, setBusinessType] = useState<BusinessType>("shop");
+  const [otherCurrencies, setOtherCurrencies] = useState(false);
+  const [staffBand, setStaffBand] = useState<StaffCountBand>("1");
+  const [branchCount, setBranchCount] = useState("1");
+  const [whatYouSell, setWhatYouSell] = useState("");
+  const [staffFeatures, setStaffFeatures] = useState(true);
+  const [modules, setModules] = useState<string[]>([...TRADER_MODULES]);
 
   async function subdivisionsFor(code: string) {
     const response = await api(`/api/v1/reference/countries/${code}/subdivisions`);
     return response.ok ? ((await response.json()).data?.items ?? []) : [];
   }
 
+  function shownError(caught: unknown) {
+    if (caught instanceof Error && caught.message && caught.message !== "ADDRESS") return caught.message;
+    return t("saveFailed");
+  }
+
   async function refresh() {
-    const [orgResponse, businessResponse, branchResponse, peopleResponse, inviteResponse, countryResponse, industryResponse] =
-      await Promise.all([
-        api("/api/v1/organizations/current"),
-        api("/api/v1/businesses"),
-        api("/api/v1/branches"),
-        api("/api/v1/memberships"),
-        api("/api/v1/invitations"),
-        api("/api/v1/reference/countries"),
-        fetch("/api/v1/catalogs/industry-packs").then((response) => response.json()),
-      ]);
+    const [orgResponse, businessResponse, branchResponse, peopleResponse, inviteResponse, countryResponse] = await Promise.all([
+      api("/api/v1/organizations/current"),
+      api("/api/v1/businesses"),
+      api("/api/v1/branches"),
+      api("/api/v1/memberships"),
+      api("/api/v1/invitations"),
+      api("/api/v1/reference/countries"),
+    ]);
     const organization = orgResponse.ok ? (await orgResponse.json()).data?.organization : null;
-    const loadedCountries = countryResponse.ok ? ((await countryResponse.json()).data?.items ?? []) : [];
-    setCountries(loadedCountries);
-    setIndustries(industryResponse.data?.items ?? []);
+    setCountries(countryResponse.ok ? ((await countryResponse.json()).data?.items ?? []) : []);
     if (organization) {
       setOrgName(organization.name ?? "");
       setOrgPhone(organization.phoneE164 ?? "");
@@ -94,6 +129,8 @@ function SettingsScreen() {
           ...businessItems[0],
           countryCode: String(businessItems[0].countryCode).trim(),
           baseCurrencyCode: String(businessItems[0].baseCurrencyCode).trim(),
+          timezone: String(businessItems[0].timezone).trim(),
+          visibleModules: (businessItems[0].visibleModules ?? TRADER_MODULES).map((item: string) => String(item).trim()),
         }
       : null;
     setBusiness(current);
@@ -101,6 +138,13 @@ function SettingsScreen() {
       const next = fromAddress(current.address, String(current.countryCode).trim());
       setBusinessAddress(next);
       setBusinessSubs(await subdivisionsFor(next.countryCode));
+      setBusinessType(current.businessType ?? "shop");
+      setOtherCurrencies(Boolean(current.otherCurrencies));
+      setStaffBand(current.staffCountBand ?? "1");
+      setBranchCount(String(current.branchCount ?? 1));
+      setWhatYouSell(current.whatYouSell ?? "");
+      setStaffFeatures(current.staffFeaturesEnabled !== false);
+      setModules(current.visibleModules);
     }
     const loadedBranches: Branch[] = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
     setBranches(loadedBranches);
@@ -108,11 +152,7 @@ function SettingsScreen() {
     const subs: Record<string, SubdivisionOption[]> = {};
     for (const branch of loadedBranches) {
       const address = fromAddress(branch.address, branch.address?.countryCode ?? "NG");
-      drafts[branch.id] = {
-        name: branch.name,
-        phone: branch.phoneE164 ?? "",
-        address,
-      };
+      drafts[branch.id] = { name: branch.name, phone: branch.phoneE164 ?? "", address };
       subs[branch.id] = await subdivisionsFor(address.countryCode || "NG");
     }
     setBranchDrafts(drafts);
@@ -127,30 +167,32 @@ function SettingsScreen() {
 
   async function saveOrganization(event: FormEvent) {
     event.preventDefault();
+    setPending(true);
     setError(null);
     try {
-      if (orgAddress.line1.trim()) await persistOwnerAddress({ kind: "organization" }, orgAddress);
+      if (hasPlace(orgAddress)) await persistOwnerAddress({ kind: "organization" }, orgAddress);
       const response = await api("/api/v1/organizations/current", {
         method: "PATCH",
         body: JSON.stringify({ name: orgName, phoneE164: orgPhone || null }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error?.message ?? "Could not save the organization.");
-      setNotice("Organization saved.");
+      if (!response.ok) throw new Error(payload.error?.message ?? t("saveFailed"));
+      setNotice(t("savedBusiness"));
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save the organization.");
+      setError(shownError(caught));
+    } finally {
+      setPending(false);
     }
   }
 
   async function saveBusiness(event: FormEvent) {
     event.preventDefault();
     if (!business) return;
+    setPending(true);
     setError(null);
     try {
-      if (businessAddress.line1.trim()) {
-        await persistOwnerAddress({ kind: "business", id: business.id }, businessAddress);
-      }
+      if (hasPlace(businessAddress)) await persistOwnerAddress({ kind: "business", id: business.id }, businessAddress);
       const response = await api(`/api/v1/businesses/${business.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -158,35 +200,69 @@ function SettingsScreen() {
           countryCode: businessAddress.countryCode,
           baseCurrencyCode: business.baseCurrencyCode,
           timezone: business.timezone,
-          industryCode: business.industryCode,
           phoneE164: business.phoneE164 || null,
         }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error?.fieldErrors?.[0]?.message ?? payload.error?.message ?? "Could not save the business.");
-      setNotice("Business saved.");
+      if (!response.ok) throw new Error(payload.error?.fieldErrors?.[0]?.message ?? payload.error?.message ?? t("saveFailed"));
+      setNotice(t("savedShop"));
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save the business.");
+      setError(shownError(caught));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function saveSetup() {
+    if (!business) return;
+    setPending(true);
+    setError(null);
+    const visible = TRADER_MODULES.filter((item) => ALWAYS_VISIBLE_MODULES.includes(item) || (modules.includes(item) && (item !== "staff" || staffFeatures)));
+    try {
+      const response = await api(`/api/v1/businesses/${business.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          businessType,
+          otherCurrencies,
+          multiCurrencyEnabled: otherCurrencies,
+          staffCountBand: staffBand,
+          branchCount: Number(branchCount) || 1,
+          whatYouSell: whatYouSell.trim() || null,
+          staffFeaturesEnabled: staffFeatures,
+          visibleModules: visible,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message ?? t("saveFailed"));
+      setNotice(t("savedSetup"));
+      await refresh();
+    } catch (caught) {
+      setError(shownError(caught));
+    } finally {
+      setPending(false);
     }
   }
 
   async function saveBranch(branchId: string) {
     const draft = branchDrafts[branchId];
     if (!draft) return;
+    setPending(true);
     setError(null);
     try {
-      if (draft.address.line1.trim()) await persistOwnerAddress({ kind: "branch", id: branchId }, draft.address);
+      if (hasPlace(draft.address)) await persistOwnerAddress({ kind: "branch", id: branchId }, draft.address);
       const response = await api(`/api/v1/branches/${branchId}`, {
         method: "PATCH",
         body: JSON.stringify({ name: draft.name, phoneE164: draft.phone || null }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error?.message ?? "Could not save the branch.");
-      setNotice("Branch saved.");
+      if (!response.ok) throw new Error(payload.error?.message ?? t("branchFailed"));
+      setNotice(t("branchSaved"));
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save the branch.");
+      setError(shownError(caught));
+    } finally {
+      setPending(false);
     }
   }
 
@@ -201,34 +277,38 @@ function SettingsScreen() {
   async function createBranch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!business) return;
-    const form = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    setPending(true);
     const response = await api("/api/v1/branches", {
       method: "POST",
-      body: JSON.stringify({ name: form.get("name"), businessId: business.id }),
+      body: JSON.stringify({ name: new FormData(form).get("name"), businessId: business.id }),
     });
     const payload = await response.json();
+    setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "Could not create the branch.");
+      setError(payload.error?.message ?? t("branchCreateFailed"));
       return;
     }
-    event.currentTarget.reset();
+    form.reset();
     await refresh();
   }
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    setPending(true);
     const response = await api("/api/v1/invitations", {
       method: "POST",
-      body: JSON.stringify({ email: form.get("email"), role: form.get("role") }),
+      body: JSON.stringify({ email: new FormData(form).get("email"), role: new FormData(form).get("role") }),
     });
     const payload = await response.json();
+    setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "Could not send the invitation.");
+      setError(payload.error?.message ?? t("inviteFailed"));
       return;
     }
-    setNotice(payload.data?.invitation?.inviteUrl ? `Invite link: ${payload.data.invitation.inviteUrl}` : "Invitation sent.");
-    event.currentTarget.reset();
+    setNotice(payload.data?.invitation?.inviteUrl ? t("inviteLink", { url: payload.data.invitation.inviteUrl }) : t("inviteSent"));
+    form.reset();
     await refresh();
   }
 
@@ -236,25 +316,57 @@ function SettingsScreen() {
     const response = await api(`/api/v1/invitations/${id}/${action}`, { method: "POST" });
     const payload = await response.json();
     if (!response.ok) {
-      setError(payload.error?.message ?? `Could not ${action} the invitation.`);
+      setError(t("actionFailed"));
       return;
     }
-    if (action === "resend" && payload.data?.invitation?.inviteUrl) setNotice(`Invite link: ${payload.data.invitation.inviteUrl}`);
+    if (action === "resend" && payload.data?.invitation?.inviteUrl) setNotice(t("inviteLink", { url: payload.data.invitation.inviteUrl }));
     await refresh();
   }
 
+  function statusLabel(status: string) {
+    if (status === "PENDING" || status === "ACCEPTED" || status === "REVOKED") return t(`status.${status}`);
+    return status;
+  }
+
+  function roleLabel(role: string) {
+    return roleLabels.has(role) ? roleLabels(role) : role;
+  }
+
   const zones = countries.find((item) => item.code === businessAddress.countryCode)?.timezones ?? [];
+  const visibleTabs: string[] = staffFeatures ? [...tabs] : tabs.filter((item) => item !== "team");
+  const typeKey = {
+    shop: "typeShop",
+    "market-stall": "typeMarket",
+    wholesale: "typeWholesale",
+    food: "typeFood",
+    services: "typeServices",
+    other: "typeOther",
+  } as const;
+  const bandKey = { "1": "staff1", "2-5": "staff2", "6-20": "staff6", "21+": "staff21" } as const;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="Organization, locations, team, appearance, and security." />
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      <PageHeader title={t("title")} description={t("description")} />
+      {error ? (
+        <p className="text-sm text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
       {notice ? <p className="break-all text-sm text-muted">{notice}</p> : null}
-      <TabsRoot value={tab} onValueChange={setTab} label="Settings" tabs={tabs.map((item) => <Tab key={item} value={item}>{item[0]?.toUpperCase()}{item.slice(1)}</Tab>)}>
+      <TabsRoot
+        value={visibleTabs.includes(tab as (typeof visibleTabs)[number]) ? tab : "organization"}
+        onValueChange={setTab}
+        label={t("tabsLabel")}
+        tabs={visibleTabs.map((item) => (
+          <Tab key={item} value={item}>
+            {t(`tabs.${item}`)}
+          </Tab>
+        ))}
+      >
         <TabPanel value="organization">
           <Card>
-            <form className="space-y-4" onSubmit={(event) => void saveOrganization(event)}>
-              <FormField id="org-name" label="Organization name">
+            <SafeForm className="space-y-4" pending={pending} onSubmit={saveOrganization}>
+              <FormField id="org-name" label={t("businessName")}>
                 <Input id="org-name" value={orgName} onChange={(event) => setOrgName(event.target.value)} required />
               </FormField>
               <AddressFields
@@ -267,18 +379,20 @@ function SettingsScreen() {
                   if (next.countryCode !== orgAddress.countryCode) void subdivisionsFor(next.countryCode).then(setOrgSubs);
                 }}
               />
-              <FormField id="org-phone" label="Phone">
-                <Input id="org-phone" value={orgPhone} onChange={(event) => setOrgPhone(event.target.value)} placeholder="+2348012345678" />
+              <FormField id="org-phone" label={common("phone")}>
+                <Input id="org-phone" value={orgPhone} onChange={(event) => setOrgPhone(event.target.value)} placeholder={t("phonePlaceholder")} />
               </FormField>
-              <Button type="submit">Save organization</Button>
-            </form>
+              <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                {t("saveBusiness")}
+              </SubmitButton>
+            </SafeForm>
           </Card>
         </TabPanel>
         <TabPanel value="business">
           <Card>
             {business ? (
-              <form className="space-y-4" onSubmit={(event) => void saveBusiness(event)}>
-                <FormField id="business-name" label="Trading name">
+              <SafeForm className="space-y-4" pending={pending} onSubmit={saveBusiness}>
+                <FormField id="business-name" label={t("shopName")}>
                   <Input id="business-name" value={business.name} onChange={(event) => setBusiness({ ...business, name: event.target.value })} required />
                 </FormField>
                 <AddressFields
@@ -289,43 +403,110 @@ function SettingsScreen() {
                   onChange={(next) => {
                     const country = countries.find((item) => item.code === next.countryCode);
                     setBusinessAddress(next);
-                    if (next.countryCode !== businessAddress.countryCode) {
+                    if (next.countryCode !== businessAddress.countryCode && country) {
                       void subdivisionsFor(next.countryCode).then(setBusinessSubs);
-                      if (country) {
-                        setBusiness({
-                          ...business,
-                          baseCurrencyCode: country.defaultCurrencyCode,
-                          timezone: country.timezones[0] ?? business.timezone,
-                        });
-                      }
+                      setBusiness({
+                        ...business,
+                        baseCurrencyCode: country.defaultCurrencyCode,
+                        timezone: country.timezones[0] ?? business.timezone,
+                      });
                     }
                   }}
                 />
-                <FormField id="business-currency" label="Currency">
-                  <Input id="business-currency" value={business.baseCurrencyCode} maxLength={3} onChange={(event) => setBusiness({ ...business, baseCurrencyCode: event.target.value.toUpperCase() })} />
+                <FormField id="business-currency" label={common("currency")}>
+                  <Input
+                    id="business-currency"
+                    value={business.baseCurrencyCode}
+                    maxLength={3}
+                    onChange={(event) => setBusiness({ ...business, baseCurrencyCode: event.target.value.toUpperCase() })}
+                  />
                 </FormField>
-                <FormField id="business-timezone" label="Timezone">
+                <FormField id="business-timezone" label={common("timezone")}>
                   <Select id="business-timezone" value={business.timezone} onChange={(event) => setBusiness({ ...business, timezone: event.target.value })}>
                     {(zones.length > 0 ? zones : [business.timezone]).map((zone) => (
-                      <option key={zone} value={zone}>{zone}</option>
+                      <option key={zone} value={zone}>
+                        {zone}
+                      </option>
                     ))}
                   </Select>
                 </FormField>
-                <FormField id="business-industry" label="Industry">
-                  <Select id="business-industry" value={business.industryCode ?? ""} onChange={(event) => setBusiness({ ...business, industryCode: event.target.value })}>
-                    {industries.map((item) => (
-                      <option key={item.code} value={item.code}>{item.name}</option>
-                    ))}
-                  </Select>
+                <FormField id="business-phone" label={common("phone")}>
+                  <Input
+                    id="business-phone"
+                    value={business.phoneE164 ?? ""}
+                    onChange={(event) => setBusiness({ ...business, phoneE164: event.target.value })}
+                    placeholder={t("phonePlaceholder")}
+                  />
                 </FormField>
-                <FormField id="business-phone" label="Phone">
-                  <Input id="business-phone" value={business.phoneE164 ?? ""} onChange={(event) => setBusiness({ ...business, phoneE164: event.target.value })} placeholder="+2348012345678" />
-                </FormField>
-                <Button type="submit">Save business</Button>
-              </form>
+                <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                  {t("saveShop")}
+                </SubmitButton>
+              </SafeForm>
             ) : (
-              <p className="text-sm text-muted">No business is available in this workspace.</p>
+              <p className="text-sm text-muted">{t("noBusiness")}</p>
             )}
+          </Card>
+        </TabPanel>
+        <TabPanel value="shop">
+          <Card>
+            <SafeForm className="space-y-4" pending={pending} onSubmit={saveSetup}>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">{t("businessType")}</legend>
+                {businessTypeSchema.options.map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="setup-type" checked={businessType === type} onChange={() => setBusinessType(type)} />
+                    {onboarding(typeKey[type])}
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">{t("staffCount")}</legend>
+                {staffCountBandSchema.options.map((band) => (
+                  <label key={band} className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="setup-staff" checked={staffBand === band} onChange={() => setStaffBand(band)} />
+                    {onboarding(bandKey[band])}
+                  </label>
+                ))}
+              </fieldset>
+              <FormField id="setup-shops" label={t("branchCount")}>
+                <Input id="setup-shops" inputMode="numeric" value={branchCount} onChange={(event) => setBranchCount(event.target.value)} />
+              </FormField>
+              <FormField id="setup-sell" label={t("whatYouSell")} hint={common("optional")}>
+                <Input id="setup-sell" value={whatYouSell} onChange={(event) => setWhatYouSell(event.target.value)} />
+              </FormField>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={otherCurrencies} onChange={(event) => setOtherCurrencies(event.target.checked)} />
+                {t("otherCurrencies")}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={staffFeatures} onChange={(event) => setStaffFeatures(event.target.checked)} />
+                {t("staffFeatures")}
+              </label>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">{t("modules")}</legend>
+                {TRADER_MODULES.map((item) => {
+                  const locked = ALWAYS_VISIBLE_MODULES.includes(item);
+                  return (
+                    <label key={item} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={locked || modules.includes(item)}
+                        disabled={locked}
+                        onChange={(event) => {
+                          setModules((current) =>
+                            event.target.checked ? [...current, item] : current.filter((module) => module !== item),
+                          );
+                        }}
+                      />
+                      {nav(item)}
+                    </label>
+                  );
+                })}
+              </fieldset>
+              <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                {common("save")}
+              </SubmitButton>
+            </SafeForm>
           </Card>
         </TabPanel>
         <TabPanel value="branches">
@@ -335,14 +516,8 @@ function SettingsScreen() {
               if (!draft) return null;
               return (
                 <Card key={branch.id}>
-                  <form
-                    className="space-y-4"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void saveBranch(branch.id);
-                    }}
-                  >
-                    <FormField id={`branch-name-${branch.id}`} label="Branch">
+                  <SafeForm className="space-y-4" pending={pending} onSubmit={() => saveBranch(branch.id)}>
+                    <FormField id={`branch-name-${branch.id}`} label={t("branch")}>
                       <Input
                         id={`branch-name-${branch.id}`}
                         value={draft.name}
@@ -364,25 +539,29 @@ function SettingsScreen() {
                         }
                       }}
                     />
-                    <FormField id={`branch-phone-${branch.id}`} label="Phone">
+                    <FormField id={`branch-phone-${branch.id}`} label={common("phone")}>
                       <Input
                         id={`branch-phone-${branch.id}`}
                         value={draft.phone}
                         onChange={(event) => updateBranchDraft(branch.id, { phone: event.target.value })}
                       />
                     </FormField>
-                    <Button type="submit">Save</Button>
-                  </form>
+                    <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                      {common("save")}
+                    </SubmitButton>
+                  </SafeForm>
                 </Card>
               );
             })}
             <Card>
-              <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => void createBranch(event)}>
-                <FormField id="new-branch" label="New branch">
+              <SafeForm className="flex flex-wrap items-end gap-3" pending={pending} onSubmit={createBranch}>
+                <FormField id="new-branch" label={t("newBranch")}>
                   <Input id="new-branch" name="name" required />
                 </FormField>
-                <Button type="submit">Add branch</Button>
-              </form>
+                <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                  {t("addBranch")}
+                </SubmitButton>
+              </SafeForm>
             </Card>
           </div>
         </TabPanel>
@@ -391,27 +570,37 @@ function SettingsScreen() {
             <ul className="space-y-2 text-sm">
               {people.map((person) => (
                 <li key={person.membershipId}>
-                  {person.displayName} ({person.email}) — {person.role}
+                  {person.displayName} ({person.email}) · {roleLabel(person.role)}
                 </li>
               ))}
             </ul>
-            <form className="grid gap-3 md:grid-cols-[1fr_180px_auto]" onSubmit={(event) => void invite(event)}>
-              <Input name="email" type="email" aria-label="Email" placeholder="teammate@business.com" required />
-              <Select name="role" aria-label="Role" defaultValue="SALES">
+            <SafeForm className="grid gap-3 md:grid-cols-[1fr_180px_auto]" pending={pending} onSubmit={invite}>
+              <Input name="email" type="email" aria-label={t("inviteEmail")} placeholder={t("invitePlaceholder")} required />
+              <Select name="role" aria-label={t("inviteRole")} defaultValue="SALES">
                 {roles.map((role) => (
-                  <option key={role} value={role}>{role}</option>
+                  <option key={role} value={role}>
+                    {roleLabel(role)}
+                  </option>
                 ))}
               </Select>
-              <Button type="submit">Invite</Button>
-            </form>
+              <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                {t("invite")}
+              </SubmitButton>
+            </SafeForm>
             <ul className="space-y-2 text-sm">
               {invitations.map((invitation) => (
                 <li key={invitation.id} className="flex flex-wrap items-center gap-2">
-                  <span>{invitation.email} — {invitation.role} — {invitation.status}</span>
+                  <span>
+                    {invitation.email} · {roleLabel(invitation.role)} · {statusLabel(invitation.status)}
+                  </span>
                   {invitation.status === "PENDING" ? (
                     <>
-                      <Button type="button" variant="secondary" size="sm" onClick={() => void invitationAction(invitation.id, "resend")}>Resend</Button>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => void invitationAction(invitation.id, "revoke")}>Revoke</Button>
+                      <button type="button" className="font-medium text-primary" onClick={() => void invitationAction(invitation.id, "resend")}>
+                        {t("resend")}
+                      </button>
+                      <button type="button" className="font-medium text-muted" onClick={() => void invitationAction(invitation.id, "revoke")}>
+                        {t("revoke")}
+                      </button>
                     </>
                   ) : null}
                 </li>
@@ -421,15 +610,35 @@ function SettingsScreen() {
         </TabPanel>
         <TabPanel value="appearance">
           <Card className="space-y-3">
-            <p className="text-sm text-muted">Choose a theme. The choice is saved on this device and applied before the next page paints.</p>
+            <p className="text-sm text-muted">{t("appearanceLead")}</p>
             <div className="flex flex-wrap gap-2">
               {(["light", "dark", "system"] as ThemeChoice[]).map((choice) => (
-                <Button key={choice} type="button" variant={theme === choice ? "primary" : "secondary"} onClick={() => setTheme(choice)}>
-                  {choice[0]?.toUpperCase()}
-                  {choice.slice(1)}
-                </Button>
+                <button
+                  key={choice}
+                  type="button"
+                  className={theme === choice ? "rounded-control bg-primary px-3 py-2 text-sm text-primary-fg" : "rounded-control border border-border px-3 py-2 text-sm"}
+                  onClick={() => setTheme(choice)}
+                >
+                  {themeLabels(choice)}
+                </button>
               ))}
             </div>
+            <FormField id="language" label={t("language")}>
+              <Select
+                id="language"
+                value={locale}
+                onChange={(event) => {
+                  document.cookie = `bizora_locale=${event.target.value}; Path=/; Max-Age=31536000; SameSite=Lax`;
+                  window.location.reload();
+                }}
+              >
+                {locales.map((item) => (
+                  <option key={item} value={item}>
+                    {localeLabels(item)}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
           </Card>
         </TabPanel>
         <TabPanel value="security">

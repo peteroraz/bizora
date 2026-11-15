@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const apiOrigin = process.env.API_ORIGIN ?? "http://localhost:3001";
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   // Standalone tracing uses symlinks; Windows without Developer Mode cannot create them.
@@ -16,4 +18,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

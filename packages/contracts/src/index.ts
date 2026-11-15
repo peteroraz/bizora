@@ -1,11 +1,34 @@
 import { z } from "zod";
 import { addressInputSchema, optionalPhoneSchema } from "./address.js";
 import { passwordSchema } from "./password.js";
+import { businessTypeSchema, staffCountBandSchema, traderModuleSchema } from "./trader.js";
 
 export { passwordRules, passwordSchema } from "./password.js";
 
-export { addressInputSchema, countryRule, optionalPhoneSchema, phoneE164Schema } from "./address.js";
-export type { AddressInput } from "./address.js";
+export { addressInputSchema, countryRule, formatAddressDisplay, optionalPhoneSchema, phoneE164Schema } from "./address.js";
+export type { AddressDisplay, AddressInput } from "./address.js";
+export { normalizePhoneToE164, whatsAppHref } from "./phone.js";
+export {
+  CUSTOMER_PAGE_SIZE,
+  customerImportSchema,
+  customerNoteSchema,
+  customerWriteSchema,
+  followupCreateSchema,
+  followupUpdateSchema,
+  parseCustomerCsv,
+} from "./customers.js";
+export type { CsvRow } from "./customers.js";
+export {
+  ALWAYS_VISIBLE_MODULES,
+  TRADER_MODULES,
+  businessTypeFromIndustry,
+  businessTypeSchema,
+  deriveTraderSetup,
+  industryForBusinessType,
+  staffCountBandSchema,
+  traderModuleSchema,
+} from "./trader.js";
+export type { BusinessType, StaffCountBand, TraderModule } from "./trader.js";
 
 export const roleSchema = z.enum([
   "OWNER",
@@ -185,6 +208,9 @@ export const Permission = {
   ORG_SETTINGS_MANAGE: "org.settings.manage",
   BUSINESS_SETTINGS_MANAGE: "business.settings.manage",
   BRANCH_SETTINGS_MANAGE: "branch.settings.manage",
+  CUSTOMERS_READ: "customers.read",
+  CUSTOMERS_MANAGE: "customers.manage",
+  FOLLOWUPS_MANAGE: "followups.manage",
 } as const;
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission];
@@ -195,7 +221,8 @@ export const completeOnboardingSchema = z.object({
   organizationName: z.string().min(1).max(160).optional(),
   businessName: z.string().min(1).max(160).optional(),
   countryCode: z.string().length(2).toUpperCase(),
-  industryCode: z.string().min(1).max(64),
+  industryCode: z.string().min(1).max(64).optional(),
+  businessType: businessTypeSchema.optional(),
   baseCurrencyCode: z.string().length(3).toUpperCase(),
   timezone: z.string().min(1),
   branchName: z.string().min(1).max(160).optional(),
@@ -204,7 +231,21 @@ export const completeOnboardingSchema = z.object({
   logoUrl: z.union([z.string().url().max(2048), z.literal("")]).optional(),
   address: addressInputSchema.optional(),
   phoneE164: optionalPhoneSchema,
+  marketOrPlaza: z.string().trim().max(200).optional(),
+  tradeCity: z.string().trim().max(120).optional(),
+  tradeSubdivisionCode: z.string().trim().max(16).nullable().optional(),
+  otherCurrencies: z.boolean().optional(),
+  staffCountBand: staffCountBandSchema.optional(),
+  branchCount: z.number().int().min(1).max(500).optional(),
+  whatYouSell: z.union([z.string().trim().max(500), z.literal(""), z.null()]).optional(),
 }).superRefine((value, ctx) => {
+  if (!value.industryCode && !value.businessType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["businessType"],
+      message: "Choose a business type.",
+    });
+  }
   if (value.address && value.address.countryCode !== value.countryCode) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -227,6 +268,14 @@ export const updateBusinessSchema = z.object({
   timezone: z.string().min(1).optional(),
   industryCode: z.string().min(1).max(64).nullable().optional(),
   phoneE164: optionalPhoneSchema,
+  businessType: businessTypeSchema.optional(),
+  otherCurrencies: z.boolean().optional(),
+  staffCountBand: staffCountBandSchema.optional(),
+  branchCount: z.number().int().min(1).max(500).optional(),
+  whatYouSell: z.union([z.string().trim().max(500), z.literal(""), z.null()]).optional(),
+  multiCurrencyEnabled: z.boolean().optional(),
+  staffFeaturesEnabled: z.boolean().optional(),
+  visibleModules: z.array(traderModuleSchema).optional(),
 });
 
 export const updateBranchSchema = z.object({

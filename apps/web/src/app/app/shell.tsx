@@ -15,42 +15,46 @@ import {
   type ThemeChoice,
 } from "@bizora/ui";
 import {
+  Banknote,
   BarChart3,
   Building2,
   ChevronLeft,
+  HandCoins,
   Home,
-  Inbox,
+  IdCard,
   LogOut,
   Menu,
+  MoreHorizontal,
   Package,
-  Receipt,
   Settings,
   ShoppingCart,
-  Sparkles,
-  Truck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { api } from "../../lib/api";
-import { primaryNav } from "../../lib/nav";
-import { formatRole } from "../../lib/role-label";
+import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
   home: Home,
   sales: ShoppingCart,
   customers: Users,
-  products: Package,
-  purchasing: Truck,
-  expenses: Receipt,
+  stock: Package,
+  debtors: HandCoins,
+  money: Banknote,
+  staff: IdCard,
   reports: BarChart3,
-  inbox: Inbox,
-  ai: Sparkles,
   settings: Settings,
 } as const;
 
-export type ShellBusiness = { id: string; name: string };
+export type ShellBusiness = {
+  id: string;
+  name: string;
+  visibleModules?: string[] | null;
+  staffFeaturesEnabled?: boolean;
+};
 export type ShellBranch = { id: string; name: string; businessId: string };
 
 export type ShellProfile = {
@@ -69,40 +73,36 @@ export type ShellProfile = {
   workspaces?: AuthWorkspace[];
 };
 
-function EmailVerificationBanner() {
-  const [notice, setNotice] = useState<string | null>(null);
-
-  async function resend() {
-    const response = await api("/api/v1/auth/email/verification", { method: "POST" });
-    const payload = await response.json();
-    setNotice(response.ok ? "Verification email sent." : (payload.error?.message ?? "Could not send the verification email."));
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-warning-bg px-4 py-3 text-sm text-fg">
-      <p>Verify your email to finish securing this account. You can keep using Bizora in the meantime.</p>
-      <button type="button" className="font-medium text-primary" onClick={() => void resend()}>
-        Resend email
-      </button>
-      {notice ? <span>{notice}</span> : null}
-    </div>
-  );
-}
-
 function isActive(href: string, pathname: string) {
   if (href === "/app") return pathname === "/app";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function AppShell({ profile, children }: { profile: ShellProfile; children: React.ReactNode }) {
+  const t = useTranslations("shell");
+  const nav = useTranslations("nav");
+  const roles = useTranslations("roles");
+  const themeLabels = useTranslations("theme");
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const businessId = profile.tenant?.businessId ?? profile.businesses[0]?.id ?? "";
   const branchId = profile.tenant?.branchId ?? "";
   const visibleBranches = profile.branches.filter((branch) => !businessId || branch.businessId === businessId);
+  const currentBusiness = profile.businesses.find((business) => business.id === businessId) ?? profile.businesses[0];
+  const allowed = new Set(
+    (currentBusiness?.visibleModules ?? primaryNav.map((item) => item.id)).map((item) => String(item).trim()),
+  );
+  allowed.add("home");
+  allowed.add("customers");
+  allowed.add("settings");
+  if (currentBusiness?.staffFeaturesEnabled === false) allowed.delete("staff");
+  const items = primaryNav.filter((item) => allowed.has(item.id));
+  const bottom = items.filter((item) => (bottomNav as readonly string[]).includes(item.id));
+  const moreItems = items.filter((item) => !(bottomNav as readonly string[]).includes(item.id));
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem("bizora-sidebar") === "collapsed");
@@ -110,6 +110,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
 
   useEffect(() => {
     setMenuOpen(false);
+    setMoreOpen(false);
   }, [pathname]);
 
   function toggleCollapsed() {
@@ -119,9 +120,18 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     });
   }
 
+  function label(id: NavId) {
+    return nav(id);
+  }
+
+  function roleLabel(role: string) {
+    return roles.has(role) ? roles(role) : role;
+  }
+
+  const onboarding = pathname.startsWith("/app/onboarding");
   const workspaces = profile.workspaces ?? [];
   const currentOrganizationId = profile.tenant?.tenantId;
-  const organizationName = profile.organization?.name ?? "Workspace";
+  const organizationName = profile.organization?.name ?? t("currentBusiness");
 
   async function switchWorkspace(organizationId: string) {
     setSwitchError(null);
@@ -134,7 +144,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       return;
     }
     const payload = await response.json().catch(() => null);
-    setSwitchError(payload?.error?.message ?? "Unable to switch workspace.");
+    setSwitchError(payload?.error?.message ?? t("switchFailed"));
   }
 
   async function selectContext(nextBusinessId: string, nextBranchId?: string) {
@@ -156,10 +166,11 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
 
   function navigation(compact: boolean) {
     return (
-      <nav className="flex flex-col gap-1" aria-label="Primary">
-        {primaryNav.map((item) => {
+      <nav className="flex flex-col gap-1" aria-label={t("primary")}>
+        {items.map((item) => {
           const Icon = icons[item.icon];
           const active = isActive(item.href, pathname);
+          const text = label(item.id);
           const className = `flex items-center gap-3 rounded-control px-3 py-2 text-sm font-medium ${
             active
               ? "bg-sidebar-active text-sidebar-active-fg shadow-[inset_3px_0_0_var(--sidebar-accent)]"
@@ -168,12 +179,12 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           const link = (
             <Link href={item.href} aria-current={active ? "page" : undefined} className={className}>
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {compact ? null : <span className="truncate">{item.label}</span>}
-              {!item.enabled && !compact ? <Badge className="ml-auto">Soon</Badge> : null}
+              {compact ? null : <span className="truncate">{text}</span>}
+              {!item.enabled && !compact ? <Badge className="ml-auto">{t("soon")}</Badge> : null}
             </Link>
           );
           return compact ? (
-            <Tooltip key={item.href} content={item.enabled ? item.label : `${item.label}, coming soon`}>
+            <Tooltip key={item.href} content={item.enabled ? text : t("comingSoon", { label: text })}>
               {link}
             </Tooltip>
           ) : (
@@ -184,12 +195,18 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     );
   }
 
+  if (onboarding) return <div className="min-h-screen bg-bg">{children}</div>;
+
   return (
     <div className={collapsed ? "min-h-screen md:grid md:grid-cols-[4.5rem_1fr]" : "min-h-screen md:grid md:grid-cols-[15rem_1fr]"}>
       <aside className="hidden border-r border-border bg-sidebar md:flex md:flex-col">
         <div className="flex items-center justify-between px-3 py-4">
-          {collapsed ? null : <Link href="/app" className="px-2 text-lg font-semibold">Bizora</Link>}
-          <IconButton label={collapsed ? "Expand sidebar" : "Collapse sidebar"} variant="ghost" onClick={toggleCollapsed}>
+          {collapsed ? null : (
+            <Link href="/app" className="px-2 text-lg font-semibold">
+              {t("menuTitle")}
+            </Link>
+          )}
+          <IconButton label={collapsed ? t("expand") : t("collapse")} variant="ghost" onClick={toggleCollapsed}>
             <ChevronLeft className={`h-4 w-4 ${collapsed ? "rotate-180" : ""}`} />
           </IconButton>
         </div>
@@ -201,9 +218,9 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             <Sheet
               open={menuOpen}
               onOpenChange={setMenuOpen}
-              title="Bizora"
+              title={t("menuTitle")}
               trigger={
-                <IconButton label="Open menu" variant="ghost">
+                <IconButton label={t("openMenu")} variant="ghost">
                   <Menu className="h-4 w-4" />
                 </IconButton>
               }
@@ -214,16 +231,16 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           <div className="flex min-w-0 max-w-56 items-center gap-2">
             <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <p className="min-w-0">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-primary">Current workspace</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-primary">{t("currentBusiness")}</span>
               <span className="block truncate text-sm font-semibold">{organizationName}</span>
             </p>
           </div>
           {profile.tenant?.role ? (
-            <Badge className="border-primary bg-sidebar-active text-sidebar-active-fg">{formatRole(profile.tenant.role)}</Badge>
+            <Badge className="border-primary bg-sidebar-active text-sidebar-active-fg">{roleLabel(profile.tenant.role)}</Badge>
           ) : null}
           {profile.businesses.length > 0 ? (
             <Select
-              aria-label="Business"
+              aria-label={t("business")}
               className="max-w-48"
               value={businessId}
               onChange={(event) => void selectContext(event.target.value)}
@@ -237,12 +254,12 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           ) : null}
           {visibleBranches.length > 0 ? (
             <Select
-              aria-label="Branch"
+              aria-label={t("shop")}
               className="max-w-48"
               value={branchId}
               onChange={(event) => void selectContext(businessId, event.target.value || undefined)}
             >
-              {profile.membership?.branchId ? null : <option value="">All branches</option>}
+              {profile.membership?.branchId ? null : <option value="">{t("allShops")}</option>}
               {visibleBranches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
@@ -252,28 +269,27 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           ) : null}
           <div className="ml-auto">
             <DropdownMenu
-              label="Account"
+              label={t("account")}
               trigger={
-                <button className="rounded-pill" aria-label="Account menu">
-                  <Avatar name={profile.user?.displayName ?? "User"} />
+                <button className="rounded-pill" aria-label={t("accountMenu")}>
+                  <Avatar name={profile.user?.displayName ?? t("account")} />
                 </button>
               }
             >
               <DropdownLabel>
                 <span className="block text-sm font-medium text-fg">{profile.user?.displayName}</span>
                 <span className="block">{profile.user?.email}</span>
-                <span className="mt-1 block">{profile.tenant?.role}</span>
+                <span className="mt-1 block">{profile.tenant?.role ? roleLabel(profile.tenant.role) : null}</span>
               </DropdownLabel>
               {(["light", "dark", "system"] as ThemeChoice[]).map((choice) => (
                 <DropdownItem key={choice} onSelect={() => setTheme(choice)}>
-                  {choice[0]?.toUpperCase()}
-                  {choice.slice(1)}
-                  {theme === choice ? " · current" : ""}
+                  {themeLabels(choice)}
+                  {theme === choice ? t("currentSuffix") : ""}
                 </DropdownItem>
               ))}
               {workspaces.length > 1 ? (
                 <>
-                  <DropdownLabel>Switch workspace</DropdownLabel>
+                  <DropdownLabel>{t("switchBusiness")}</DropdownLabel>
                   {workspaces.map((workspace) => {
                     const current = workspace.organizationId === currentOrganizationId;
                     return (
@@ -286,7 +302,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                         <span className="inline-flex items-center gap-2">
                           <Building2 className="h-4 w-4" aria-hidden="true" />
                           {workspace.organizationName}
-                          {current ? " · current" : ""}
+                          {current ? t("currentSuffix") : ""}
                         </span>
                       </DropdownItem>
                     );
@@ -295,7 +311,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               ) : null}
               <DropdownItem onSelect={() => void logout()}>
                 <span className="inline-flex items-center gap-2">
-                  <LogOut className="h-4 w-4" aria-hidden="true" /> Log out
+                  <LogOut className="h-4 w-4" aria-hidden="true" /> {t("logout")}
                 </span>
               </DropdownItem>
             </DropdownMenu>
@@ -307,8 +323,69 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           ) : null}
         </header>
         {profile.user?.emailVerifiedAt === null ? <EmailVerificationBanner /> : null}
-        <main className="px-4 py-6 md:px-8">{children}</main>
+        <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">{children}</main>
+        <nav
+          className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-card md:hidden"
+          style={{ gridTemplateColumns: `repeat(${bottom.length + 1}, minmax(0, 1fr))` }}
+          aria-label={t("mobile")}
+        >
+          {bottom.map((item) => {
+            const Icon = icons[item.icon];
+            const active = isActive(item.href, pathname);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex flex-col items-center gap-1 px-1 py-2 text-[11px] font-medium ${active ? "text-primary" : "text-muted"}`}
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                {label(item.id)}
+              </Link>
+            );
+          })}
+          <Sheet
+            open={moreOpen}
+            onOpenChange={setMoreOpen}
+            title={t("more")}
+            trigger={
+              <button type="button" className="flex flex-col items-center gap-1 px-1 py-2 text-[11px] font-medium text-muted">
+                <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+                {t("more")}
+              </button>
+            }
+          >
+            <div className="flex flex-col gap-1">
+              {moreItems.map((item) => (
+                <Link key={item.href} href={item.href} className="rounded-control px-3 py-2 text-sm font-medium">
+                  {label(item.id)}
+                </Link>
+              ))}
+            </div>
+          </Sheet>
+        </nav>
       </div>
+    </div>
+  );
+}
+
+function EmailVerificationBanner() {
+  const t = useTranslations("shell");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function resend() {
+    const response = await api("/api/v1/auth/email/verification", { method: "POST" });
+    const payload = await response.json();
+    setNotice(response.ok ? t("resendOk") : (payload.error?.message ?? t("resendFailed")));
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-warning-bg px-4 py-3 text-sm text-fg">
+      <p>{t("verify")}</p>
+      <button type="button" className="font-medium text-primary" onClick={() => void resend()}>
+        {t("resend")}
+      </button>
+      {notice ? <span>{notice}</span> : null}
     </div>
   );
 }

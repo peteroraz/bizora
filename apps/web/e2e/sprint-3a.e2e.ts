@@ -15,19 +15,28 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await registrationCountry.click();
   await registrationCountry.fill("Kenya");
   await page.getByRole("option", { name: "Kenya", exact: true }).click();
-  await page.getByRole("button", { name: "Create workspace" }).click();
-  await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
+  await page.getByRole("button", { name: "Create your business" }).click();
+  await expect(page.getByRole("heading", { name: "What kind of business do you run?" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Where do you trade?" })).toBeVisible();
 
   const country = page.getByRole("combobox", { name: "Country" });
   await country.click();
   await country.fill("Nigeria");
   await page.getByRole("option", { name: "Nigeria" }).click();
-  await page.getByLabel("Address line 1").fill("12 Broad Street");
+  await page.getByLabel("Street").fill("12 Broad Street");
   await page.getByLabel("City").fill("Lagos");
   const state = page.getByRole("combobox", { name: "State" });
   await state.click();
   await state.fill("Lagos");
   await page.getByRole("option", { name: "Lagos", exact: true }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Which currency do you take?" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "How many people work with you?" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "How many shops do you have?" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("heading", { name: /Welcome, Alice Adeyemi/ })).toBeVisible();
 
@@ -80,7 +89,7 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Choose a workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a business" })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(organization) }).click();
   await expect(page.getByRole("heading", { name: /Welcome, Alice Adeyemi/ })).toBeVisible();
 });

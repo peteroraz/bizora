@@ -9,7 +9,7 @@
     "start": "next start --port 3000",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests --exclude e2e/**",
+    "test": "vitest run --passWithNoTests --exclude 'e2e/**'",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "geist": "^1.9.2",
     "lucide-react": "^0.511.0",
     "next": "^15.3.3",
+    "next-intl": "^4.15.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

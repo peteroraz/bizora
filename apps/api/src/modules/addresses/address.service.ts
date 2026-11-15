@@ -11,14 +11,25 @@ import { addresses } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 
+function emptyToNull(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function addressValues(payload: ReturnType<typeof addressInputSchema.parse>) {
+  const marketOrPlaza = emptyToNull(payload.marketOrPlaza);
+  const lineOrBlock = emptyToNull(payload.lineOrBlock);
+  const shopNumber = emptyToNull(payload.shopNumber);
   return {
-    line1: payload.line1,
+    line1: payload.line1?.trim() || marketOrPlaza || shopNumber || payload.city,
     line2: payload.line2 ?? null,
     city: payload.city,
     subdivisionCode: payload.subdivisionCode?.trim() ? payload.subdivisionCode.trim() : null,
     postalCode: payload.postalCode?.trim() ? payload.postalCode.trim() : null,
     countryCode: payload.countryCode,
+    marketOrPlaza,
+    lineOrBlock,
+    shopNumber,
   };
 }
 
