@@ -1,12 +1,14 @@
 "use client";
 
 import { passwordRules } from "@bizora/contracts/password";
-import { Button, Card } from "@bizora/ui";
-import { FormEvent, useState } from "react";
+import { Card, SafeForm, SubmitButton } from "@bizora/ui";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { confirmPasswordError } from "../lib/password";
 import { CurrentPasswordField, PasswordWithConfirmation } from "./password-fields";
 
 export function ChangePasswordForm({ hasPassword = true }: { hasPassword?: boolean }) {
+  const t = useTranslations("password");
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -15,15 +17,17 @@ export function ChangePasswordForm({ hasPassword = true }: { hasPassword?: boole
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!event.currentTarget.reportValidity()) return;
-    const mismatchError = confirmPasswordError(password, confirmation);
+  function mismatchFor(nextPassword: string, nextConfirmation: string) {
+    return confirmPasswordError(nextPassword, nextConfirmation) ? t("mismatch") : null;
+  }
+
+  async function onSubmit() {
+    const mismatchError = mismatchFor(password, confirmation);
     const rulesMet = passwordRules.every((rule) => rule.met(password));
     if (mismatchError || !rulesMet) {
       setMismatch(mismatchError);
       setNotice(null);
-      setError(rulesMet ? null : "Choose a password that meets every rule.");
+      setError(rulesMet ? null : t("rules"));
       return;
     }
     setPending(true);
@@ -38,42 +42,42 @@ export function ChangePasswordForm({ hasPassword = true }: { hasPassword?: boole
     const payload = await response.json();
     setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "Could not change the password.");
+      setError(payload.error?.message ?? t("failed"));
       return;
     }
     setCurrentPassword("");
     setPassword("");
     setConfirmation("");
-    setNotice("Password updated.");
+    setNotice(t("updated"));
   }
 
   return (
     <Card>
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <SafeForm className="space-y-4" pending={pending} onSubmit={onSubmit}>
         {hasPassword ? <CurrentPasswordField id="currentPassword" value={currentPassword} onChange={setCurrentPassword} /> : null}
         <PasswordWithConfirmation
           passwordId="newPassword"
           confirmId="confirmNewPassword"
-          passwordLabel="New password"
-          confirmLabel="Confirm new password"
+          passwordLabel={t("new")}
+          confirmLabel={t("confirmNew")}
           password={password}
           confirmation={confirmation}
           onPasswordChange={(value) => {
             setPassword(value);
-            if (confirmation) setMismatch(confirmPasswordError(value, confirmation));
+            if (confirmation) setMismatch(mismatchFor(value, confirmation));
           }}
           onConfirmationChange={(value) => {
             setConfirmation(value);
-            setMismatch(value ? confirmPasswordError(password, value) : null);
+            setMismatch(value ? mismatchFor(password, value) : null);
           }}
           mismatch={mismatch}
         />
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {notice ? <p className="text-sm text-muted">{notice}</p> : null}
-        <Button type="submit" disabled={pending}>
-          {pending ? "Saving…" : hasPassword ? "Change password" : "Set password"}
-        </Button>
-      </form>
+        <SubmitButton pending={pending} pendingLabel={t("saving")}>
+          {hasPassword ? t("change") : t("set")}
+        </SubmitButton>
+      </SafeForm>
     </Card>
   );
 }

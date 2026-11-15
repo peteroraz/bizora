@@ -1,14 +1,17 @@
 "use client";
 
 import { passwordRules } from "@bizora/contracts/password";
-import { Button, Card, FormField, Input } from "@bizora/ui";
+import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
+import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
 import { confirmPasswordError } from "../../lib/password";
 
 function InviteForm() {
+  const t = useTranslations("invite");
+  const passwordText = useTranslations("password");
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
@@ -18,15 +21,18 @@ function InviteForm() {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function mismatchFor(nextPassword: string, nextConfirmation: string) {
+    return confirmPasswordError(nextPassword, nextConfirmation) ? passwordText("mismatch") : null;
+  }
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
     if (!event.currentTarget.reportValidity()) return;
-    const mismatchError = confirmPasswordError(password, confirmation);
+    const mismatchError = mismatchFor(password, confirmation);
     const rulesMet = passwordRules.every((rule) => rule.met(password));
     if (mismatchError || !rulesMet) {
       setMismatch(mismatchError);
-      setError(rulesMet ? null : "Choose a password that meets every rule.");
+      setError(rulesMet ? null : t("rules"));
       return;
     }
     setPending(true);
@@ -44,7 +50,7 @@ function InviteForm() {
     const payload = await response.json();
     if (!response.ok) {
       setPending(false);
-      setError(payload.error?.message ?? "Invitation could not be accepted.");
+      setError(payload.error?.message ?? t("failed"));
       return;
     }
     const login = await fetch("/api/v1/auth/login", {
@@ -69,13 +75,13 @@ function InviteForm() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full">
-        <h1 className="text-2xl font-semibold">Join a Bizora workspace</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <div className="mt-6">
           <OauthButtons returnTo={`/invite?token=${encodeURIComponent(token)}`} intent="invite" token={token} />
         </div>
-        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
+        <SafeForm className="mt-4 space-y-4" pending={pending} onSubmit={onSubmit}>
           <input type="hidden" name="token" value={token} />
-          <FormField id="displayName" label="Your name">
+          <FormField id="displayName" label={t("name")}>
             <Input id="displayName" name="displayName" required />
           </FormField>
           <PasswordWithConfirmation
@@ -85,19 +91,19 @@ function InviteForm() {
             confirmation={confirmation}
             onPasswordChange={(value) => {
               setPassword(value);
-              if (confirmation) setMismatch(confirmPasswordError(value, confirmation));
+              if (confirmation) setMismatch(mismatchFor(value, confirmation));
             }}
             onConfirmationChange={(value) => {
               setConfirmation(value);
-              setMismatch(value ? confirmPasswordError(password, value) : null);
+              setMismatch(value ? mismatchFor(password, value) : null);
             }}
             mismatch={mismatch}
           />
           {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" disabled={pending || !token} className="w-full">
-            {pending ? "Joining…" : "Accept invitation"}
-          </Button>
-        </form>
+          <SubmitButton pending={pending} pendingLabel={t("pending")} disabled={!token} className="w-full">
+            {t("submit")}
+          </SubmitButton>
+        </SafeForm>
       </Card>
     </main>
   );

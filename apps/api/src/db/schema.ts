@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, char, check, foreignKey, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, char, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -48,6 +48,9 @@ export const addresses = pgTable(
     subdivisionCode: varchar("subdivision_code", { length: 16 }),
     postalCode: varchar("postal_code", { length: 32 }),
     countryCode: varchar("country_code", { length: 2 }).notNull(),
+    marketOrPlaza: varchar("market_or_plaza", { length: 200 }),
+    lineOrBlock: varchar("line_or_block", { length: 80 }),
+    shopNumber: varchar("shop_number", { length: 40 }),
     ...timestamps,
   },
   (table) => [
@@ -78,6 +81,7 @@ export const organizations = pgTable(
     onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
     addressId: uuid("address_id"),
     phoneE164: varchar("phone_e164", { length: 20 }),
+    traderProfile: jsonb("trader_profile"),
     ...timestamps,
   },
   (table) => [
@@ -141,6 +145,17 @@ export const businesses = pgTable(
     industryCode: varchar("industry_code", { length: 64 }),
     addressId: uuid("address_id"),
     phoneE164: varchar("phone_e164", { length: 20 }),
+    businessType: varchar("business_type", { length: 64 }),
+    otherCurrencies: boolean("other_currencies").notNull().default(false),
+    staffCountBand: varchar("staff_count_band", { length: 16 }),
+    branchCount: integer("branch_count"),
+    whatYouSell: text("what_you_sell"),
+    multiCurrencyEnabled: boolean("multi_currency_enabled").notNull().default(false),
+    staffFeaturesEnabled: boolean("staff_features_enabled").notNull().default(true),
+    visibleModules: text("visible_modules")
+      .array()
+      .notNull()
+      .default(sql`ARRAY['home','sales','stock','customers','debtors','money','staff','reports','settings']::text[]`),
     ...timestamps,
   },
   (table) => [
@@ -336,6 +351,112 @@ export const auditEvents = pgTable(
   ],
 );
 
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id"),
+    name: varchar("name", { length: 160 }).notNull(),
+    phoneE164: varchar("phone_e164", { length: 20 }),
+    isWalkIn: boolean("is_walk_in").notNull().default(false),
+    email: varchar("email", { length: 320 }),
+    addressId: uuid("address_id"),
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    notesSummary: text("notes_summary"),
+    ...timestamps,
+  },
+  (table) => [
+    index("customers_tenant_business_idx").on(table.tenantId, table.businessId),
+    index("customers_tenant_business_name_idx").on(table.tenantId, table.businessId, table.name),
+    uniqueIndex("customers_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "customers_tenant_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "customers_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "customers_tenant_address_fk",
+      columns: [table.tenantId, table.addressId],
+      foreignColumns: [addresses.tenantId, addresses.id],
+    }),
+  ],
+);
+
+export const customerNotes = pgTable(
+  "customer_notes",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (table) => [
+    index("customer_notes_customer_idx").on(table.tenantId, table.customerId, table.createdAt),
+    uniqueIndex("customer_notes_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "customer_notes_customer_fk",
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
+    foreignKey({
+      name: "customer_notes_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+  ],
+);
+
+export const customerFollowups = pgTable(
+  "customer_followups",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    branchId: uuid("branch_id"),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    reason: varchar("reason", { length: 500 }).notNull(),
+    assignedTo: uuid("assigned_to"),
+    status: varchar("status", { length: 16 }).notNull().default("open"),
+    snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("customer_followups_due_idx").on(table.tenantId, table.businessId, table.status, table.dueAt),
+    uniqueIndex("customer_followups_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({
+      name: "customer_followups_customer_fk",
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
+    foreignKey({
+      name: "customer_followups_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "customer_followups_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "customer_followups_assignee_fk",
+      columns: [table.tenantId, table.assignedTo],
+      foreignColumns: [memberships.tenantId, memberships.id],
+    }),
+  ],
+);
+
 export const schema = {
   addresses,
   organizations,
@@ -354,6 +475,9 @@ export const schema = {
   auditEvents,
   userIdentities,
   authTokens,
+  customers,
+  customerNotes,
+  customerFollowups,
 };
 
 export type DatabaseSchema = typeof schema;

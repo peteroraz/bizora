@@ -1,6 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  addressInputSchema,
+  businessTypeFromIndustry,
   completeOnboardingSchema,
+  deriveTraderSetup,
+  industryForBusinessType,
   updateBrandingSchema,
   updateBranchSchema,
   updateBusinessSchema,
@@ -39,10 +43,41 @@ export class OnboardingService {
     if (!country) {
       throw new ApiError("COUNTRY_UNKNOWN", "That country is not available.", 400);
     }
-    const industry = await this.tenants.findIndustryPack(payload.industryCode);
+    const industryCode = payload.industryCode ?? (payload.businessType ? industryForBusinessType(payload.businessType) : null);
+    if (!industryCode) {
+      throw new ApiError("INDUSTRY_PACK_UNKNOWN", "That industry pack is not available.", 400);
+    }
+    const industry = await this.tenants.findIndustryPack(industryCode);
     if (!industry) {
       throw new ApiError("INDUSTRY_PACK_UNKNOWN", "That industry pack is not available.", 400);
     }
+    const traderAnswers =
+      payload.businessType !== undefined ||
+      payload.staffCountBand !== undefined ||
+      payload.otherCurrencies !== undefined ||
+      payload.marketOrPlaza !== undefined ||
+      payload.tradeCity !== undefined;
+    const setup = traderAnswers
+      ? deriveTraderSetup({
+          businessType: payload.businessType ?? businessTypeFromIndustry(industryCode),
+          staffCountBand: payload.staffCountBand ?? null,
+          otherCurrencies: payload.otherCurrencies ?? false,
+        })
+      : null;
+    const place = payload.address || payload.tradeCity
+      ? {
+          line1: payload.address?.line1 || payload.marketOrPlaza || payload.tradeCity || "",
+          line2: payload.address?.line2 ?? null,
+          city: payload.address?.city || payload.tradeCity || "",
+          subdivisionCode: payload.address?.subdivisionCode ?? payload.tradeSubdivisionCode ?? null,
+          postalCode: payload.address?.postalCode ?? null,
+          countryCode: payload.address?.countryCode || payload.countryCode,
+          marketOrPlaza: payload.address?.marketOrPlaza ?? payload.marketOrPlaza ?? null,
+          lineOrBlock: payload.address?.lineOrBlock ?? null,
+          shopNumber: payload.address?.shopNumber ?? null,
+        }
+      : null;
+    const parsedPlace = place ? addressInputSchema.parse(place) : null;
 
     const organization = await this.tenants.findOrganization(tenant.tenantId);
     if (!organization) {
@@ -85,6 +120,20 @@ export class OnboardingService {
           accentColor: payload.accentColor ?? organization.accentColor,
           logoUrl: payload.logoUrl === "" ? null : (payload.logoUrl ?? organization.logoUrl),
           onboardingCompletedAt: new Date(),
+          ...(traderAnswers
+            ? {
+                traderProfile: {
+                  businessType: payload.businessType ?? businessTypeFromIndustry(industryCode),
+                  marketOrPlaza: payload.marketOrPlaza ?? null,
+                  tradeCity: payload.tradeCity ?? null,
+                  tradeSubdivisionCode: payload.tradeSubdivisionCode ?? null,
+                  otherCurrencies: payload.otherCurrencies ?? false,
+                  staffCountBand: payload.staffCountBand ?? null,
+                  branchCount: payload.branchCount ?? null,
+                  whatYouSell: payload.whatYouSell || null,
+                },
+              }
+            : {}),
           updatedBy: tenant.userId,
         })
         .where(eq(organizations.id, tenant.tenantId));
@@ -96,7 +145,19 @@ export class OnboardingService {
           countryCode: payload.countryCode,
           baseCurrencyCode: payload.baseCurrencyCode,
           timezone: payload.timezone,
-          industryCode: payload.industryCode,
+          industryCode,
+          ...(payload.businessType ? { businessType: payload.businessType } : {}),
+          ...(payload.otherCurrencies !== undefined ? { otherCurrencies: payload.otherCurrencies } : {}),
+          ...(payload.staffCountBand ? { staffCountBand: payload.staffCountBand } : {}),
+          ...(payload.branchCount !== undefined ? { branchCount: payload.branchCount } : {}),
+          ...(payload.whatYouSell !== undefined ? { whatYouSell: payload.whatYouSell || null } : {}),
+          ...(setup
+            ? {
+                multiCurrencyEnabled: setup.multiCurrency,
+                staffFeaturesEnabled: setup.staffFeatures,
+                visibleModules: setup.modules,
+              }
+            : {}),
           updatedBy: tenant.userId,
         })
         .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)));
@@ -108,17 +169,23 @@ export class OnboardingService {
           .where(and(eq(branches.id, tenant.branchId), eq(branches.tenantId, tenant.tenantId)));
       }
 
-      if (payload.address) {
+      if (parsedPlace) {
         createdAddressId = newId();
+        const marketOrPlaza = parsedPlace.marketOrPlaza?.trim() ? parsedPlace.marketOrPlaza.trim() : null;
+        const lineOrBlock = parsedPlace.lineOrBlock?.trim() ? parsedPlace.lineOrBlock.trim() : null;
+        const shopNumber = parsedPlace.shopNumber?.trim() ? parsedPlace.shopNumber.trim() : null;
         await tx.insert(addresses).values({
           id: createdAddressId,
           tenantId: tenant.tenantId,
-          line1: payload.address.line1,
-          line2: payload.address.line2 ?? null,
-          city: payload.address.city,
-          subdivisionCode: payload.address.subdivisionCode ?? null,
-          postalCode: payload.address.postalCode ?? null,
-          countryCode: payload.address.countryCode,
+          line1: parsedPlace.line1?.trim() || marketOrPlaza || shopNumber || parsedPlace.city,
+          line2: parsedPlace.line2 ?? null,
+          city: parsedPlace.city,
+          subdivisionCode: parsedPlace.subdivisionCode?.trim() ? parsedPlace.subdivisionCode.trim() : null,
+          postalCode: parsedPlace.postalCode?.trim() ? parsedPlace.postalCode.trim() : null,
+          countryCode: parsedPlace.countryCode,
+          marketOrPlaza,
+          lineOrBlock,
+          shopNumber,
           createdBy: tenant.userId,
           updatedBy: tenant.userId,
         });
@@ -231,6 +298,25 @@ export class OnboardingService {
         throw new ApiError("COUNTRY_UNKNOWN", "That country is not available.", 400);
       }
     }
+    const touchesTrader =
+      payload.businessType !== undefined ||
+      payload.otherCurrencies !== undefined ||
+      payload.staffCountBand !== undefined ||
+      payload.branchCount !== undefined ||
+      payload.whatYouSell !== undefined ||
+      payload.multiCurrencyEnabled !== undefined ||
+      payload.staffFeaturesEnabled !== undefined ||
+      payload.visibleModules !== undefined;
+    const setup = touchesTrader
+      ? deriveTraderSetup({
+          businessType: payload.businessType ?? business.businessType,
+          staffCountBand: payload.staffCountBand ?? business.staffCountBand,
+          otherCurrencies: payload.otherCurrencies ?? business.otherCurrencies,
+          staffFeaturesEnabled: payload.staffFeaturesEnabled,
+          multiCurrencyEnabled: payload.multiCurrencyEnabled,
+          visibleModules: payload.visibleModules,
+        })
+      : null;
     const [updated] = await this.db
       .update(businesses)
       .set({
@@ -238,14 +324,48 @@ export class OnboardingService {
         ...(payload.countryCode ? { countryCode: payload.countryCode } : {}),
         ...(payload.baseCurrencyCode ? { baseCurrencyCode: payload.baseCurrencyCode } : {}),
         ...(payload.timezone ? { timezone: payload.timezone } : {}),
-        ...(payload.industryCode !== undefined ? { industryCode: payload.industryCode } : {}),
+        ...(payload.industryCode !== undefined
+          ? { industryCode: payload.industryCode }
+          : payload.businessType
+            ? { industryCode: industryForBusinessType(payload.businessType) }
+            : {}),
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
+        ...(setup
+          ? {
+              businessType: payload.businessType ?? business.businessType,
+              otherCurrencies: payload.otherCurrencies ?? business.otherCurrencies,
+              staffCountBand: payload.staffCountBand ?? business.staffCountBand,
+              branchCount: payload.branchCount !== undefined ? payload.branchCount : business.branchCount,
+              whatYouSell: payload.whatYouSell !== undefined ? payload.whatYouSell || null : business.whatYouSell,
+              multiCurrencyEnabled: payload.multiCurrencyEnabled ?? setup.multiCurrency,
+              staffFeaturesEnabled: payload.staffFeaturesEnabled ?? setup.staffFeatures,
+              visibleModules: setup.modules,
+            }
+          : {}),
         updatedBy: tenant.userId,
       })
       .where(and(eq(businesses.id, businessId), eq(businesses.tenantId, tenant.tenantId)))
       .returning();
     if (!updated) {
       throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
+    }
+    if (setup && canManageOrganizationSettings(tenant)) {
+      await this.db
+        .update(organizations)
+        .set({
+          traderProfile: {
+            businessType: updated.businessType,
+            otherCurrencies: updated.otherCurrencies,
+            staffCountBand: updated.staffCountBand,
+            branchCount: updated.branchCount,
+            whatYouSell: updated.whatYouSell,
+            multiCurrencyEnabled: updated.multiCurrencyEnabled,
+            staffFeaturesEnabled: updated.staffFeaturesEnabled,
+            visibleModules: updated.visibleModules,
+          },
+          updatedBy: tenant.userId,
+        })
+        .where(eq(organizations.id, tenant.tenantId));
     }
     return updated;
   }

@@ -1,46 +1,46 @@
 "use client";
 
 import { passwordRules } from "@bizora/contracts/password";
-import { Button, Card, Combobox, FormField, Input, Select } from "@bizora/ui";
+import { Card, Combobox, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
+import { PublicFooter } from "../../components/public-footer";
 import { confirmPasswordError } from "../../lib/password";
 
 type Country = { code: string; name: string; defaultCurrencyCode: string; timezones: string[] };
-type Pack = { code: string; name: string };
 
 export default function RegisterPage() {
+  const t = useTranslations("register");
+  const common = useTranslations("common");
+  const passwordText = useTranslations("password");
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
-  const [industries, setIndustries] = useState<Pack[]>([]);
   const [countryCode, setCountryCode] = useState("NG");
   const [currency, setCurrency] = useState("NGN");
   const [timezone, setTimezone] = useState("Africa/Lagos");
-  const [industryCode, setIndustryCode] = useState("general-retail");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const countryTouched = useRef(false);
 
   useEffect(() => {
-    void Promise.all([
-      fetch("/api/v1/public/reference/countries").then((response) => response.json()),
-      fetch("/api/v1/catalogs/industry-packs").then((response) => response.json()),
-    ]).then(([countryPayload, industryPayload]) => {
-      const items = (countryPayload.data?.items ?? []) as Country[];
-      setCountries(items);
-      setIndustries(industryPayload.data?.items ?? []);
-      if (countryTouched.current) return;
-      const nigeria = items.find((item) => item.code === "NG");
-      if (!nigeria) return;
-      setCurrency(nigeria.defaultCurrencyCode);
-      setTimezone(nigeria.timezones[0] ?? "Africa/Lagos");
-    });
+    void fetch("/api/v1/public/reference/countries")
+      .then((response) => response.json())
+      .then((countryPayload) => {
+        const items = (countryPayload.data?.items ?? []) as Country[];
+        setCountries(items);
+        if (countryTouched.current) return;
+        const nigeria = items.find((item) => item.code === "NG");
+        if (!nigeria) return;
+        setCurrency(nigeria.defaultCurrencyCode);
+        setTimezone(nigeria.timezones[0] ?? "Africa/Lagos");
+      });
   }, []);
 
   function onCountryChange(code: string) {
@@ -50,6 +50,10 @@ export default function RegisterPage() {
     if (!country) return;
     setCurrency(country.defaultCurrencyCode);
     setTimezone(country.timezones[0] ?? "");
+  }
+
+  function mismatchFor(nextPassword: string, nextConfirmation: string) {
+    return confirmPasswordError(nextPassword, nextConfirmation) ? passwordText("mismatch") : null;
   }
 
   const selected = countries.find((item) => item.code === countryCode);
@@ -64,15 +68,14 @@ export default function RegisterPage() {
     label: zone,
   }));
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
     if (!event.currentTarget.reportValidity()) return;
-    const mismatchError = confirmPasswordError(password, confirmation);
+    const mismatchError = mismatchFor(password, confirmation);
     const rulesMet = passwordRules.every((rule) => rule.met(password));
     if (mismatchError || !rulesMet) {
       setMismatch(mismatchError);
-      setError(rulesMet ? null : "Choose a password that meets every rule.");
+      setError(rulesMet ? null : t("passwordRules"));
       return;
     }
     setPending(true);
@@ -90,33 +93,33 @@ export default function RegisterPage() {
         countryCode,
         baseCurrencyCode: currency,
         timezone,
-        industryCode,
+        industryCode: "general-retail",
       }),
     });
     const payload = await response.json();
     setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "Unable to create workspace.");
+      setError(payload.error?.message ?? t("failed"));
       return;
     }
     router.push("/app/onboarding");
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-4 py-8">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-8">
       <Card className="w-full">
-        <h1 className="text-2xl font-semibold">Create your Bizora workspace</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <div className="mt-6">
           <OauthButtons returnTo="/setup" />
         </div>
-        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
-          <FormField id="displayName" label="Your name">
+        <SafeForm className="mt-4 space-y-4" pending={pending} onSubmit={onSubmit}>
+          <FormField id="displayName" label={t("name")}>
             <Input id="displayName" name="displayName" required />
           </FormField>
-          <FormField id="organizationName" label="Business name">
+          <FormField id="organizationName" label={t("business")}>
             <Input id="organizationName" name="organizationName" required />
           </FormField>
-          <FormField id="email" label="Email">
+          <FormField id="email" label={t("email")}>
             <Input id="email" name="email" type="email" autoComplete="email" required />
           </FormField>
           <PasswordWithConfirmation
@@ -126,65 +129,60 @@ export default function RegisterPage() {
             confirmation={confirmation}
             onPasswordChange={(value) => {
               setPassword(value);
-              if (confirmation) setMismatch(confirmPasswordError(value, confirmation));
+              if (confirmation) setMismatch(mismatchFor(value, confirmation));
             }}
             onConfirmationChange={(value) => {
               setConfirmation(value);
-              setMismatch(value ? confirmPasswordError(password, value) : null);
+              setMismatch(value ? mismatchFor(password, value) : null);
             }}
             mismatch={mismatch}
           />
-          <FormField id="country" label="Country">
+          <FormField id="country" label={t("country")}>
             <Combobox
               id="country"
-              label="Country"
+              label={t("country")}
+              emptyLabel={common("noMatches")}
               items={countries.map((item) => ({ value: item.code, label: item.name }))}
               value={countryCode}
               onValueChange={onCountryChange}
-              placeholder="Search countries"
+              placeholder={common("searchCountries")}
             />
           </FormField>
-          <FormField id="currency" label="Currency">
+          <FormField id="currency" label={t("currency")}>
             <Combobox
               id="currency"
-              label="Currency"
+              label={t("currency")}
+              emptyLabel={common("noMatches")}
               items={currencyItems}
               value={currency}
               onValueChange={setCurrency}
-              placeholder="Search currencies"
+              placeholder={common("searchCurrencies")}
             />
           </FormField>
-          <FormField id="timezone" label="Timezone">
+          <FormField id="timezone" label={t("timezone")}>
             <Combobox
               id="timezone"
-              label="Timezone"
+              label={t("timezone")}
+              emptyLabel={common("noMatches")}
               items={timezoneItems}
               value={timezone}
               onValueChange={setTimezone}
-              placeholder="Search timezones"
+              placeholder={common("searchTimezones")}
             />
           </FormField>
-          <FormField id="industryCode" label="Industry">
-            <Select id="industryCode" value={industryCode} onChange={(event) => setIndustryCode(event.target.value)}>
-              {industries.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          </FormField>
           {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" disabled={pending} className="w-full">
-            {pending ? "Creating…" : "Create workspace"}
-          </Button>
-        </form>
+          <SubmitButton pending={pending} pendingLabel={t("pending")} className="w-full">
+            {t("submit")}
+          </SubmitButton>
+        </SafeForm>
         <p className="mt-4 text-sm">
-          Already registered?{" "}
+          {t("already")}{" "}
           <Link href="/login" className="font-medium text-primary">
-            Sign in
+            {t("signIn")}
           </Link>
         </p>
       </Card>
+      <PublicFooter />
     </main>
   );
 }

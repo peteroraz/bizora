@@ -2,6 +2,7 @@
 
 import { passwordRules } from "@bizora/contracts/password";
 import { FormField, Input } from "@bizora/ui";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 function SecretInput({
@@ -21,6 +22,7 @@ function SecretInput({
   invalid?: boolean;
   describedBy?: string;
 }) {
+  const t = useTranslations("password");
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
@@ -38,25 +40,27 @@ function SecretInput({
       <button
         type="button"
         className="absolute top-1/2 right-2 -translate-y-1/2 rounded-control px-2 py-1 text-xs font-medium text-muted"
-        aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        aria-label={visible ? t("hide", { label }) : t("show", { label })}
         onClick={() => setVisible((current) => !current)}
       >
-        {visible ? "Hide" : "Show"}
+        {visible ? t("hideWord") : t("showWord")}
       </button>
     </div>
   );
 }
 
 export function PasswordRules({ password }: { password: string }) {
+  const t = useTranslations("password");
+  const labels = { "min-length": t("minLength"), "max-length": t("maxLength") };
   return (
-    <ul className="space-y-1" aria-label="Password rules">
+    <ul className="space-y-1" aria-label={t("rulesLabel")}>
       {passwordRules.map((rule) => {
         const met = rule.met(password);
         return (
           <li key={rule.id} className={met ? "text-xs text-success" : "text-xs text-muted"}>
             <span aria-hidden="true">{met ? "✓ " : "○ "}</span>
-            {rule.label}
-            <span className="sr-only">{met ? ", met" : ", not met"}</span>
+            {labels[rule.id]}
+            <span className="sr-only">{met ? t("met") : t("unmet")}</span>
           </li>
         );
       })}
@@ -67,8 +71,8 @@ export function PasswordRules({ password }: { password: string }) {
 export function PasswordWithConfirmation({
   passwordId,
   confirmId,
-  passwordLabel = "Password",
-  confirmLabel = "Confirm password",
+  passwordLabel,
+  confirmLabel,
   password,
   confirmation,
   onPasswordChange,
@@ -87,13 +91,16 @@ export function PasswordWithConfirmation({
   autoComplete?: string;
   mismatch: string | null;
 }) {
+  const t = useTranslations("password");
+  const passwordText = passwordLabel ?? t("password");
+  const confirmText = confirmLabel ?? t("confirm");
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <FormField id={passwordId} label={passwordLabel}>
+        <FormField id={passwordId} label={passwordText}>
           <SecretInput
             id={passwordId}
-            label={passwordLabel}
+            label={passwordText}
             value={password}
             onChange={onPasswordChange}
             autoComplete={autoComplete}
@@ -104,10 +111,10 @@ export function PasswordWithConfirmation({
           <PasswordRules password={password} />
         </div>
       </div>
-      <FormField id={confirmId} label={confirmLabel} error={mismatch ?? undefined}>
+      <FormField id={confirmId} label={confirmText} error={mismatch ?? undefined}>
         <SecretInput
           id={confirmId}
-          label={confirmLabel}
+          label={confirmText}
           value={confirmation}
           onChange={onConfirmationChange}
           autoComplete={autoComplete}
@@ -128,15 +135,10 @@ export function CurrentPasswordField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const t = useTranslations("password");
   return (
-    <FormField id={id} label="Current password">
-      <SecretInput
-        id={id}
-        label="Current password"
-        value={value}
-        onChange={onChange}
-        autoComplete="current-password"
-      />
+    <FormField id={id} label={t("current")}>
+      <SecretInput id={id} label={t("current")} value={value} onChange={onChange} autoComplete="current-password" />
     </FormField>
   );
 }

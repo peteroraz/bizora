@@ -35,18 +35,32 @@ const blankToNull = z
 
 export const addressInputSchema = z
   .object({
-    line1: z.string().trim().min(1).max(200),
+    line1: z.string().trim().max(200).optional(),
     line2: blankToNull,
     city: z.string().trim().min(1).max(120),
     subdivisionCode: z.string().trim().max(16).nullable().optional(),
     postalCode: z.string().trim().max(32).nullable().optional(),
     countryCode: z.string().trim().length(2).toUpperCase(),
+    marketOrPlaza: z.string().trim().max(200).nullable().optional(),
+    lineOrBlock: z.string().trim().max(80).nullable().optional(),
+    shopNumber: z.string().trim().max(40).nullable().optional(),
   })
   .superRefine((value, ctx) => {
     const country = countries[value.countryCode];
     if (!country) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["countryCode"], message: "Choose a valid country." });
       return;
+    }
+    const line1 = value.line1?.trim() ?? "";
+    const market = value.marketOrPlaza?.trim() ?? "";
+    const shop = value.shopNumber?.trim() ?? "";
+    const block = value.lineOrBlock?.trim() ?? "";
+    if (!line1 && !market && !shop && !block) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["line1"],
+        message: "Enter a street, shop number, or market.",
+      });
     }
     const subdivision = value.subdivisionCode?.trim() || null;
     if (country.subdivisionRequired && !subdivision) {
@@ -79,5 +93,34 @@ export const addressInputSchema = z
   });
 
 export type AddressInput = z.infer<typeof addressInputSchema>;
+
+export type AddressDisplay = {
+  shopNumber?: string | null;
+  lineOrBlock?: string | null;
+  marketOrPlaza?: string | null;
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  subdivisionName?: string | null;
+  postalCode?: string | null;
+};
+
+export function formatAddressDisplay(address: AddressDisplay): string {
+  const shop = address.shopNumber?.trim() ?? "";
+  const line = address.lineOrBlock?.trim() ?? "";
+  const market = address.marketOrPlaza?.trim() ?? "";
+  const city = address.city?.trim() ?? "";
+  const subdivision = address.subdivisionName?.trim() ?? "";
+  const street = address.line1?.trim() ?? "";
+  const parts = [
+    shop ? (/^shop\b/i.test(shop) ? shop : `Shop ${shop}`) : null,
+    line ? (/^line\b/i.test(line) ? line : `Line ${line}`) : null,
+    market || null,
+    street && street.toLowerCase() !== market.toLowerCase() && street.toLowerCase() !== city.toLowerCase() ? street : null,
+    city || null,
+    subdivision || null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.join(", ");
+}
 
 export const optionalPhoneSchema = z.union([phoneE164Schema, z.literal(""), z.null()]).optional();

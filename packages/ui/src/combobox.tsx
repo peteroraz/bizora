@@ -12,6 +12,7 @@ export function Combobox({
   value,
   onValueChange,
   placeholder = "Search",
+  emptyLabel = "No matches",
   describedBy,
 }: {
   id?: string;
@@ -20,6 +21,7 @@ export function Combobox({
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
+  emptyLabel?: string;
   describedBy?: string;
 }) {
   const generatedId = useId();
@@ -104,7 +106,7 @@ export function Combobox({
           className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-control border border-border bg-card p-1 shadow-md"
         >
           {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-muted">No matches</li>
+            <li className="px-3 py-2 text-sm text-muted">{emptyLabel}</li>
           ) : (
             filtered.map((item, index) => (
               <li

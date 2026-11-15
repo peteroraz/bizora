@@ -1,11 +1,13 @@
 "use client";
 
-import { Button, Card } from "@bizora/ui";
+import { Card, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { useTranslations } from "next-intl";
 
 function VerifyEmail() {
+  const t = useTranslations("verify");
   const token = useSearchParams().get("token") ?? "";
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,26 +24,28 @@ function VerifyEmail() {
     const payload = await response.json();
     setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "That verification link is invalid or has expired.");
+      setError(payload.error?.message ?? t("failed"));
       return;
     }
-    setMessage("Your email is verified.");
+    setMessage(t("done"));
   }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full space-y-4">
-        <h1 className="text-2xl font-semibold">Verify your email</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         {message ? <p className="text-sm">{message}</p> : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {message ? null : (
-          <Button type="button" disabled={pending || !token} onClick={() => void confirm()}>
-            {pending ? "Verifying…" : "Confirm email"}
-          </Button>
+          <SafeForm pending={pending} onSubmit={confirm}>
+            <SubmitButton pending={pending} pendingLabel={t("pending")} disabled={!token}>
+              {t("submit")}
+            </SubmitButton>
+          </SafeForm>
         )}
         <p className="text-sm">
           <Link href="/app" className="font-medium text-primary">
-            Continue to Bizora
+            {t("continue")}
           </Link>
         </p>
       </Card>

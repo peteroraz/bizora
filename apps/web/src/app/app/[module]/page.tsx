@@ -1,16 +1,20 @@
 import { Badge, EmptyState } from "@bizora/ui";
+import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { comingSoonModules } from "../../../lib/nav";
 
 export default async function ComingSoonPage({ params }: { params: Promise<{ module: string }> }) {
   const { module } = await params;
-  const title = comingSoonModules[module as keyof typeof comingSoonModules];
-  if (!title) notFound();
-  return (
-    <EmptyState
-      title={`${title} is coming soon`}
-      description="This part of Bizora is on the roadmap. Your workspace, team, and settings are ready to use today."
-      action={<Badge tone="info">Soon</Badge>}
-    />
-  );
+  if (!(module in comingSoonModules)) notFound();
+  const t = await getTranslations("comingSoon");
+  const key = module as keyof typeof comingSoonModules;
+  const copy = {
+    sales: { title: t("salesTitle"), body: t("salesBody") },
+    stock: { title: t("stockTitle"), body: t("stockBody") },
+    debtors: { title: t("debtorsTitle"), body: t("debtorsBody") },
+    money: { title: t("moneyTitle"), body: t("moneyBody") },
+    staff: { title: t("staffTitle"), body: t("staffBody") },
+    reports: { title: t("reportsTitle"), body: t("reportsBody") },
+  }[key];
+  return <EmptyState title={copy.title} description={copy.body} action={<Badge tone="info">{t("badge")}</Badge>} />;
 }

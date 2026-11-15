@@ -19,7 +19,24 @@ export type AddressValue = {
   subdivisionCode: string;
   postalCode: string;
   countryCode: string;
+  marketOrPlaza: string;
+  lineOrBlock: string;
+  shopNumber: string;
 };
+
+export async function loadCountries(): Promise<CountryOption[]> {
+  const response = await fetch("/api/v1/reference/countries", { credentials: "include" });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return (payload.data?.items ?? []) as CountryOption[];
+}
+
+export async function loadSubdivisions(countryCode: string): Promise<SubdivisionOption[]> {
+  const response = await fetch(`/api/v1/reference/countries/${countryCode}/subdivisions`, { credentials: "include" });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return (payload.data?.items ?? []) as SubdivisionOption[];
+}
 
 export const emptyAddress = (countryCode = "NG"): AddressValue => ({
   line1: "",
@@ -28,4 +45,7 @@ export const emptyAddress = (countryCode = "NG"): AddressValue => ({
   subdivisionCode: "",
   postalCode: "",
   countryCode,
+  marketOrPlaza: "",
+  lineOrBlock: "",
+  shopNumber: "",
 });

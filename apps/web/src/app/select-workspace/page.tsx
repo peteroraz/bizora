@@ -4,7 +4,7 @@ import type { AuthWorkspace } from "@bizora/contracts";
 import { Badge, Button, Card, EmptyState, Skeleton } from "@bizora/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { formatRole } from "../../lib/role-label";
+import { useTranslations } from "next-intl";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -13,6 +13,9 @@ function workspaceDetail(workspace: AuthWorkspace) {
 }
 
 export default function SelectWorkspacePage() {
+  const t = useTranslations("workspaces");
+  const common = useTranslations("common");
+  const roles = useTranslations("roles");
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState<AuthWorkspace[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -40,7 +43,7 @@ export default function SelectWorkspacePage() {
         if (controller.signal.aborted) return;
         if (!response.ok || !Array.isArray(payload?.data)) {
           setLoadState("error");
-          setError(payload?.error?.message ?? "Unable to load your workspaces.");
+          setError(payload?.error?.message ?? t("failed"));
           return;
         }
         setWorkspaces(payload.data as AuthWorkspace[]);
@@ -48,7 +51,7 @@ export default function SelectWorkspacePage() {
       } catch {
         if (controller.signal.aborted) return;
         setLoadState("error");
-        setError("Unable to load your workspaces.");
+        setError(t("failed"));
       }
     })();
 
@@ -67,7 +70,7 @@ export default function SelectWorkspacePage() {
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       setPendingId(null);
-      setError(payload?.error?.message ?? "Unable to open that workspace.");
+      setError(payload?.error?.message ?? t("openFailed"));
       return;
     }
     const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((result) => result.json());
@@ -82,12 +85,12 @@ export default function SelectWorkspacePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl items-center px-4 py-10">
       <div className="w-full">
-        <p className="text-sm font-semibold tracking-[0.2em] text-primary">BIZORA</p>
-        <h1 className="mt-2 text-2xl font-semibold text-fg">Choose a workspace</h1>
-        <p className="mt-2 text-sm text-muted">Open the organization you want to work in.</p>
+        <p className="text-sm font-semibold tracking-[0.2em] text-primary">{t("kicker")}</p>
+        <h1 className="mt-2 text-2xl font-semibold text-fg">{t("title")}</h1>
+        <p className="mt-2 text-sm text-muted">{t("lead")}</p>
 
         {loadState === "loading" ? (
-          <div className="mt-6 space-y-3" aria-busy="true" aria-label="Loading workspaces">
+          <div className="mt-6 space-y-3" aria-busy="true" aria-label={t("loading")}>
             <Skeleton className="h-24 w-full rounded-card" />
             <Skeleton className="h-24 w-full rounded-card" />
           </div>
@@ -99,7 +102,7 @@ export default function SelectWorkspacePage() {
               {error}
             </p>
             <Button type="button" className="mt-4" onClick={() => setRequestId((current) => current + 1)}>
-              Try again
+              {common("tryAgain")}
             </Button>
           </Card>
         ) : null}
@@ -107,11 +110,11 @@ export default function SelectWorkspacePage() {
         {loadState === "ready" && workspaces.length === 0 ? (
           <div className="mt-6">
             <EmptyState
-              title="No workspaces yet"
-              description="This account is not an active member of any organization."
+              title={t("emptyTitle")}
+              description={t("emptyBody")}
               action={
                 <Button type="button" onClick={() => void signOut()}>
-                  Sign out
+                  {common("signOut")}
                 </Button>
               }
             />
@@ -134,7 +137,7 @@ export default function SelectWorkspacePage() {
                       <span className="flex items-start justify-between gap-3">
                         <span className="text-base font-semibold text-fg">{workspace.organizationName}</span>
                         <Badge className="shrink-0 border-primary bg-sidebar-active text-sidebar-active-fg">
-                          {formatRole(workspace.role)}
+                          {roles.has(workspace.role) ? roles(workspace.role) : workspace.role}
                         </Badge>
                       </span>
                       {detail ? <span className="text-sm text-muted">{detail}</span> : null}

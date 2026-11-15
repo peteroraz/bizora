@@ -83,7 +83,7 @@ test("password login lists both workspaces and the menu switches between them", 
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Choose a workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a business" })).toBeVisible();
   const harborCard = page.getByRole("button", { name: new RegExp(harbor) });
   const atelierCard = page.getByRole("button", { name: new RegExp(atelier) });
   await expect(harborCard).toContainText("Owner");
@@ -95,15 +95,15 @@ test("password login lists both workspaces and the menu switches between them", 
   await harborCard.click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("heading", { name: /Welcome, Nia Okonkwo/ })).toBeVisible();
-  await expect(page.locator("header p", { hasText: "Current workspace" })).toContainText(harbor);
+  await expect(page.locator("header p", { hasText: "Your business" })).toContainText(harbor);
 
   await page.getByRole("button", { name: "Account menu" }).click();
-  await expect(page.getByText("Switch workspace")).toBeVisible();
+  await expect(page.getByText("Switch business")).toBeVisible();
   await page.getByRole("menuitem", { name: new RegExp(atelier) }).click();
 
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.locator("header p", { hasText: "Current workspace" })).toContainText(atelier);
-  await expect(page.locator("header p", { hasText: "Current workspace" })).not.toContainText(harbor);
+  await expect(page.locator("header p", { hasText: "Your business" })).toContainText(atelier);
+  await expect(page.locator("header p", { hasText: "Your business" })).not.toContainText(harbor);
 });
 
 test("select-workspace renders workspaces without sessionStorage", async ({ page, request }) => {

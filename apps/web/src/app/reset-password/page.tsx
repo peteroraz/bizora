@@ -1,13 +1,16 @@
 "use client";
 
 import { passwordRules } from "@bizora/contracts/password";
-import { Button, Card } from "@bizora/ui";
+import { Card, SafeForm, SubmitButton } from "@bizora/ui";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
+import { useTranslations } from "next-intl";
 import { PasswordWithConfirmation } from "../../components/password-fields";
 import { confirmPasswordError } from "../../lib/password";
 
 function ResetForm() {
+  const t = useTranslations("reset");
+  const passwordText = useTranslations("password");
   const router = useRouter();
   const token = useSearchParams().get("token") ?? "";
   const [password, setPassword] = useState("");
@@ -16,14 +19,17 @@ function ResetForm() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function mismatchFor(nextPassword: string, nextConfirmation: string) {
+    return confirmPasswordError(nextPassword, nextConfirmation) ? passwordText("mismatch") : null;
+  }
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     if (!event.currentTarget.reportValidity()) return;
-    const mismatchError = confirmPasswordError(password, confirmation);
+    const mismatchError = mismatchFor(password, confirmation);
     const rulesMet = passwordRules.every((rule) => rule.met(password));
     if (mismatchError || !rulesMet) {
       setMismatch(mismatchError);
-      setError(rulesMet ? null : "Choose a password that meets every rule.");
+      setError(rulesMet ? null : t("rules"));
       return;
     }
     setPending(true);
@@ -36,7 +42,7 @@ function ResetForm() {
     const payload = await response.json();
     setPending(false);
     if (!response.ok) {
-      setError(payload.error?.message ?? "That reset link is invalid or has expired.");
+      setError(payload.error?.message ?? t("failed"));
       return;
     }
     router.push("/login");
@@ -45,8 +51,8 @@ function ResetForm() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full">
-        <h1 className="text-2xl font-semibold">Choose a new password</h1>
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
+        <SafeForm className="mt-6 space-y-4" pending={pending} onSubmit={onSubmit}>
           <PasswordWithConfirmation
             passwordId="password"
             confirmId="confirmPassword"
@@ -54,19 +60,19 @@ function ResetForm() {
             confirmation={confirmation}
             onPasswordChange={(value) => {
               setPassword(value);
-              if (confirmation) setMismatch(confirmPasswordError(value, confirmation));
+              if (confirmation) setMismatch(mismatchFor(value, confirmation));
             }}
             onConfirmationChange={(value) => {
               setConfirmation(value);
-              setMismatch(value ? confirmPasswordError(password, value) : null);
+              setMismatch(value ? mismatchFor(password, value) : null);
             }}
             mismatch={mismatch}
           />
           {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" disabled={pending || !token} className="w-full">
-            {pending ? "Saving…" : "Update password"}
-          </Button>
-        </form>
+          <SubmitButton pending={pending} pendingLabel={t("pending")} disabled={!token} className="w-full">
+            {t("submit")}
+          </SubmitButton>
+        </SafeForm>
       </Card>
     </main>
   );
