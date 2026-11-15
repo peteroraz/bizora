@@ -13,3 +13,6 @@ export function createPostgresDatabase(url: string, socketDir?: string) {
   });
   return { client, db: drizzle(client, { schema }) };
 }
+
+/** Anything that can run queries: the database or an open transaction. */
+export type DbExecutor = Pick<AppDatabase, "insert" | "update" | "select" | "delete" | "execute">;

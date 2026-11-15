@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { sha256Hex } from "@bizora/auth";
 import { enrollDeviceSchema, uuidSchema } from "@bizora/contracts";
-import { and, desc, eq, isNull, type SQL } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -52,8 +52,15 @@ export class ShopDeviceService {
     const token = randomBytes(32).toString("base64url");
     const id = newId();
     await this.db.transaction(async (tx) => {
+      // Lock the organization row so two enrolments cannot take the same device number.
+      await tx.execute(sql`SELECT id FROM organizations WHERE id = ${tenant.tenantId} FOR UPDATE`);
+      const [numbering] = await tx
+        .select({ next: sql<number>`coalesce(max(${shopDevices.code}), 0) + 1` })
+        .from(shopDevices)
+        .where(eq(shopDevices.tenantId, tenant.tenantId));
       await tx.insert(shopDevices).values({
         id,
+        code: Number(numbering?.next ?? 1),
         tenantId: tenant.tenantId,
         businessId: branch.businessId,
         branchId: branch.id,
@@ -186,6 +193,8 @@ export class ShopDeviceService {
     return {
       id: device.id,
       name: device.name,
+      /** Short device number for provisional document numbers, e.g. DEV3-000045. */
+      code: device.code,
       businessId: device.businessId,
       branchId: device.branchId,
       branchName: branchName ?? null,

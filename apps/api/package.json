@@ -19,6 +19,7 @@
     "@bizora/auth": "workspace:*",
     "@bizora/config": "workspace:*",
     "@bizora/contracts": "workspace:*",
+    "@bizora/money": "workspace:*",
     "@nestjs/common": "^11.1.2",
     "@nestjs/core": "^11.1.2",
     "@nestjs/platform-express": "^11.1.2",

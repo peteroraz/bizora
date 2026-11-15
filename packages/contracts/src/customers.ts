@@ -1,9 +1,15 @@
 import { z } from "zod";
+import { isUuidV7 } from "./ids.js";
 import { addressInputSchema } from "./address.js";
 
 export const CUSTOMER_PAGE_SIZE = 25;
 /** Maximum data rows in one customer CSV import (header row not counted). */
 export const CUSTOMER_IMPORT_MAX_ROWS = 2000;
+
+/** A device may choose the new customer's ID itself (UUIDv7), so it can refer to the customer while offline. */
+export const customerClientIdSchema = z.object({
+  id: z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.").optional(),
+});
 
 export const customerWriteSchema = z
   .object({

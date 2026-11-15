@@ -4,6 +4,7 @@ import type { AuthWorkspace } from "@bizora/contracts";
 import {
   Avatar,
   Badge,
+  Button,
   DropdownItem,
   DropdownLabel,
   DropdownMenu,
@@ -40,6 +41,8 @@ import { api } from "../../lib/api";
 import { setShopMode } from "../../lib/shop-mode";
 import { navAllowed } from "../../lib/access";
 import { AccessProvider } from "../../lib/access-context";
+import { dismissRejected, subscribe, summary } from "../../lib/offline/outbox";
+import { startBackgroundSync } from "../../lib/offline/sync";
 import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
@@ -74,6 +77,7 @@ export type ShellProfile = {
     deviceId?: string | null;
     /** Loaded from the database for this membership's role. */
     permissions?: string[];
+    membershipId?: string;
   };
   onboardingCompleted?: boolean;
   membership?: { businessId: string | null; branchId: string | null } | null;
@@ -109,10 +113,38 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   allowed.add("customers");
   allowed.add("settings");
   if (currentBusiness?.staffFeaturesEnabled === false) allowed.delete("staff");
+  const tenantId = profile.tenant?.tenantId;
+  const membershipId = profile.tenant?.membershipId;
   const access = useMemo(
-    () => ({ permissions: profile.tenant?.permissions ?? [], staffSession: Boolean(profile.tenant?.deviceId) }),
-    [profile.tenant?.permissions, profile.tenant?.deviceId],
+    () => ({
+      permissions: profile.tenant?.permissions ?? [],
+      staffSession: Boolean(profile.tenant?.deviceId),
+      owner: tenantId && membershipId ? { tenantId, membershipId } : null,
+    }),
+    [profile.tenant?.permissions, profile.tenant?.deviceId, tenantId, membershipId],
   );
+  const [outbox, setOutbox] = useState<{ pending: number; rejected: { id: string; error: { message: string } | null }[] }>({
+    pending: 0,
+    rejected: [],
+  });
+
+  // Send work saved offline whenever the device is online, and show what is still waiting.
+  useEffect(() => {
+    if (!tenantId || !membershipId) return;
+    const owner = { tenantId, membershipId };
+    const refresh = () => {
+      void summary(owner)
+        .then((next) => setOutbox({ pending: next.pending, rejected: next.rejected }))
+        .catch(() => undefined);
+    };
+    refresh();
+    const unsubscribe = subscribe(refresh);
+    const stop = startBackgroundSync(owner);
+    return () => {
+      unsubscribe();
+      stop();
+    };
+  }, [tenantId, membershipId]);
   const items = primaryNav.filter((item) => allowed.has(item.id) && navAllowed(access, item.id));
   const bottom = items.filter((item) => (bottomNav as readonly string[]).includes(item.id));
   const moreItems = items.filter((item) => !(bottomNav as readonly string[]).includes(item.id));
@@ -376,7 +408,27 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               {switchError}
             </p>
           ) : null}
+          {outbox.pending > 0 ? (
+            <Badge tone="warning" role="status">
+              {t("syncWaiting", { count: outbox.pending })}
+            </Badge>
+          ) : null}
         </header>
+        {outbox.rejected.length > 0 && access.owner ? (
+          <div className="flex flex-wrap items-start gap-3 border-b border-border bg-card px-4 py-3 text-sm" role="alert">
+            <div className="flex-1">
+              <p className="font-medium text-danger">{t("syncRejected", { count: outbox.rejected.length })}</p>
+              <ul className="mt-1 list-disc pl-5 text-muted">
+                {outbox.rejected.map((item) => (
+                  <li key={item.id}>{item.error?.message}</li>
+                ))}
+              </ul>
+            </div>
+            <Button variant="secondary" onClick={() => access.owner && void dismissRejected(access.owner)}>
+              {t("syncDismiss")}
+            </Button>
+          </div>
+        ) : null}
         {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email ? <EmailVerificationBanner /> : null}
         <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">
           <AccessProvider value={access}>{children}</AccessProvider>

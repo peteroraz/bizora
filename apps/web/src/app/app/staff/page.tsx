@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { FormEvent, useEffect, useState } from "react";
 import { RequireAccess } from "../../../components/require-access";
 import { api } from "../../../lib/api";
+import { clearDevice, summary } from "../../../lib/offline/outbox";
 
 type Staff = {
   id: string;
@@ -156,8 +157,17 @@ function StaffPageScreen() {
   }
 
   async function exitShopMode() {
+    // Work saved offline must reach the server before this device forgets it.
+    const waiting = (await summary()).devicePending;
+    if (waiting > 0) {
+      setError(t("exitWaiting", { count: waiting }));
+      return;
+    }
     const ok = await run(() => api("/api/v1/shop-devices/current/exit", { method: "POST" }), t("exited"));
-    if (ok) setThisDeviceEnrolled(false);
+    if (ok) {
+      await clearDevice().catch(() => undefined);
+      setThisDeviceEnrolled(false);
+    }
   }
 
   function roleLabel(role: string) {
