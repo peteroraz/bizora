@@ -1,11 +1,13 @@
 "use client";
 
-import { whatsAppHref } from "@bizora/contracts";
+import { Permission, whatsAppHref } from "@bizora/contracts";
 import { FormField, Input, PageHeader, SafeForm, Select, SubmitButton, Tab, TabPanel, TabsRoot, Textarea } from "@bizora/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { can } from "../../../../lib/access";
+import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { dayKey, formatWhen } from "../../../../i18n/format";
 
@@ -26,6 +28,9 @@ type Assignee = { membershipId: string; displayName: string | null; role: string
 export default function CustomerPage() {
   const params = useParams<{ id: string }>();
   const t = useTranslations("customers");
+  const access = useAccess();
+  const canManage = can(access, Permission.CUSTOMERS_MANAGE);
+  const canFollowUp = can(access, Permission.FOLLOWUPS_MANAGE);
   const followups = useTranslations("followups");
   const roles = useTranslations("roles");
   const common = useTranslations("common");
@@ -193,14 +198,16 @@ export default function CustomerPage() {
               </li>
             ))}
           </ul>
-          <SafeForm className="mt-4 space-y-3" pending={pending} onSubmit={addNote}>
-            <FormField id="note-body" label={t("noteLabel")}>
-              <Textarea id="note-body" value={note} onChange={(event) => setNote(event.target.value)} required />
-            </FormField>
-            <SubmitButton pending={pending} pendingLabel={t("saving")}>
-              {t("addNote")}
-            </SubmitButton>
-          </SafeForm>
+          {canManage ? (
+            <SafeForm className="mt-4 space-y-3" pending={pending} onSubmit={addNote}>
+              <FormField id="note-body" label={t("noteLabel")}>
+                <Textarea id="note-body" value={note} onChange={(event) => setNote(event.target.value)} required />
+              </FormField>
+              <SubmitButton pending={pending} pendingLabel={t("saving")}>
+                {t("addNote")}
+              </SubmitButton>
+            </SafeForm>
+          ) : null}
         </TabPanel>
         <TabPanel value="followups">
           {items.length === 0 ? <p className="text-sm text-muted">{followups("none")}</p> : null}
@@ -209,45 +216,49 @@ export default function CustomerPage() {
               <li key={item.id} className="rounded-card border border-border bg-card px-4 py-3 text-sm">
                 <p className="font-medium">{item.reason}</p>
                 <p className="text-muted">{formatWhen(item.dueAt, locale, timezone)}</p>
-                <div className="mt-2 flex gap-3">
-                  <button type="button" className="font-medium text-primary" disabled={pending} onClick={() => void updateFollowup(item.id, { status: "done" })}>
-                    {followups("done")}
-                  </button>
-                  <button
-                    type="button"
-                    className="font-medium text-primary"
-                    disabled={pending}
-                    onClick={() => void updateFollowup(item.id, { status: "snoozed", snoozeDays: 1 })}
-                  >
-                    {followups("snooze")}
-                  </button>
-                </div>
+                {canFollowUp ? (
+                  <div className="mt-2 flex gap-3">
+                    <button type="button" className="font-medium text-primary" disabled={pending} onClick={() => void updateFollowup(item.id, { status: "done" })}>
+                      {followups("done")}
+                    </button>
+                    <button
+                      type="button"
+                      className="font-medium text-primary"
+                      disabled={pending}
+                      onClick={() => void updateFollowup(item.id, { status: "snoozed", snoozeDays: 1 })}
+                    >
+                      {followups("snooze")}
+                    </button>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
-          <SafeForm className="mt-4 space-y-3" pending={pending} onSubmit={addFollowup}>
-            <FormField id="followup-reason" label={followups("reason")}>
-              <Input id="followup-reason" value={reason} onChange={(event) => setReason(event.target.value)} required />
-            </FormField>
-            <FormField id="followup-day" label={followups("day")}>
-              <Input id="followup-day" type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} required />
-            </FormField>
-            {assignees.length > 0 ? (
-              <FormField id="followup-assignee" label={followups("assignee")}>
-                <Select id="followup-assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-                  <option value="">{followups("assignee")}</option>
-                  {assignees.map((person) => (
-                    <option key={person.membershipId} value={person.membershipId}>
-                      {person.displayName} · {roles.has(person.role) ? roles(person.role) : person.role}
-                    </option>
-                  ))}
-                </Select>
+          {canFollowUp ? (
+            <SafeForm className="mt-4 space-y-3" pending={pending} onSubmit={addFollowup}>
+              <FormField id="followup-reason" label={followups("reason")}>
+                <Input id="followup-reason" value={reason} onChange={(event) => setReason(event.target.value)} required />
               </FormField>
-            ) : null}
-            <SubmitButton pending={pending} pendingLabel={followups("adding")}>
-              {followups("add")}
-            </SubmitButton>
-          </SafeForm>
+              <FormField id="followup-day" label={followups("day")}>
+                <Input id="followup-day" type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} required />
+              </FormField>
+              {assignees.length > 0 ? (
+                <FormField id="followup-assignee" label={followups("assignee")}>
+                  <Select id="followup-assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+                    <option value="">{followups("assignee")}</option>
+                    {assignees.map((person) => (
+                      <option key={person.membershipId} value={person.membershipId}>
+                        {person.displayName} · {roles.has(person.role) ? roles(person.role) : person.role}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+              ) : null}
+              <SubmitButton pending={pending} pendingLabel={followups("adding")}>
+                {followups("add")}
+              </SubmitButton>
+            </SafeForm>
+          ) : null}
         </TabPanel>
         <TabPanel value="purchases">
           <p className="text-sm text-muted">{t("purchasesBody")}</p>
@@ -256,11 +267,13 @@ export default function CustomerPage() {
           <p className="text-sm text-muted">{t("owesBody")}</p>
         </TabPanel>
       </TabsRoot>
-      <SafeForm pending={pending} onSubmit={remove}>
-        <SubmitButton pending={pending} pendingLabel={t("saving")} variant="danger">
-          {t("delete")}
-        </SubmitButton>
-      </SafeForm>
+      {canManage ? (
+        <SafeForm pending={pending} onSubmit={remove}>
+          <SubmitButton pending={pending} pendingLabel={t("saving")} variant="danger">
+            {t("delete")}
+          </SubmitButton>
+        </SafeForm>
+      ) : null}
       <Link href="/app/customers" className="inline-block text-sm font-medium text-primary">
         {t("back")}
       </Link>

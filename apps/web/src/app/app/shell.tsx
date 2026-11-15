@@ -33,11 +33,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { PIN_LOCKOUT } from "@bizora/contracts";
 import { api } from "../../lib/api";
 import { setShopMode } from "../../lib/shop-mode";
+import { navAllowed } from "../../lib/access";
+import { AccessProvider } from "../../lib/access-context";
 import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
@@ -70,6 +72,8 @@ export type ShellProfile = {
     branchId: string | null;
     /** Set when a shop staff member signed in with a PIN on an enrolled shop device. */
     deviceId?: string | null;
+    /** Loaded from the database for this membership's role. */
+    permissions?: string[];
   };
   onboardingCompleted?: boolean;
   membership?: { businessId: string | null; branchId: string | null } | null;
@@ -105,7 +109,11 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   allowed.add("customers");
   allowed.add("settings");
   if (currentBusiness?.staffFeaturesEnabled === false) allowed.delete("staff");
-  const items = primaryNav.filter((item) => allowed.has(item.id));
+  const access = useMemo(
+    () => ({ permissions: profile.tenant?.permissions ?? [], staffSession: Boolean(profile.tenant?.deviceId) }),
+    [profile.tenant?.permissions, profile.tenant?.deviceId],
+  );
+  const items = primaryNav.filter((item) => allowed.has(item.id) && navAllowed(access, item.id));
   const bottom = items.filter((item) => (bottomNav as readonly string[]).includes(item.id));
   const moreItems = items.filter((item) => !(bottomNav as readonly string[]).includes(item.id));
 
@@ -219,7 +227,11 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     );
   }
 
-  if (onboarding) return <div className="min-h-screen bg-bg">{children}</div>;
+  if (onboarding) return (
+      <div className="min-h-screen bg-bg">
+        <AccessProvider value={access}>{children}</AccessProvider>
+      </div>
+    );
 
   return (
     <div className={collapsed ? "min-h-screen md:grid md:grid-cols-[4.5rem_1fr]" : "min-h-screen md:grid md:grid-cols-[15rem_1fr]"}>
@@ -366,7 +378,9 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           ) : null}
         </header>
         {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email ? <EmailVerificationBanner /> : null}
-        <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">{children}</main>
+        <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">
+          <AccessProvider value={access}>{children}</AccessProvider>
+        </main>
         <nav
           className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-card md:hidden"
           style={{ gridTemplateColumns: `repeat(${bottom.length + 1}, minmax(0, 1fr))` }}

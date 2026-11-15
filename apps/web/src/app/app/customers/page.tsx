@@ -1,16 +1,19 @@
 "use client";
 
-import { CUSTOMER_PAGE_SIZE } from "@bizora/contracts";
+import { CUSTOMER_PAGE_SIZE, Permission } from "@bizora/contracts";
 import { EmptyState, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { can } from "../../../lib/access";
+import { useAccess } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 
 type Customer = { id: string; name: string; phoneE164: string | null; isWalkIn: boolean; email: string | null };
 
 export default function CustomersPage() {
   const t = useTranslations("customers");
+  const canManage = can(useAccess(), Permission.CUSTOMERS_MANAGE);
   const common = useTranslations("common");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -45,14 +48,16 @@ export default function CustomersPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          <div className="flex gap-3 text-sm font-medium">
-            <Link href="/app/customers/import" className="text-primary">
-              {t("import")}
-            </Link>
-            <Link href="/app/customers/new" className="text-primary">
-              {t("add")}
-            </Link>
-          </div>
+          canManage ? (
+            <div className="flex gap-3 text-sm font-medium">
+              <Link href="/app/customers/import" className="text-primary">
+                {t("import")}
+              </Link>
+              <Link href="/app/customers/new" className="text-primary">
+                {t("add")}
+              </Link>
+            </div>
+          ) : undefined
         }
       />
       <SafeForm
