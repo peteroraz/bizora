@@ -1,12 +1,9 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
 
-/** Header every offline-capable write carries. A retry with the same key returns the first result. */
-export const IDEMPOTENCY_HEADER = "idempotency-key";
-/** Response header set when the server returns a stored result instead of running the request again. */
-export const IDEMPOTENT_REPLAY_HEADER = "idempotent-replayed";
-/** How many operations one sync push may carry. */
-export const SYNC_MAX_BATCH = 50;
+import { SYNC_MAX_BATCH } from "./constants.js";
+
+export { IDEMPOTENCY_HEADER, IDEMPOTENT_REPLAY_HEADER, SYNC_MAX_BATCH } from "./constants.js";
 
 export const idempotencyKeySchema = z
   .string()
@@ -18,7 +15,7 @@ export const idempotencyKeySchema = z
 export const uuidV7Schema = z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.");
 
 /** Operation types the server accepts from a device outbox. Sprints 4 and 5 add stock and sales operations. */
-export const SYNC_OPERATION_TYPES = ["customer.create"] as const;
+export const SYNC_OPERATION_TYPES = ["customer.create", "stock.receive", "stock.count"] as const;
 export type SyncOperationType = (typeof SYNC_OPERATION_TYPES)[number];
 
 export const syncOperationSchema = z.object({

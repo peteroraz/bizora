@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   // Linux CI and Cloud Run images still emit the standalone output.
   output: process.platform === "win32" ? undefined : "standalone",
   transpilePackages: ["@bizora/ui", "@bizora/contracts"],
+  experimental: {
+    // Import only the components and contracts a page uses, not whole packages (Spec §8 JavaScript budget).
+    optimizePackageImports: ["@bizora/ui", "@bizora/contracts", "@bizora/money"],
+  },
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${apiOrigin}/api/:path*` },

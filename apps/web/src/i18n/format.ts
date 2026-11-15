@@ -1,4 +1,4 @@
-import { formatMoney } from "@bizora/money";
+import { formatMoney } from "@bizora/money/format";
 
 export function formatCount(value: number, locale: string) {
   return new Intl.NumberFormat(locale).format(value);

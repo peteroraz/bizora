@@ -11,8 +11,6 @@ export const STAFF_ROLES = ["SALES", "CASHIER", "INVENTORY", "EMPLOYEE"] as cons
 export const staffRoleSchema = z.enum(STAFF_ROLES);
 export type StaffRole = z.infer<typeof staffRoleSchema>;
 
-export const PIN_MIN_LENGTH = 4;
-export const PIN_MAX_LENGTH = 6;
 
 /** Rejects PINs that are trivially guessed: all the same digit, or straight runs like 1234 / 9876. */
 export function isWeakPin(pin: string): boolean {
@@ -52,13 +50,7 @@ export const pinLoginSchema = z.object({
 });
 
 /** Lockout policy (Addendum v1.2 §6). */
-export const PIN_LOCKOUT = {
-  staffFailures: 5,
-  staffLockMinutes: 15,
-  deviceFailures: 20,
-  deviceWindowHours: 24,
-  autoLockMinutesDefault: 5,
-} as const;
+export { PIN_LOCKOUT, PIN_MAX_LENGTH, PIN_MIN_LENGTH } from "./constants.js";
 
 export const planFeatureSchema = z.enum(["multi_currency", "whatsapp_automation", "advanced_reports", "ai", "integrations"]);
 export type PlanFeature = z.infer<typeof planFeatureSchema>;

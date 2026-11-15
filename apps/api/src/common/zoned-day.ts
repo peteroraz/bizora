@@ -50,3 +50,8 @@ export function zonedDayBounds(timeZone: string, now = new Date()) {
   const start = zonedDateTime(date, "00:00:00", timeZone);
   return { date, start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 }
+
+/** The calendar date (YYYY-MM-DD) at that moment in the business's timezone. */
+export function localDate(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}

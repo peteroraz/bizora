@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-import { ThemeProvider, ToastProvider, TooltipProvider, themeBootScript, themeColor, themeColorDark } from "@bizora/ui";
+import { ThemeProvider, ToastProvider, themeBootScript, themeColor, themeColorDark } from "@bizora/ui";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
@@ -34,9 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
-            <TooltipProvider>
-              <ToastProvider>{children}</ToastProvider>
-            </TooltipProvider>
+            <ToastProvider>{children}</ToastProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
         <script

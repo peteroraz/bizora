@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js"
     }
   },
   "scripts": {
@@ -23,5 +27,6 @@
     "eslint": "^9.28.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
-  }
+  },
+  "sideEffects": false
 }

@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./globals.css": "./src/globals.css"
+    "./globals.css": "./src/globals.css",
+    "./sheet": "./src/sheet.tsx",
+    "./dropdown-menu": "./src/dropdown-menu.tsx"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
@@ -40,5 +42,8 @@
     "eslint": "^9.28.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
-  }
+  },
+  "sideEffects": [
+    "*.css"
+  ]
 }

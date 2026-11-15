@@ -33,6 +33,8 @@ Only SALES, CASHIER, INVENTORY and EMPLOYEE can be created as PIN staff.
 | Storekeeper | Home, Stock, Reports (stock), Settings | Low stock | None |
 | Employee | Home, Settings | "Nothing to show yet" | None |
 
+On the Stock screens, everyone with `stock.read` sees quantities and selling prices. Costs and stock values appear only with `prices.cost.read`. A storekeeper records stock in as owed to the supplier (paying from cash or bank needs `purchases.manage`), and their counts wait for a manager's approval (ADR-014).
+
 Settings tabs follow the permissions too (`apps/web/src/lib/access.ts`). PIN staff see only Settings → Look.
 
 ## Data scope

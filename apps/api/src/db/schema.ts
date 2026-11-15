@@ -742,6 +742,172 @@ export const journalLines = pgTable(
   ],
 );
 
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    category: varchar("category", { length: 60 }),
+    baseUnit: varchar("base_unit", { length: 16 }).notNull(),
+    priceMinor: bigint("price_minor", { mode: "bigint" }),
+    defaultCostMinor: bigint("default_cost_minor", { mode: "bigint" }),
+    lowStockLevel: bigint("low_stock_level", { mode: "bigint" }),
+    barcode: varchar("barcode", { length: 64 }),
+    trackStock: boolean("track_stock").notNull().default(true),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("products_tenant_id_id_key").on(table.tenantId, table.id),
+    uniqueIndex("products_tenant_business_id_key").on(table.tenantId, table.businessId, table.id),
+    index("products_business_updated_idx").on(table.tenantId, table.businessId, table.updatedAt, table.id),
+    foreignKey({
+      name: "products_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+  ],
+);
+
+export const productUnits = pgTable(
+  "product_units",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    unitCode: varchar("unit_code", { length: 16 }).notNull(),
+    baseQuantity: bigint("base_quantity", { mode: "bigint" }).notNull(),
+    priceMinor: bigint("price_minor", { mode: "bigint" }),
+  },
+  (table) => [
+    uniqueIndex("product_units_product_unit_key").on(table.productId, table.unitCode),
+    foreignKey({
+      name: "product_units_product_fk",
+      columns: [table.tenantId, table.businessId, table.productId],
+      foreignColumns: [products.tenantId, products.businessId, products.id],
+    }),
+  ],
+);
+
+export const stockMovements = pgTable(
+  "stock_movements",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    movementType: varchar("movement_type", { length: 16 }).notNull(),
+    quantity: bigint("quantity", { mode: "bigint" }).notNull(),
+    valueMinor: bigint("value_minor", { mode: "bigint" }).notNull(),
+    enteredQuantity: bigint("entered_quantity", { mode: "bigint" }).notNull(),
+    enteredUnit: varchar("entered_unit", { length: 16 }).notNull(),
+    reason: varchar("reason", { length: 32 }),
+    note: varchar("note", { length: 240 }),
+    supplier: varchar("supplier", { length: 160 }),
+    paidFrom: varchar("paid_from", { length: 8 }),
+    documentNumber: varchar("document_number", { length: 24 }),
+    transferId: uuid("transfer_id"),
+    countId: uuid("count_id"),
+    journalEntryId: uuid("journal_entry_id"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    membershipId: uuid("membership_id"),
+    deviceId: uuid("device_id"),
+    actorType: varchar("actor_type", { length: 16 }).notNull().default("HUMAN"),
+  },
+  (table) => [
+    uniqueIndex("stock_movements_tenant_id_id_key").on(table.tenantId, table.id),
+    index("stock_movements_product_idx").on(table.tenantId, table.productId, table.createdAt),
+    index("stock_movements_branch_idx").on(table.tenantId, table.branchId, table.createdAt),
+    foreignKey({
+      name: "stock_movements_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "stock_movements_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "stock_movements_product_fk",
+      columns: [table.tenantId, table.businessId, table.productId],
+      foreignColumns: [products.tenantId, products.businessId, products.id],
+    }),
+  ],
+);
+
+export const stockBalances = pgTable(
+  "stock_balances",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    quantity: bigint("quantity", { mode: "bigint" }).notNull().default(0n),
+    valueMinor: bigint("value_minor", { mode: "bigint" }).notNull().default(0n),
+    negativeSince: timestamp("negative_since", { withTimezone: true }),
+    lastMovementAt: timestamp("last_movement_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.branchId, table.productId] }),
+    index("stock_balances_business_updated_idx").on(table.tenantId, table.businessId, table.updatedAt),
+    foreignKey({
+      name: "stock_balances_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "stock_balances_product_fk",
+      columns: [table.tenantId, table.businessId, table.productId],
+      foreignColumns: [products.tenantId, products.businessId, products.id],
+    }),
+  ],
+);
+
+export const stockCounts = pgTable(
+  "stock_counts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    countedQuantity: bigint("counted_quantity", { mode: "bigint" }).notNull(),
+    systemQuantity: bigint("system_quantity", { mode: "bigint" }).notNull(),
+    difference: bigint("difference", { mode: "bigint" }).notNull(),
+    status: varchar("status", { length: 10 }).notNull().default("pending"),
+    note: varchar("note", { length: 240 }),
+    countedBy: uuid("counted_by"),
+    countedMembershipId: uuid("counted_membership_id"),
+    deviceId: uuid("device_id"),
+    countedAt: timestamp("counted_at", { withTimezone: true }).notNull(),
+    decidedBy: uuid("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    movementId: uuid("movement_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("stock_counts_branch_status_idx").on(table.tenantId, table.branchId, table.status, table.countedAt),
+    foreignKey({
+      name: "stock_counts_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "stock_counts_product_fk",
+      columns: [table.tenantId, table.businessId, table.productId],
+      foreignColumns: [products.tenantId, products.businessId, products.id],
+    }),
+  ],
+);
+
 export const schema = {
   addresses,
   organizations,
@@ -774,6 +940,11 @@ export const schema = {
   ledgerPeriods,
   journalEntries,
   journalLines,
+  products,
+  productUnits,
+  stockMovements,
+  stockBalances,
+  stockCounts,
 };
 
 export type DatabaseSchema = typeof schema;

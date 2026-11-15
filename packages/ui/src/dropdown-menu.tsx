@@ -7,13 +7,16 @@ export function DropdownMenu({
   trigger,
   label,
   children,
+  defaultOpen,
 }: {
   trigger: ReactNode;
   label: string;
   children: ReactNode;
+  /** Open on first render, for menus whose code is loaded when first tapped. */
+  defaultOpen?: boolean;
 }) {
   return (
-    <Dropdown.Root>
+    <Dropdown.Root {...(defaultOpen ? { defaultOpen } : {})}>
       <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content

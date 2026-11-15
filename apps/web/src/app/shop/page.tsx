@@ -16,6 +16,7 @@ const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 
 export default function ShopModePage() {
   const t = useTranslations("shop");
+  const common = useTranslations("common");
   const roles = useTranslations("roles");
   const format = useFormatter();
   const hydrated = useHydrated();
@@ -91,7 +92,12 @@ export default function ShopModePage() {
   );
 
   if (status === "loading") {
-    return <main className="min-h-screen bg-bg" aria-busy="true" />;
+    // Something to paint at once on slow connections, instead of a blank screen (Spec §8 loading budget).
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4" aria-busy="true">
+        <p className="text-lg font-medium text-muted">{common("loading")}</p>
+      </main>
+    );
   }
 
   if (status === "off" || status === "suspended") {
