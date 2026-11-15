@@ -22,6 +22,7 @@ import {
   HandCoins,
   Home,
   IdCard,
+  Lock,
   LogOut,
   Menu,
   MoreHorizontal,
@@ -34,7 +35,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { PIN_LOCKOUT } from "@bizora/contracts";
 import { api } from "../../lib/api";
+import { setShopMode } from "../../lib/shop-mode";
 import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
@@ -58,13 +61,15 @@ export type ShellBusiness = {
 export type ShellBranch = { id: string; name: string; businessId: string };
 
 export type ShellProfile = {
-  user?: { displayName: string; email: string; emailVerifiedAt?: string | null } | null;
+  user?: { displayName: string; email: string | null; emailVerifiedAt?: string | null; kind?: string } | null;
   organization?: { name: string } | null;
   tenant?: {
     role: string;
     tenantId: string;
     businessId: string | null;
     branchId: string | null;
+    /** Set when a shop staff member signed in with a PIN on an enrolled shop device. */
+    deviceId?: string | null;
   };
   onboardingCompleted?: boolean;
   membership?: { businessId: string | null; branchId: string | null } | null;
@@ -159,10 +164,29 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     if (response.ok) window.location.assign("/app");
   }
 
+  const staffMode = Boolean(profile.tenant?.deviceId);
+
   async function logout() {
     await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" });
-    window.location.assign("/login");
+    window.location.assign(staffMode ? "/shop" : "/login");
   }
+
+  // Shop mode: lock back to the staff list after a few minutes without a tap or key press.
+  useEffect(() => {
+    if (!staffMode) return;
+    setShopMode(true);
+    let timer = window.setTimeout(() => void logout(), PIN_LOCKOUT.autoLockMinutesDefault * 60_000);
+    const reset = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void logout(), PIN_LOCKOUT.autoLockMinutesDefault * 60_000);
+    };
+    const events = ["pointerdown", "keydown", "touchstart", "scroll"] as const;
+    events.forEach((name) => window.addEventListener(name, reset, { passive: true }));
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((name) => window.removeEventListener(name, reset));
+    };
+  }, [staffMode]);
 
   function navigation(compact: boolean) {
     return (
@@ -238,7 +262,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           {profile.tenant?.role ? (
             <Badge className="border-primary bg-sidebar-active text-sidebar-active-fg">{roleLabel(profile.tenant.role)}</Badge>
           ) : null}
-          {profile.businesses.length > 0 ? (
+          {!staffMode && profile.businesses.length > 0 ? (
             <Select
               aria-label={t("business")}
               className="max-w-48"
@@ -252,7 +276,15 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               ))}
             </Select>
           ) : null}
-          {visibleBranches.length > 0 ? (
+          {staffMode ? (
+            <Badge tone="info">
+              {t("shopMode")}
+              {visibleBranches.find((branch) => branch.id === branchId)?.name
+                ? ` · ${visibleBranches.find((branch) => branch.id === branchId)?.name}`
+                : ""}
+            </Badge>
+          ) : null}
+          {!staffMode && visibleBranches.length > 0 ? (
             <Select
               aria-label={t("shop")}
               className="max-w-48"
@@ -267,7 +299,17 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               ))}
             </Select>
           ) : null}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {staffMode ? (
+              <button
+                type="button"
+                onClick={() => void logout()}
+                aria-label={t("lockLabel")}
+                className="inline-flex h-10 items-center gap-2 rounded-control border border-border px-3 text-sm font-medium"
+              >
+                <Lock className="h-4 w-4" aria-hidden="true" /> {t("lock")}
+              </button>
+            ) : null}
             <DropdownMenu
               label={t("account")}
               trigger={
@@ -287,7 +329,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                   {theme === choice ? t("currentSuffix") : ""}
                 </DropdownItem>
               ))}
-              {workspaces.length > 1 ? (
+              {!staffMode && workspaces.length > 1 ? (
                 <>
                   <DropdownLabel>{t("switchBusiness")}</DropdownLabel>
                   {workspaces.map((workspace) => {
@@ -311,7 +353,8 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               ) : null}
               <DropdownItem onSelect={() => void logout()}>
                 <span className="inline-flex items-center gap-2">
-                  <LogOut className="h-4 w-4" aria-hidden="true" /> {t("logout")}
+                  {staffMode ? <Lock className="h-4 w-4" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}{" "}
+                  {staffMode ? t("lock") : t("logout")}
                 </span>
               </DropdownItem>
             </DropdownMenu>
@@ -322,7 +365,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             </p>
           ) : null}
         </header>
-        {profile.user?.emailVerifiedAt === null ? <EmailVerificationBanner /> : null}
+        {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email ? <EmailVerificationBanner /> : null}
         <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">{children}</main>
         <nav
           className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-card md:hidden"

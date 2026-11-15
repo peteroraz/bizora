@@ -1,3 +1,4 @@
+import { EntitlementService } from "../entitlements/entitlement.service.js";
 import { Inject, Injectable } from "@nestjs/common";
 import { hashPassword, verifyPassword } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
@@ -27,7 +28,7 @@ import { SessionService, type IssuedTokens } from "./session.service.js";
 export type AuthMeta = { correlationId: string; ip?: string | null; userAgent?: string | null };
 
 export type AuthPayload = {
-  user: { id: string; email: string; displayName: string };
+  user: { id: string; email: string | null; displayName: string };
   needsWorkspaceSelection: boolean;
   needsOrganizationSetup: boolean;
   workspaces: WorkspaceOption[];
@@ -51,6 +52,7 @@ export class IdentityService {
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
+    @Inject(EntitlementService) private readonly entitlements: EntitlementService,
   ) {}
 
   async register(input: RegisterRequest, meta: AuthMeta): Promise<AuthPayload> {
@@ -87,6 +89,7 @@ export class IdentityService {
         createdBy: userId,
         updatedBy: userId,
       });
+      await this.entitlements.assignDefaultPlan(tenantId, tx);
       await tx.insert(businesses).values({
         id: businessId,
         tenantId,
@@ -172,18 +175,22 @@ export class IdentityService {
   async login(raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
     const payload = loginRequestSchema.parse(raw);
     const user = await this.findUserByEmail(payload.email);
-    if (!user?.passwordHash || !(await verifyPassword(user.passwordHash, payload.password))) {
+    if (!user?.passwordHash || user.kind !== "person" || !(await verifyPassword(user.passwordHash, payload.password))) {
       throw new ApiError("INVALID_CREDENTIALS", "Email or password is incorrect.", 401);
     }
     return this.establishSession(user, meta, "password");
   }
 
   async establishSession(
-    user: { id: string; email: string; displayName: string },
+    user: { id: string; email: string | null; displayName: string; kind?: string },
     meta: AuthMeta,
     method: "password" | "google",
     allowSetup = false,
   ): Promise<AuthPayload> {
+    // Shop staff (no email) only ever sign in with a PIN on an enrolled shop device.
+    if (user.kind === "staff" || !user.email) {
+      throw new ApiError("INVALID_CREDENTIALS", "This account signs in with a PIN on a shop device.", 401);
+    }
     const workspaces = await this.listWorkspaces(user.id);
     if (workspaces.length === 0) {
       if (!allowSetup) {
@@ -255,6 +262,11 @@ export class IdentityService {
 
   async selectContext(userId: string, sessionId: string, raw: unknown, meta: AuthMeta): Promise<AuthPayload> {
     const payload = selectContextRequestSchema.parse(raw);
+    // A staff PIN session is bound to its shop device; switching context must not mint an unbound session.
+    const actor = await this.findUserById(userId);
+    if (!actor || actor.kind !== "person") {
+      throw new ApiError("FORBIDDEN", "Shop staff cannot switch workspace.", 403);
+    }
     const membership = await this.tenants.findMembership(payload.organizationId, userId);
     if (!membership) {
       throw new ApiError("FORBIDDEN", "You cannot switch into that tenant.", 403);
@@ -310,7 +322,7 @@ export class IdentityService {
     });
   }
 
-  async refresh(rawToken: string, meta: AuthMeta) {
+  async refresh(rawToken: string, meta: AuthMeta & { deviceToken?: string | null }) {
     const tokens = await this.sessions.refresh(rawToken, meta);
     return tokens;
   }
@@ -324,6 +336,9 @@ export class IdentityService {
     const user = await this.findUserById(userId);
     if (!user) {
       throw new ApiError("INVALID_CREDENTIALS", "Current password is incorrect.", 401);
+    }
+    if (user.kind !== "person") {
+      throw new ApiError("FORBIDDEN", "Shop staff use a PIN. Ask the owner to reset it.", 403);
     }
     if (user.passwordHash) {
       if (!payload.currentPassword || !(await verifyPassword(user.passwordHash, payload.currentPassword))) {
@@ -347,6 +362,7 @@ export class IdentityService {
             email: user.email,
             displayName: user.displayName,
             emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+            kind: user.kind,
           }
         : null,
       organization,
@@ -404,6 +420,7 @@ export class IdentityService {
     const payload = createOrganizationSchema.parse(raw);
     const user = await this.findUserById(userId);
     if (!user) throw new ApiError("UNAUTHENTICATED", "User was not found.", 401);
+    if (user.kind !== "person") throw new ApiError("FORBIDDEN", "Shop staff cannot create a workspace.", 403);
     const existing = await this.listWorkspaces(userId);
     if (existing.length > 0) {
       throw new ApiError("WORKSPACE_EXISTS", "This account already belongs to a workspace.", 409);
@@ -424,6 +441,7 @@ export class IdentityService {
         createdBy: userId,
         updatedBy: userId,
       });
+      await this.entitlements.assignDefaultPlan(tenantId, tx);
       await tx.insert(businesses).values({
         id: businessId,
         tenantId,
@@ -528,6 +546,10 @@ export class IdentityService {
   }
 
   async linkIdentity(userId: string, profile: OauthProfile, meta: AuthMeta) {
+    const owner = await this.findUserById(userId);
+    if (!owner || owner.kind !== "person") {
+      throw new ApiError("FORBIDDEN", "Shop staff sign in with a PIN only.", 403);
+    }
     if (!profile.emailVerified) {
       throw new ApiError("OAUTH_REJECTED", "That provider did not confirm the email address.", 400);
     }
@@ -603,7 +625,7 @@ export class IdentityService {
 
   private async issueWorkspaceSession(input: {
     userId: string;
-    email: string;
+    email: string | null;
     displayName: string;
     tenantId: string;
     businessId: string | null;

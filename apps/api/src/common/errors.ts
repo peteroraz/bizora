@@ -72,6 +72,26 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       return;
     }
 
+    // Errors raised by the JSON body parser (too large, malformed) carry a 4xx status and `expose`.
+    const parserError = exception as { status?: unknown; expose?: unknown; type?: unknown };
+    if (
+      typeof parserError?.status === "number" &&
+      parserError.status >= 400 &&
+      parserError.status < 500 &&
+      parserError.expose === true
+    ) {
+      const tooLarge = parserError.type === "entity.too.large";
+      response.status(parserError.status).json({
+        error: {
+          code: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_REQUEST_BODY",
+          message: tooLarge ? "The request is too large." : "The request body could not be read.",
+          fieldErrors: [],
+          correlationId,
+        },
+      });
+      return;
+    }
+
     console.error(exception);
 
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({

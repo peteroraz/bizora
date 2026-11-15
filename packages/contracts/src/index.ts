@@ -4,11 +4,29 @@ import { passwordSchema } from "./password.js";
 import { businessTypeSchema, staffCountBandSchema, traderModuleSchema } from "./trader.js";
 
 export { passwordRules, passwordSchema } from "./password.js";
+export {
+  PIN_LOCKOUT,
+  PIN_MAX_LENGTH,
+  PIN_MIN_LENGTH,
+  STAFF_ROLES,
+  createStaffSchema,
+  enrollDeviceSchema,
+  isWeakPin,
+  pinLoginSchema,
+  pinSchema,
+  planFeatureSchema,
+  planLimitSchema,
+  planLimitsSchema,
+  resetStaffPinSchema,
+  staffRoleSchema,
+} from "./staff.js";
+export type { PlanFeature, PlanLimit, PlanLimits, StaffRole } from "./staff.js";
 
 export { addressInputSchema, countryRule, formatAddressDisplay, optionalPhoneSchema, phoneE164Schema } from "./address.js";
 export type { AddressDisplay, AddressInput } from "./address.js";
 export { normalizePhoneToE164, whatsAppHref } from "./phone.js";
 export {
+  CUSTOMER_IMPORT_MAX_ROWS,
   CUSTOMER_PAGE_SIZE,
   customerImportSchema,
   customerNoteSchema,
@@ -60,7 +78,7 @@ export function isHigherPrivilege(candidate: Role, actor: Role): boolean {
   return ROLE_RANK[candidate] < ROLE_RANK[actor];
 }
 
-export const actorTypeSchema = z.enum(["HUMAN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW"]);
+export const actorTypeSchema = z.enum(["HUMAN", "STAFF_PIN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW"]);
 export type ActorType = z.infer<typeof actorTypeSchema>;
 
 export const uuidSchema = z.string().uuid();
@@ -211,6 +229,10 @@ export const Permission = {
   CUSTOMERS_READ: "customers.read",
   CUSTOMERS_MANAGE: "customers.manage",
   FOLLOWUPS_MANAGE: "followups.manage",
+  PRICES_COST_READ: "prices.cost.read",
+  REPORTS_PROFIT_READ: "reports.profit.read",
+  STAFF_MANAGE: "staff.manage",
+  DEVICES_MANAGE: "devices.manage",
 } as const;
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission];

@@ -73,7 +73,7 @@ export class IdentityController {
     if (!token) {
       throw new ApiError("UNAUTHENTICATED", "Refresh token is required.", 401);
     }
-    const tokens = await this.identity.refresh(token, this.meta(req));
+    const tokens = await this.identity.refresh(token, { ...this.meta(req), deviceToken: this.sessions.readDeviceToken(req) });
     this.writeCookies(res, tokens.accessToken, tokens.refreshToken);
     return success(tokens, req.correlationId ?? "unknown");
   }

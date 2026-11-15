@@ -28,6 +28,8 @@ const env: AppEnv = {
   THROTTLE_AUTH_LIMIT: 100,
   INVITE_TOKEN_EXPOSE: true,
   TRUST_PROXY: true,
+  // These tests create several shops and invite several people; plan limits are tested in staff-devices.test.ts.
+  DEFAULT_PLAN_CODE: "business",
 };
 
 function decode(token: string) {

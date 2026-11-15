@@ -12,6 +12,7 @@ import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { RbacModule } from "./modules/rbac/rbac.module.js";
 import { ReferenceModule } from "./modules/reference/reference.module.js";
+import { StaffModule } from "./modules/staff/staff.module.js";
 import { TenantModule } from "./modules/tenant/tenant.module.js";
 
 export type AppModuleOptions = {
@@ -44,6 +45,7 @@ export class AppModule {
         ReferenceModule,
         AddressModule,
         CustomersModule,
+        StaffModule,
       ],
     };
   }

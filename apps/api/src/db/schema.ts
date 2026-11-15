@@ -93,14 +93,27 @@ export const organizations = pgTable(
   ],
 );
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey(),
-  email: varchar("email", { length: 320 }).notNull().unique(),
-  passwordHash: varchar("password_hash", { length: 255 }),
-  displayName: varchar("display_name", { length: 120 }).notNull(),
-  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
-  ...timestamps,
-});
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey(),
+    // Null only for staff users (kind = 'staff'), who sign in with a PIN on an enrolled shop device.
+    email: varchar("email", { length: 320 }).unique(),
+    passwordHash: varchar("password_hash", { length: 255 }),
+    displayName: varchar("display_name", { length: 120 }).notNull(),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    kind: varchar("kind", { length: 16 }).notNull().default("person"),
+    ...timestamps,
+  },
+  (table) => [
+    check("users_kind_ck", sql`${table.kind} IN ('person', 'staff')`),
+    check("users_person_email_ck", sql`${table.kind} = 'staff' OR ${table.email} IS NOT NULL`),
+    check(
+      "users_staff_no_credentials_ck",
+      sql`${table.kind} = 'person' OR (${table.email} IS NULL AND ${table.passwordHash} IS NULL)`,
+    ),
+  ],
+);
 
 export const userIdentities = pgTable(
   "user_identities",
@@ -207,6 +220,7 @@ export const memberships = pgTable(
     businessId: uuid("business_id"),
     branchId: uuid("branch_id"),
     status: varchar("status", { length: 24 }).notNull().default("ACTIVE"),
+    phoneE164: varchar("phone_e164", { length: 20 }),
     ...timestamps,
   },
   (table) => [
@@ -285,6 +299,106 @@ export const invitations = pgTable(
   ],
 );
 
+
+export const shopDevices = pgTable(
+  "shop_devices",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    attemptsResetAt: timestamp("attempts_reset_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("shop_devices_tenant_id_id_key").on(table.tenantId, table.id),
+    index("shop_devices_tenant_branch_idx").on(table.tenantId, table.branchId),
+    foreignKey({
+      name: "shop_devices_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "shop_devices_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+  ],
+);
+
+export const staffCredentials = pgTable(
+  "staff_credentials",
+  {
+    membershipId: uuid("membership_id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    pinHash: varchar("pin_hash", { length: 255 }).notNull(),
+    pinUpdatedAt: timestamp("pin_updated_at", { withTimezone: true }).notNull().defaultNow(),
+    attemptsResetAt: timestamp("attempts_reset_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "staff_credentials_membership_fk",
+      columns: [table.tenantId, table.membershipId],
+      foreignColumns: [memberships.tenantId, memberships.id],
+    }),
+  ],
+);
+
+export const staffPinAttempts = pgTable(
+  "staff_pin_attempts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    deviceId: uuid("device_id").notNull(),
+    membershipId: uuid("membership_id"),
+    succeeded: boolean("succeeded").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("staff_pin_attempts_device_member_idx").on(table.deviceId, table.membershipId, table.createdAt),
+    index("staff_pin_attempts_device_idx").on(table.deviceId, table.createdAt),
+    foreignKey({
+      name: "staff_pin_attempts_device_fk",
+      columns: [table.tenantId, table.deviceId],
+      foreignColumns: [shopDevices.tenantId, shopDevices.id],
+    }),
+    foreignKey({
+      name: "staff_pin_attempts_membership_fk",
+      columns: [table.tenantId, table.membershipId],
+      foreignColumns: [memberships.tenantId, memberships.id],
+    }),
+  ],
+);
+
+export const plans = pgTable("plans", {
+  code: varchar("code", { length: 32 }).primaryKey(),
+  name: varchar("name", { length: 80 }).notNull(),
+  limits: jsonb("limits").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const organizationPlans = pgTable("organization_plans", {
+  tenantId: uuid("tenant_id")
+    .primaryKey()
+    .references(() => organizations.id),
+  planCode: varchar("plan_code", { length: 32 })
+    .notNull()
+    .references(() => plans.code),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const sessions = pgTable(
   "sessions",
   {
@@ -303,6 +417,7 @@ export const sessions = pgTable(
     replacedBy: uuid("replaced_by"),
     userAgent: varchar("user_agent", { length: 512 }),
     ip: varchar("ip", { length: 64 }),
+    deviceId: uuid("device_id"),
   },
   (table) => [
     index("sessions_user_id_idx").on(table.userId),
@@ -322,6 +437,12 @@ export const sessions = pgTable(
       columns: [table.tenantId, table.membershipId],
       foreignColumns: [memberships.tenantId, memberships.id],
     }),
+    foreignKey({
+      name: "sessions_tenant_device_fk",
+      columns: [table.tenantId, table.deviceId],
+      foreignColumns: [shopDevices.tenantId, shopDevices.id],
+    }),
+    index("sessions_device_id_idx").on(table.deviceId),
     check("sessions_scope_ck", sql`${table.branchId} IS NULL OR ${table.businessId} IS NOT NULL`),
   ],
 );
@@ -478,6 +599,11 @@ export const schema = {
   customers,
   customerNotes,
   customerFollowups,
+  shopDevices,
+  staffCredentials,
+  staffPinAttempts,
+  plans,
+  organizationPlans,
 };
 
 export type DatabaseSchema = typeof schema;

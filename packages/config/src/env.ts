@@ -54,6 +54,10 @@ const envSchema = z
     THROTTLE_AUTH_LIMIT: z.coerce.number().int().positive().default(20),
     INVITE_TOKEN_EXPOSE: booleanFromEnv,
     TRUST_PROXY: booleanFromEnv,
+    // Plan given to new organizations (Addendum v1.2 §12). Must match a row in the plans table.
+    DEFAULT_PLAN_CODE: z.enum(["starter", "business"]).optional(),
+    // Lifetime of a staff PIN session's refresh token on a shop device.
+    STAFF_SESSION_TTL: z.string().default("12h"),
     EMAIL_PROVIDER: z.enum(["console", "resend"]).default("console"),
     EMAIL_API_KEY: optionalText,
     EMAIL_FROM: optionalText,
@@ -90,6 +94,8 @@ export type AppEnv = Omit<
   | "GOOGLE_OAUTH_CLIENT_ID"
   | "GOOGLE_OAUTH_CLIENT_SECRET"
   | "GOOGLE_OAUTH_ISSUER"
+  | "DEFAULT_PLAN_CODE"
+  | "STAFF_SESSION_TTL"
 > & {
   COOKIE_SECURE: boolean;
   INVITE_TOKEN_EXPOSE: boolean;
@@ -102,6 +108,8 @@ export type AppEnv = Omit<
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_ISSUER?: string;
+  DEFAULT_PLAN_CODE?: "starter" | "business";
+  STAFF_SESSION_TTL?: string;
 };
 
 export function publicWebOrigin(env: { PUBLIC_WEB_ORIGIN?: string; WEB_ORIGIN: string }): string {

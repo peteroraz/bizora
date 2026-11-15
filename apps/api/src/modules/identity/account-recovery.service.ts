@@ -49,7 +49,7 @@ export class AccountRecoveryService {
 
   async resendVerification(userId: string): Promise<typeof accepted> {
     const user = await this.findUser(userId);
-    if (user && !user.emailVerifiedAt) await this.sendVerification(user.id, user.email);
+    if (user?.email && !user.emailVerifiedAt) await this.sendVerification(user.id, user.email);
     return accepted;
   }
 
@@ -76,7 +76,7 @@ export class AccountRecoveryService {
     const payload = forgotPasswordSchema.parse(raw);
     const email = payload.email.toLowerCase();
     const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (!user) return accepted;
+    if (!user?.email || user.kind !== "person") return accepted;
     try {
       const token = await this.tokens.issue(user.id, "password_reset", resetTtlMs);
       const link = `${publicWebOrigin(this.env)}/reset-password?token=${encodeURIComponent(token)}`;

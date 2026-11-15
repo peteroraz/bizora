@@ -13,7 +13,6 @@ export default async function ComingSoonPage({ params }: { params: Promise<{ mod
     stock: { title: t("stockTitle"), body: t("stockBody") },
     debtors: { title: t("debtorsTitle"), body: t("debtorsBody") },
     money: { title: t("moneyTitle"), body: t("moneyBody") },
-    staff: { title: t("staffTitle"), body: t("staffBody") },
     reports: { title: t("reportsTitle"), body: t("reportsBody") },
   }[key];
   return <EmptyState title={copy.title} description={copy.body} action={<Badge tone="info">{t("badge")}</Badge>} />;

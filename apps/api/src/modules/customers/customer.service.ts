@@ -11,7 +11,7 @@ import {
   normalizePhoneToE164,
   parseCustomerCsv,
 } from "@bizora/contracts";
-import { and, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -453,21 +453,32 @@ export class CustomerService {
       action: "create" | "update" | "error";
       errors: string[];
     }> = [];
-    for (const row of parsed.rows) {
+    const normalized = parsed.rows.map((row) => ({
+      row,
+      phoneE164: row.phone ? normalizePhoneToE164(row.phone, country) : null,
+    }));
+    // One lookup for every phone in the file instead of one query per row.
+    const existingByPhone = await this.findPhones(
+      tenant.tenantId,
+      business.id,
+      normalized.flatMap((item) => (item.phoneE164 ? [item.phoneE164] : [])),
+    );
+    const seenInFile = new Set<string>();
+    for (const { row, phoneE164 } of normalized) {
       const errors: string[] = [];
       if (!row.name) errors.push("Name is required.");
       if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push("Email is not valid.");
-      const phoneE164 = row.phone ? normalizePhoneToE164(row.phone, country) : null;
       if (!phoneE164) errors.push("Phone could not be read as a number for this country.");
       let action: "create" | "update" | "error" = errors.length > 0 ? "error" : "create";
       if (phoneE164 && errors.length === 0) {
-        const existing = await this.findPhone(tenant.tenantId, business.id, phoneE164);
+        const existing = existingByPhone.get(phoneE164);
         if (existing && tenant.membershipBranchId && existing.branchId !== tenant.membershipBranchId) {
           errors.push("This phone is already used in another shop.");
           action = "error";
-        } else if (existing) {
+        } else if (existing || seenInFile.has(phoneE164)) {
           action = "update";
         }
+        seenInFile.add(phoneE164);
       }
       preview.push({ ...row, phoneE164, action, errors });
     }
@@ -476,9 +487,15 @@ export class CustomerService {
     if (payload.commit) {
       const branch = await this.resolveBranch(tenant, business.id, tenant.branchId ?? undefined);
       await this.db.transaction(async (tx) => {
+        const known = await this.findPhones(
+          tenant.tenantId,
+          business.id,
+          preview.flatMap((row) => (row.action !== "error" && row.phoneE164 ? [row.phoneE164] : [])),
+          tx,
+        );
         for (const row of preview) {
           if (row.action === "error" || !row.phoneE164) continue;
-          const existing = await this.findPhone(tenant.tenantId, business.id, row.phoneE164, tx);
+          const existing = known.get(row.phoneE164) ?? null;
           if (existing && tenant.membershipBranchId && existing.branchId !== tenant.membershipBranchId) continue;
           if (existing) {
             await tx
@@ -504,20 +521,25 @@ export class CustomerService {
             updated += 1;
           } else {
             const id = newId();
-            await tx.insert(customers).values({
-              id,
-              tenantId: tenant.tenantId,
-              businessId: business.id,
-              branchId: branch.id,
-              name: row.name,
-              phoneE164: row.phoneE164,
-              isWalkIn: false,
-              email: row.email || null,
-              tags: [],
-              notesSummary: row.notes || null,
-              createdBy: tenant.userId,
-              updatedBy: tenant.userId,
-            });
+            const [inserted] = await tx
+              .insert(customers)
+              .values({
+                id,
+                tenantId: tenant.tenantId,
+                businessId: business.id,
+                branchId: branch.id,
+                name: row.name,
+                phoneE164: row.phoneE164,
+                isWalkIn: false,
+                email: row.email || null,
+                tags: [],
+                notesSummary: row.notes || null,
+                createdBy: tenant.userId,
+                updatedBy: tenant.userId,
+              })
+              .returning();
+            // A later row in the same file with this phone updates the customer just created.
+            if (inserted) known.set(row.phoneE164, inserted);
             if (row.notes) {
               await tx.insert(customerNotes).values({
                 id: newId(),
@@ -673,6 +695,29 @@ export class CustomerService {
         { field: "customerId", message: existing.id },
       ]);
     }
+  }
+
+  private async findPhones(
+    tenantId: string,
+    businessId: string,
+    phones: string[],
+    store: Pick<AppDatabase, "select"> = this.db,
+  ) {
+    const found = new Map<string, typeof customers.$inferSelect>();
+    const unique = [...new Set(phones)];
+    for (let start = 0; start < unique.length; start += 500) {
+      const chunk = unique.slice(start, start + 500);
+      const rows = await store
+        .select()
+        .from(customers)
+        .where(
+          and(eq(customers.tenantId, tenantId), eq(customers.businessId, businessId), inArray(customers.phoneE164, chunk)),
+        );
+      for (const row of rows) {
+        if (row.phoneE164 && !found.has(row.phoneE164)) found.set(row.phoneE164, row);
+      }
+    }
+    return found;
   }
 
   private async findPhone(
