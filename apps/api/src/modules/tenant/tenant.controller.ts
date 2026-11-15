@@ -1,3 +1,4 @@
+import { EntitlementService } from "../entitlements/entitlement.service.js";
 import { Body, Controller, Get, Inject, Param, Patch, Post, Put, UseGuards } from "@nestjs/common";
 import { Permission, createBranchSchema, success } from "@bizora/contracts";
 import { isBranchScope } from "../../common/tenant-scope.js";
@@ -19,6 +20,7 @@ export class TenantController {
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
     @Inject(OnboardingService) private readonly onboarding: OnboardingService,
     @Inject(DB) private readonly db: AppDatabase,
+    @Inject(EntitlementService) private readonly entitlements: EntitlementService,
   ) {}
 
   @Get("catalogs/country-packs")
@@ -163,6 +165,7 @@ export class TenantController {
     if (!business) {
       throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
     }
+    await this.entitlements.assertWithinLimit(tenant.tenantId, "max_branches");
     const id = newId();
     await this.db.insert(branches).values({
       id,

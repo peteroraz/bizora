@@ -12,6 +12,10 @@ export type TenantContext = {
   role: Role;
   permissions: PermissionCode[];
   correlationId: string;
+  /** Shop device for staff PIN sessions; null for normal sign-in. */
+  deviceId?: string | null;
+  /** STAFF_PIN for staff PIN sessions (used in audit events). */
+  actorType?: "HUMAN" | "STAFF_PIN";
 };
 
 export const TENANT_CONTEXT_KEY = "tenantContext";

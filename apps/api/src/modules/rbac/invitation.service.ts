@@ -1,3 +1,4 @@
+import { EntitlementService } from "../entitlements/entitlement.service.js";
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { hashPassword, sha256Hex } from "@bizora/auth";
@@ -32,6 +33,7 @@ export class InvitationService {
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
     @Inject(EMAIL) private readonly email: EmailPort,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(EntitlementService) private readonly entitlements: EntitlementService,
   ) {}
 
   async invite(tenant: TenantContext, raw: unknown) {
@@ -63,6 +65,7 @@ export class InvitationService {
     if (pending) {
       throw new ApiError("DUPLICATE_INVITATION", "A pending invitation already exists for that email.", 409);
     }
+    await this.entitlements.assertWithinLimit(tenant.tenantId, "max_staff");
 
     const token = randomBytes(32).toString("base64url");
     const id = newId();

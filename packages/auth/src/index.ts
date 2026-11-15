@@ -5,6 +5,8 @@ import { accessTokenClaimsSchema, type AccessTokenClaims } from "@bizora/contrac
 
 export const SESSION_COOKIE = "bizora_session";
 export const REFRESH_COOKIE = "bizora_refresh";
+/** httpOnly cookie that identifies an enrolled shop device (Addendum v1.2 §6). */
+export const DEVICE_COOKIE = "bizora_device";
 
 export type { AccessTokenClaims };
 

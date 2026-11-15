@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  DEVICE_COOKIE,
   REFRESH_COOKIE,
   SESSION_COOKIE,
   newRefreshToken,
@@ -18,7 +19,7 @@ import type { Request } from "express";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
-import { sessions } from "../../db/schema.js";
+import { sessions, shopDevices } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
 
 export type IssuedTokens = {
@@ -45,11 +46,13 @@ export class SessionService {
     familyId?: string;
     userAgent?: string | null;
     ip?: string | null;
+    /** Set for staff PIN sessions: the session only works together with that device's cookie. */
+    deviceId?: string | null;
   }): Promise<IssuedTokens> {
     const sessionId = newId();
     const familyId = input.familyId ?? newId();
     const refreshToken = newRefreshToken();
-    const expiresAt = new Date(Date.now() + ttlToMs(this.env.JWT_REFRESH_TTL));
+    const expiresAt = new Date(Date.now() + this.refreshTtlMs(input.deviceId ?? null));
     await this.db.insert(sessions).values({
       id: sessionId,
       userId: input.userId,
@@ -62,6 +65,7 @@ export class SessionService {
       expiresAt,
       userAgent: input.userAgent ?? null,
       ip: input.ip ?? null,
+      deviceId: input.deviceId ?? null,
     });
     const accessToken = await signAccessToken(
       {
@@ -100,6 +104,14 @@ export class SessionService {
       .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), ne(sessions.id, sessionId)));
   }
 
+  /** Revoke every live session created on a shop device (device revoked or suspended). */
+  async revokeAllForDevice(deviceId: string) {
+    await this.db
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.revokedAt)));
+  }
+
   async revoke(sessionId: string, userId: string) {
     await this.db
       .update(sessions)
@@ -107,11 +119,17 @@ export class SessionService {
       .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt)));
   }
 
-  async refresh(rawToken: string, meta?: { userAgent?: string | null; ip?: string | null }): Promise<IssuedTokens> {
+  async refresh(
+    rawToken: string,
+    meta?: { userAgent?: string | null; ip?: string | null; deviceToken?: string | null },
+  ): Promise<IssuedTokens> {
     const hash = sha256Hex(rawToken);
     const [current] = await this.db.select().from(sessions).where(eq(sessions.refreshTokenHash, hash)).limit(1);
     if (!current) {
       throw new ApiError("UNAUTHENTICATED", "Refresh token is invalid.", 401);
+    }
+    if (current.deviceId) {
+      await this.assertDeviceBinding(current.deviceId, current.tenantId, meta?.deviceToken ?? null);
     }
     if (current.revokedAt) {
       await this.db
@@ -144,9 +162,10 @@ export class SessionService {
         branchId: current.branchId,
         refreshTokenHash: sha256Hex(refreshToken),
         familyId: current.familyId,
-        expiresAt: new Date(Date.now() + ttlToMs(this.env.JWT_REFRESH_TTL)),
+        expiresAt: new Date(Date.now() + this.refreshTtlMs(current.deviceId)),
         userAgent: meta?.userAgent ?? current.userAgent,
         ip: meta?.ip ?? current.ip,
+        deviceId: current.deviceId,
       });
       return row;
     });
@@ -193,7 +212,36 @@ export class SessionService {
     if (!session || session.revokedAt) {
       throw new ApiError("UNAUTHENTICATED", "Session is no longer valid.", 401);
     }
+    if (session.deviceId) {
+      await this.assertDeviceBinding(session.deviceId, session.tenantId, this.readDeviceToken(request));
+    }
     return { claims, userId: claims.sub, sessionId: session.id, session };
+  }
+
+  /**
+   * A staff PIN session is only valid on the shop device it was created on: the request must carry
+   * that device's cookie, and the device must not be revoked or suspended.
+   */
+  async assertDeviceBinding(deviceId: string, tenantId: string | null, deviceToken: string | null) {
+    if (!deviceToken || !tenantId) {
+      throw new ApiError("UNAUTHENTICATED", "This session only works on its shop device.", 401);
+    }
+    const [device] = await this.db
+      .select()
+      .from(shopDevices)
+      .where(and(eq(shopDevices.id, deviceId), eq(shopDevices.tenantId, tenantId)))
+      .limit(1);
+    if (!device || device.tokenHash !== sha256Hex(deviceToken) || device.revokedAt || device.suspendedAt) {
+      throw new ApiError("UNAUTHENTICATED", "This shop device is no longer allowed.", 401);
+    }
+  }
+
+  readDeviceToken(request: Request) {
+    return readCookieValue(request.headers.cookie, DEVICE_COOKIE);
+  }
+
+  private refreshTtlMs(deviceId: string | null) {
+    return ttlToMs(deviceId ? (this.env.STAFF_SESSION_TTL ?? "12h") : this.env.JWT_REFRESH_TTL);
   }
 
   readAccessToken(request: Request) {

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { addressInputSchema } from "./address.js";
 
 export const CUSTOMER_PAGE_SIZE = 25;
+/** Maximum data rows in one customer CSV import (header row not counted). */
+export const CUSTOMER_IMPORT_MAX_ROWS = 2000;
 
 export const customerWriteSchema = z
   .object({
@@ -93,6 +95,13 @@ export function parseCustomerCsv(text: string): { headers: string[]; rows: CsvRo
       email: (cells[emailIndex] ?? "").trim(),
       notes: (cells[notesIndex] ?? "").trim(),
     });
+  }
+  if (rows.length > CUSTOMER_IMPORT_MAX_ROWS) {
+    return {
+      headers,
+      rows: [],
+      error: `The file has ${rows.length} rows. Import at most ${CUSTOMER_IMPORT_MAX_ROWS} rows at a time; split the file and import each part.`,
+    };
   }
   return { headers, rows };
 }

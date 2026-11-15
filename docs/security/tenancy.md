@@ -33,6 +33,10 @@ Switching to an organization without an active membership returns 403.
 - Protected routes load membership from the database. JWT `role` is never trusted for authorization.
 - Password reset revokes every session for that user. Google sign-in reuses this same session issuance. A verified provider sign-in that matches an unverified password account also revokes every session and clears that password. See `docs/adr/ADR-008-oidc-sign-in.md` and `docs/adr/ADR-009-sign-in-providers.md`.
 
+## Shop staff sessions
+
+Staff without email sign in with a PIN, only on a shop device enrolled by an owner or manager. The session is bound to that device through the httpOnly `bizora_device` cookie and is re-checked on every request and refresh. Removing or suspending the device ends its sessions. See `docs/adr/ADR-010-staff-pin-devices-and-plans.md` and `docs/security/roles.md`.
+
 ## Invite lifecycle
 
 Pending invites are unique per tenant+email. Accept is a single `PENDING` → `ACCEPTED` update. Revoke and resend exist. Tokens appear in API responses only when `INVITE_TOKEN_EXPOSE=true`. The accept link is always included in the invitation email.

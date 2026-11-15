@@ -385,7 +385,11 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
 - Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
-- CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.
+- Catalog, sales, payments, inventory, and Ask Zora are not implemented.
+- There is no billing. Every organization starts on the `starter` plan (1 branch, 2 staff, 2 shop devices). To move one to `business`, run in Cloud SQL Studio: `UPDATE organization_plans SET plan_code = 'business' WHERE tenant_id = '<organization id>';`. `DEFAULT_PLAN_CODE` changes the plan given to new organizations only.
+- Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
+- Shop staff auto-lock after 5 minutes without input in the browser. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`).
+- Customer CSV import takes at most 2,000 rows and 1.5 MB per file.
 
 ## What CI checks
 

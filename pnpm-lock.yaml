@@ -50,6 +50,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.4(@electric-sql/pglite@0.3.16)(postgres@3.4.9)
+      express:
+        specifier: 5.2.1
+        version: 5.2.1
       jose:
         specifier: ^6.2.17
         version: 6.2.17

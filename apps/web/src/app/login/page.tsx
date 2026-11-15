@@ -7,6 +7,7 @@ import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
 import { PublicFooter } from "../../components/public-footer";
+import { safeReturnTo } from "../../lib/shop-mode";
 
 function LoginForm() {
   const t = useTranslations("login");
@@ -53,7 +54,7 @@ function LoginForm() {
       return;
     }
     const me = await fetch("/api/v1/auth/me", { credentials: "include" }).then((result) => result.json());
-    router.push(me.data?.onboardingCompleted === false ? "/app/onboarding" : "/app");
+    router.push(me.data?.onboardingCompleted === false ? "/app/onboarding" : (safeReturnTo(params.get("returnTo")) ?? "/app"));
   }
 
   return (
@@ -78,6 +79,11 @@ function LoginForm() {
         <p className="mt-4 text-sm">
           <Link href="/forgot-password" className="font-medium text-primary">
             {t("forgot")}
+          </Link>
+        </p>
+        <p className="mt-4 text-sm">
+          <Link href="/shop" className="font-medium text-primary">
+            {t("shopStaff")}
           </Link>
         </p>
         <p className="mt-4 text-sm">

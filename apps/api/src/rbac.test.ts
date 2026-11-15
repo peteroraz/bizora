@@ -25,6 +25,8 @@ const env: AppEnv = {
   THROTTLE_AUTH_LIMIT: 100,
   INVITE_TOKEN_EXPOSE: true,
   TRUST_PROXY: false,
+  // These tests create several shops and invite several people; plan limits are tested in staff-devices.test.ts.
+  DEFAULT_PLAN_CODE: "business",
 };
 
 async function registerOwner(http: unknown, email: string, org: string) {

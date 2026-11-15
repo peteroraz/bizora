@@ -9,9 +9,11 @@ async function load(path: string, cookie: string) {
 }
 
 export default async function AppShellLayout({ children }: { children: React.ReactNode }) {
-  const cookie = (await cookies()).toString();
+  const jar = await cookies();
+  const cookie = jar.toString();
   const meResponse = await load("/api/v1/auth/me", cookie);
-  if (meResponse.status === 401) redirect("/login?reason=session");
+  // A shop device goes back to the staff PIN screen, everyone else to the sign-in page.
+  if (meResponse.status === 401) redirect(jar.has("bizora_device") ? "/shop" : "/login?reason=session");
   if (!meResponse.ok) redirect("/login");
   const me = (await meResponse.json()) as { data: Omit<ShellProfile, "businesses" | "branches"> };
   const [businessResponse, branchResponse] = await Promise.all([

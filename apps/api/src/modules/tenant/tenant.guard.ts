@@ -78,6 +78,8 @@ export class TenantGuard implements CanActivate {
       role: membership.role as TenantContext["role"],
       permissions,
       correlationId: request.correlationId ?? "unknown",
+      deviceId: identity.session.deviceId ?? null,
+      actorType: identity.session.deviceId ? "STAFF_PIN" : "HUMAN",
     };
     return true;
   }

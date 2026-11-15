@@ -1,4 +1,4 @@
-import { REFRESH_COOKIE, SESSION_COOKIE } from "@bizora/auth";
+import { DEVICE_COOKIE, REFRESH_COOKIE, SESSION_COOKIE } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
 import { ttlToMs } from "@bizora/config/env";
 import type { CookieOptions, Response } from "express";
@@ -29,4 +29,15 @@ function cookieOptions(env: AppEnv, maxAge: number): CookieOptions {
     path: "/",
     maxAge,
   };
+}
+
+const DEVICE_COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+
+/** Long-lived httpOnly cookie that marks this browser as an enrolled shop device. */
+export function writeDeviceCookie(res: Response, env: AppEnv, deviceToken: string) {
+  res.cookie(DEVICE_COOKIE, deviceToken, cookieOptions(env, DEVICE_COOKIE_MAX_AGE_MS));
+}
+
+export function clearDeviceCookie(res: Response, env: AppEnv) {
+  res.clearCookie(DEVICE_COOKIE, cookieOptions(env, 0));
 }
