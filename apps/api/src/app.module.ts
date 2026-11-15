@@ -12,7 +12,11 @@ import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { RbacModule } from "./modules/rbac/rbac.module.js";
 import { ReferenceModule } from "./modules/reference/reference.module.js";
+import { DocumentsModule } from "./modules/documents/documents.module.js";
+import { IdempotencyModule } from "./modules/idempotency/idempotency.module.js";
+import { LedgerModule } from "./modules/ledger/ledger.module.js";
 import { StaffModule } from "./modules/staff/staff.module.js";
+import { SyncModule } from "./modules/sync/sync.module.js";
 import { TenantModule } from "./modules/tenant/tenant.module.js";
 
 export type AppModuleOptions = {
@@ -46,6 +50,10 @@ export class AppModule {
         AddressModule,
         CustomersModule,
         StaffModule,
+        IdempotencyModule,
+        SyncModule,
+        DocumentsModule,
+        LedgerModule,
       ],
     };
   }

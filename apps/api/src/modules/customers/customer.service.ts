@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   CUSTOMER_PAGE_SIZE,
+  customerClientIdSchema,
   LOOKUP_MIN_QUERY,
   LOOKUP_RESULT_LIMIT,
   Permission,
@@ -220,11 +221,19 @@ export class CustomerService {
 
   async create(tenant: TenantContext, raw: unknown) {
     const payload = customerWriteSchema.parse(raw);
+    const { id: clientId } = customerClientIdSchema.parse(raw ?? {});
     const business = await this.requireBusiness(tenant);
     const branch = await this.resolveBranch(tenant, business.id, payload.branchId);
     const phone = await this.normalize(payload, business);
+    if (clientId) {
+      const [taken] = await this.db.select().from(customers).where(eq(customers.id, clientId)).limit(1);
+      // The same device sending the same new customer again (for example after a lost response): return it.
+      if (taken && taken.tenantId === tenant.tenantId) return this.present(tenant.tenantId, taken);
+      // IDs are global; never say whose record holds it.
+      if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
+    }
     if (phone) await this.assertPhoneAvailable(tenant.tenantId, business.id, phone, null);
-    const id = newId();
+    const id = clientId ?? newId();
     let addressId: string | null = null;
     await this.db.transaction(async (tx) => {
       if (payload.address) {

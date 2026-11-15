@@ -221,7 +221,10 @@
     "soon": "Soon",
     "lock": "Lock",
     "lockLabel": "Lock this device and return to the staff list",
-    "shopMode": "Shop mode"
+    "shopMode": "Shop mode",
+    "syncWaiting": "{count, plural, one {# change waiting to sync} other {# changes waiting to sync}}",
+    "syncRejected": "{count, plural, one {# change could not be saved} other {# changes could not be saved}}",
+    "syncDismiss": "Dismiss"
   },
   "nav": {
     "home": "Home",
@@ -451,7 +454,8 @@
     "lookupFailed": "Could not search. Try again.",
     "lookupMore": "Showing the first {count}. Type more of the name or number to narrow it down.",
     "phoneEnds": "Phone ends in {digits}",
-    "limitedNote": "You can see a customer's name and the end of their phone number. Ask a manager if you need more."
+    "limitedNote": "You can see a customer's name and the end of their phone number. Ask a manager if you need more.",
+    "savedOffline": "No network. The customer is saved on this phone and will be sent when you are back online."
   },
   "followups": {
     "title": "Follow-ups",
@@ -546,7 +550,8 @@
     "exit": "Turn off Shop mode on this device",
     "exited": "Shop mode is off on this device.",
     "actionFailed": "That did not work. Try again.",
-    "noPermission": "Only the owner or a manager can manage staff."
+    "noPermission": "Only the owner or a manager can manage staff.",
+    "exitWaiting": "{count, plural, one {# change is} other {# changes are}} still waiting to sync on this device. Connect to the internet and wait for it to finish before turning off Shop mode."
   },
   "shop": {
     "title": "Who is selling?",

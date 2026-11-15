@@ -5,6 +5,8 @@ export type Access = {
   permissions: readonly string[];
   /** True when a shop staff member signed in with a PIN on an enrolled shop device. */
   staffSession: boolean;
+  /** Who owns work saved offline on this device (see lib/offline/outbox.ts). */
+  owner?: { tenantId: string; membershipId: string } | null;
 };
 
 export const noAccess: Access = { permissions: [], staffSession: false };

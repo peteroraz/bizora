@@ -146,3 +146,5 @@ export function serializeMoney(value: Money): { amountMinor: string; currencyCod
     currencyCode: value.currencyCode,
   };
 }
+
+export * from "./stock-cost.js";

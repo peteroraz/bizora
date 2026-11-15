@@ -392,6 +392,9 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Customer CSV import takes at most 2,000 rows and 1.5 MB per file.
 - A cashier's customer search (counter lookup) needs at least 3 letters or 7 digits and returns at most 10 results, but it has no rate limit of its own yet.
 - Roles are fixed (see `docs/security/roles.md`). There are no per-person permission toggles or custom roles yet.
+- Offline: only adding a customer works offline so far (ADR-012). Sales and stock join in Sprints 4 and 5. Looking up records offline (pull sync) is not built yet.
+- Idempotency keys are kept until pruned (`IdempotencyService.prune`, 30 days). No scheduled job runs it yet.
+- The ledger (ADR-013) has no screens yet. Its only endpoints are the read-only chart of accounts and trial balance.
 
 ## What CI checks
 

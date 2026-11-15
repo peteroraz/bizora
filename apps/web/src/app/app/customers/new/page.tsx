@@ -1,13 +1,16 @@
 "use client";
 
-import { Permission } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, uuidv7 } from "@bizora/contracts";
 import { FormField, Input, PageHeader, SafeForm, SubmitButton, Textarea } from "@bizora/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { RequireAccess } from "../../../../components/require-access";
 import { AddressFields } from "../../../../components/address-fields";
+import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
+import { enqueue } from "../../../../lib/offline/outbox";
+import { isNetworkFailure } from "../../../../lib/offline/sync";
 import { addressPayload, hasPlace } from "../../../../lib/address-client";
 import { emptyAddress, loadCountries, loadSubdivisions, type CountryOption, type SubdivisionOption } from "../../../../lib/reference";
 
@@ -26,6 +29,8 @@ function NewCustomerPageScreen() {
   const [error, setError] = useState<string | null>(null);
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [savedOffline, setSavedOffline] = useState(false);
+  const { owner } = useAccess();
 
   useEffect(() => {
     void loadCountries().then(setCountries);
@@ -35,25 +40,56 @@ function NewCustomerPageScreen() {
     void loadSubdivisions(address.countryCode).then(setSubdivisions);
   }, [address.countryCode]);
 
+  function reset() {
+    setName("");
+    setPhone("");
+    setWalkIn(false);
+    setEmail("");
+    setNotes("");
+    setTags("");
+    setAddress(emptyAddress("NG"));
+  }
+
   async function save() {
     setPending(true);
     setError(null);
     setDuplicateId(null);
-    const response = await api("/api/v1/customers", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        isWalkIn: walkIn,
-        phone: walkIn ? undefined : phone,
-        email: email.trim() || null,
-        notesSummary: notes.trim() || null,
-        tags: tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter((tag) => tag.length > 0),
-        ...(hasPlace(address) && address.city.trim() ? { address: addressPayload(address) } : {}),
-      }),
-    });
+    setSavedOffline(false);
+    // The device picks the customer's ID, so the same customer is never created twice, online or offline.
+    const body = {
+      id: uuidv7(),
+      name,
+      isWalkIn: walkIn,
+      phone: walkIn ? undefined : phone,
+      email: email.trim() || null,
+      notesSummary: notes.trim() || null,
+      tags: tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0),
+      ...(hasPlace(address) && address.city.trim() ? { address: addressPayload(address) } : {}),
+    };
+    let response: Response;
+    try {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) throw new TypeError("offline");
+      response = await api("/api/v1/customers", {
+        method: "POST",
+        headers: { [IDEMPOTENCY_HEADER]: uuidv7() },
+        body: JSON.stringify(body),
+      });
+    } catch (failure) {
+      if (!isNetworkFailure(failure) || !owner) {
+        setError(t("failed"));
+        setPending(false);
+        return;
+      }
+      // No network: keep it on this phone and send it later.
+      await enqueue(owner, "customer.create", body);
+      reset();
+      setSavedOffline(true);
+      setPending(false);
+      return;
+    }
     const payload = await response.json().catch(() => null);
     if (response.ok) {
       window.location.href = `/app/customers/${payload.data.customer.id}`;
@@ -68,6 +104,11 @@ function NewCustomerPageScreen() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeader title={t("newTitle")} description={t("newLead")} />
+      {savedOffline ? (
+        <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
+          {t("savedOffline")}
+        </p>
+      ) : null}
       <SafeForm className="space-y-4" pending={pending} onSubmit={save}>
         <FormField id="customer-name" label={common("name")}>
           <Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} required />

@@ -31,6 +31,7 @@ export {
   customerImportSchema,
   customerNoteSchema,
   customerWriteSchema,
+  customerClientIdSchema,
   followupCreateSchema,
   followupUpdateSchema,
   parseCustomerCsv,
@@ -214,6 +215,9 @@ export type AuthWorkspace = Pick<
 >;
 
 export { Permission } from "./permissions.js";
+export { uuidv7, isUuidV7, uuidv7Time } from "./ids.js";
+export * from "./sync.js";
+export * from "./ledger.js";
 export type { PermissionCode } from "./permissions.js";
 export { ROLE_PERMISSIONS, LOOKUP_RESULT_LIMIT, LOOKUP_MIN_QUERY } from "./access.js";
 

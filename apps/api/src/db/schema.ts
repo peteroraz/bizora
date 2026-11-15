@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, char, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { bigint, boolean, char, check, date, foreignKey, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -316,9 +316,12 @@ export const shopDevices = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     suspendedAt: timestamp("suspended_at", { withTimezone: true }),
     attemptsResetAt: timestamp("attempts_reset_at", { withTimezone: true }),
+    /** Short number per organization (DEV3), used in provisional document numbers. */
+    code: integer("code").notNull(),
   },
   (table) => [
     uniqueIndex("shop_devices_tenant_id_id_key").on(table.tenantId, table.id),
+    uniqueIndex("shop_devices_tenant_code_key").on(table.tenantId, table.code),
     index("shop_devices_tenant_branch_idx").on(table.tenantId, table.branchId),
     foreignKey({
       name: "shop_devices_business_fk",
@@ -578,6 +581,167 @@ export const customerFollowups = pgTable(
   ],
 );
 
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  {
+    tenantId: uuid("tenant_id").notNull().references(() => organizations.id),
+    key: varchar("key", { length: 64 }).notNull(),
+    scope: varchar("scope", { length: 120 }).notNull(),
+    requestHash: char("request_hash", { length: 64 }).notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("in_progress"),
+    responseStatus: integer("response_status"),
+    responseBody: jsonb("response_body"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.key] }), index("idempotency_keys_created_idx").on(table.createdAt)],
+);
+
+export const documentSequences = pgTable(
+  "document_sequences",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    documentType: varchar("document_type", { length: 32 }).notNull(),
+    nextValue: bigint("next_value", { mode: "bigint" }).notNull().default(1n),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.businessId, table.documentType] }),
+    foreignKey({
+      name: "document_sequences_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+  ],
+);
+
+export const ledgerAccounts = pgTable(
+  "ledger_accounts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id"),
+    code: varchar("code", { length: 20 }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    accountType: varchar("account_type", { length: 16 }).notNull(),
+    role: varchar("role", { length: 32 }).notNull(),
+    isSystem: boolean("is_system").notNull().default(true),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("ledger_accounts_tenant_id_id_key").on(table.tenantId, table.id),
+    uniqueIndex("ledger_accounts_tenant_business_id_key").on(table.tenantId, table.businessId, table.id),
+    uniqueIndex("ledger_accounts_business_code_key").on(table.tenantId, table.businessId, table.code),
+    foreignKey({
+      name: "ledger_accounts_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "ledger_accounts_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+  ],
+);
+
+export const ledgerPeriods = pgTable(
+  "ledger_periods",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    periodStart: date("period_start").notNull(),
+    status: varchar("status", { length: 8 }).notNull().default("open"),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedBy: uuid("locked_by"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.businessId, table.periodStart] }),
+    foreignKey({
+      name: "ledger_periods_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+  ],
+);
+
+export const journalEntries = pgTable(
+  "journal_entries",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id"),
+    entryDate: date("entry_date").notNull(),
+    periodStart: date("period_start").notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    sourceType: varchar("source_type", { length: 32 }).notNull(),
+    sourceId: uuid("source_id").notNull(),
+    postingKey: varchar("posting_key", { length: 160 }).notNull(),
+    description: varchar("description", { length: 240 }).notNull(),
+    reversesEntryId: uuid("reverses_entry_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (table) => [
+    uniqueIndex("journal_entries_tenant_id_id_key").on(table.tenantId, table.id),
+    uniqueIndex("journal_entries_tenant_business_id_key").on(table.tenantId, table.businessId, table.id),
+    uniqueIndex("journal_entries_posting_key").on(table.tenantId, table.postingKey),
+    index("journal_entries_source_idx").on(table.tenantId, table.sourceType, table.sourceId),
+    foreignKey({
+      name: "journal_entries_business_fk",
+      columns: [table.tenantId, table.businessId],
+      foreignColumns: [businesses.tenantId, businesses.id],
+    }),
+    foreignKey({
+      name: "journal_entries_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id],
+    }),
+    foreignKey({
+      name: "journal_entries_period_fk",
+      columns: [table.tenantId, table.businessId, table.periodStart],
+      foreignColumns: [ledgerPeriods.tenantId, ledgerPeriods.businessId, ledgerPeriods.periodStart],
+    }),
+  ],
+);
+
+export const journalLines = pgTable(
+  "journal_lines",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    lineNo: smallint("line_no").notNull(),
+    debitMinor: bigint("debit_minor", { mode: "bigint" }).notNull().default(0n),
+    creditMinor: bigint("credit_minor", { mode: "bigint" }).notNull().default(0n),
+    originalCurrencyCode: char("original_currency_code", { length: 3 }),
+    originalAmountMinor: bigint("original_amount_minor", { mode: "bigint" }),
+    fxRate: numeric("fx_rate", { precision: 24, scale: 10 }),
+    memo: varchar("memo", { length: 240 }),
+  },
+  (table) => [
+    uniqueIndex("journal_lines_entry_line_key").on(table.entryId, table.lineNo),
+    index("journal_lines_account_idx").on(table.tenantId, table.accountId),
+    foreignKey({
+      name: "journal_lines_entry_fk",
+      columns: [table.tenantId, table.businessId, table.entryId],
+      foreignColumns: [journalEntries.tenantId, journalEntries.businessId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "journal_lines_account_fk",
+      columns: [table.tenantId, table.businessId, table.accountId],
+      foreignColumns: [ledgerAccounts.tenantId, ledgerAccounts.businessId, ledgerAccounts.id],
+    }),
+  ],
+);
+
 export const schema = {
   addresses,
   organizations,
@@ -604,6 +768,12 @@ export const schema = {
   staffPinAttempts,
   plans,
   organizationPlans,
+  idempotencyKeys,
+  documentSequences,
+  ledgerAccounts,
+  ledgerPeriods,
+  journalEntries,
+  journalLines,
 };
 
 export type DatabaseSchema = typeof schema;

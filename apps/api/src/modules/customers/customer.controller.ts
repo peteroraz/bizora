@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
+import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
@@ -36,8 +37,10 @@ export class CustomersController {
     return success(await this.customers.list(tenant, q ?? "", Number.isFinite(parsed) ? parsed : 1), tenant.correlationId);
   }
 
+  // Offline-capable: the web app sends an Idempotency-Key, so a retried request never creates a second customer.
   @Post("customers")
   @RequirePermissions(Permission.CUSTOMERS_MANAGE)
+  @Idempotent()
   async create(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     const customer = await this.customers.create(tenant, body);
     return success({ customer }, tenant.correlationId);
