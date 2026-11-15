@@ -557,5 +557,9 @@
     "suspendedBody": "There were too many wrong PINs. Ask the owner to allow this device again in Staff.",
     "ownerSignIn": "Owner or manager? Sign in",
     "pinEntered": "{count} of up to 6 digits entered"
+  },
+  "access": {
+    "noPageTitle": "This page is not for your role",
+    "noPageBody": "Ask the shop owner or a manager if you need it."
   }
 }

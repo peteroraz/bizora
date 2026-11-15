@@ -1,15 +1,17 @@
 "use client";
 
+import { Permission } from "@bizora/contracts";
 import { FormField, Input, PageHeader, SafeForm, SubmitButton, Textarea } from "@bizora/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { RequireAccess } from "../../../../components/require-access";
 import { AddressFields } from "../../../../components/address-fields";
 import { api } from "../../../../lib/api";
 import { addressPayload, hasPlace } from "../../../../lib/address-client";
 import { emptyAddress, loadCountries, loadSubdivisions, type CountryOption, type SubdivisionOption } from "../../../../lib/reference";
 
-export default function NewCustomerPage() {
+function NewCustomerPageScreen() {
   const t = useTranslations("customers");
   const common = useTranslations("common");
   const [name, setName] = useState("");
@@ -116,5 +118,13 @@ export default function NewCustomerPage() {
         </div>
       </SafeForm>
     </div>
+  );
+}
+
+export default function NewCustomerPage() {
+  return (
+    <RequireAccess anyOf={[Permission.CUSTOMERS_MANAGE]}>
+      <NewCustomerPageScreen />
+    </RequireAccess>
   );
 }

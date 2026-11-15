@@ -1,9 +1,11 @@
 "use client";
 
+import { Permission } from "@bizora/contracts";
 import { FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { RequireAccess } from "../../../../components/require-access";
 import { api } from "../../../../lib/api";
 
 type PreviewRow = {
@@ -15,7 +17,7 @@ type PreviewRow = {
   errors: string[];
 };
 
-export default function ImportCustomersPage() {
+function ImportCustomersPageScreen() {
   const t = useTranslations("customers");
   const [csv, setCsv] = useState("");
   const [rows, setRows] = useState<PreviewRow[]>([]);
@@ -121,5 +123,13 @@ export default function ImportCustomersPage() {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+export default function ImportCustomersPage() {
+  return (
+    <RequireAccess anyOf={[Permission.CUSTOMERS_MANAGE]}>
+      <ImportCustomersPageScreen />
+    </RequireAccess>
   );
 }

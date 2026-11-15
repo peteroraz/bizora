@@ -48,9 +48,10 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   await page.getByLabel("Name", { exact: true }).fill("Chika");
   await page.getByLabel("PIN (4 to 6 digits)").fill("4821");
   await page.getByLabel("Type the PIN again").fill("4821");
+  await page.getByLabel("Role", { exact: true }).selectOption("CASHIER");
   await page.getByRole("button", { name: "Add staff" }).click();
   await expect(page.getByText("Staff added.")).toBeVisible();
-  await expect(page.getByRole("listitem").filter({ hasText: "Chika" })).toContainText("Sales staff");
+  await expect(page.getByRole("listitem").filter({ hasText: "Chika" })).toContainText("Cashier");
 
   // Turn on Shop mode on this device.
   await page.getByLabel("Device name").fill("Counter phone");
@@ -68,6 +69,18 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("button", { name: "Lock this device and return to the staff list" })).toBeVisible();
+
+  // A cashier on the shop device sees no staff, shop or sign-in settings.
+  await expect(page.getByRole("link", { name: "Staff" })).toHaveCount(0);
+  await page.goto("/app/settings");
+  await expect(page.getByRole("tab", { name: "Look" })).toBeVisible();
+  for (const tab of ["Business", "Shop details", "Setup", "Shops", "Staff", "Sign-in"]) {
+    await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveCount(0);
+  }
+  await expect(page.getByRole("button", { name: "Set password" })).toHaveCount(0);
+  await page.goto("/app/staff");
+  await expect(page.getByText("This page is not for your role")).toBeVisible();
+  await page.goto("/app");
 
   // Lock returns to the staff list.
   await page.getByRole("button", { name: "Lock this device and return to the staff list" }).click();
@@ -95,7 +108,10 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   });
   expect(revoked.ok()).toBeTruthy();
 
-  await page.reload();
+  // The app may already be on its way to the PIN screen, which aborts this navigation. Either path is fine.
+  await page.goto("/app").catch((error: Error) => {
+    if (!error.message.includes("ERR_ABORTED")) throw error;
+  });
   await expect(page).toHaveURL(/\/shop$/);
   await expect(page.getByRole("heading", { name: "Shop mode is off on this device" })).toBeVisible();
 });

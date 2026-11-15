@@ -1,9 +1,10 @@
 "use client";
 
-import { STAFF_ROLES, isWeakPin } from "@bizora/contracts";
+import { Permission, STAFF_ROLES, isWeakPin } from "@bizora/contracts";
 import { Badge, Button, Card, EmptyState, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useFormatter, useTranslations } from "next-intl";
 import { FormEvent, useEffect, useState } from "react";
+import { RequireAccess } from "../../../components/require-access";
 import { api } from "../../../lib/api";
 
 type Staff = {
@@ -36,7 +37,7 @@ function pinProblem(pin: string, confirm: string): "pinFormat" | "pinWeak" | "pi
   return null;
 }
 
-export default function StaffPage() {
+function StaffPageScreen() {
   const t = useTranslations("staff");
   const roles = useTranslations("roles");
   const common = useTranslations("common");
@@ -400,5 +401,13 @@ export default function StaffPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function StaffPage() {
+  return (
+    <RequireAccess anyOf={[Permission.STAFF_MANAGE, Permission.DEVICES_MANAGE]}>
+      <StaffPageScreen />
+    </RequireAccess>
   );
 }

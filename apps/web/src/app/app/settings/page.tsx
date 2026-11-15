@@ -2,6 +2,7 @@
 
 import {
   ALWAYS_VISIBLE_MODULES,
+  Permission,
   TRADER_MODULES,
   businessTypeSchema,
   staffCountBandSchema,
@@ -14,6 +15,8 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
+import { can, settingsTabs as tabs, visibleSettingsTabs } from "../../../lib/access";
+import { useAccess } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 import { hasPlace, persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
@@ -39,7 +42,6 @@ type Branch = { id: string; name: string; phoneE164: string | null; address: Add
 type BranchDraft = { name: string; phone: string; address: AddressValue };
 
 const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"] as const;
-const tabs = ["organization", "business", "shop", "branches", "team", "appearance", "security"] as const;
 const locales = ["en-NG", "pcm", "ha", "ig", "yo"] as const;
 
 function fromAddress(address: Partial<AddressValue> | null, countryCode: string): AddressValue {
@@ -67,6 +69,9 @@ function SettingsScreen() {
   const localeLabels = useTranslations("locales");
   const onboarding = useTranslations("onboarding");
   const locale = useLocale();
+  const access = useAccess();
+  const canSeePeople = can(access, Permission.USERS_READ);
+  const canInvite = can(access, Permission.USERS_INVITE);
   const params = useSearchParams();
   const requested = params.get("tab") === "password" ? "security" : (params.get("tab") ?? "organization");
   const { theme, setTheme } = useTheme();
@@ -110,8 +115,8 @@ function SettingsScreen() {
       api("/api/v1/organizations/current"),
       api("/api/v1/businesses"),
       api("/api/v1/branches"),
-      api("/api/v1/memberships"),
-      api("/api/v1/invitations"),
+      canSeePeople ? api("/api/v1/memberships") : Promise.resolve(null),
+      canSeePeople ? api("/api/v1/invitations") : Promise.resolve(null),
       api("/api/v1/reference/countries"),
     ]);
     const organization = orgResponse.ok ? (await orgResponse.json()).data?.organization : null;
@@ -157,8 +162,8 @@ function SettingsScreen() {
     }
     setBranchDrafts(drafts);
     setBranchSubs(subs);
-    setPeople(peopleResponse.ok ? ((await peopleResponse.json()).data?.items ?? []) : []);
-    setInvitations(inviteResponse.ok ? ((await inviteResponse.json()).data?.items ?? []) : []);
+    setPeople(peopleResponse?.ok ? ((await peopleResponse.json()).data?.items ?? []) : []);
+    setInvitations(inviteResponse?.ok ? ((await inviteResponse.json()).data?.items ?? []) : []);
   }
 
   useEffect(() => {
@@ -333,7 +338,7 @@ function SettingsScreen() {
   }
 
   const zones = countries.find((item) => item.code === businessAddress.countryCode)?.timezones ?? [];
-  const visibleTabs: string[] = staffFeatures ? [...tabs] : tabs.filter((item) => item !== "team");
+  const visibleTabs: string[] = visibleSettingsTabs(access, staffFeatures);
   const typeKey = {
     shop: "typeShop",
     "market-stall": "typeMarket",
@@ -354,7 +359,7 @@ function SettingsScreen() {
       ) : null}
       {notice ? <p className="break-all text-sm text-muted">{notice}</p> : null}
       <TabsRoot
-        value={visibleTabs.includes(tab as (typeof visibleTabs)[number]) ? tab : "organization"}
+        value={visibleTabs.includes(tab) ? tab : (visibleTabs[0] ?? "appearance")}
         onValueChange={setTab}
         label={t("tabsLabel")}
         tabs={visibleTabs.map((item) => (
@@ -570,30 +575,33 @@ function SettingsScreen() {
             <ul className="space-y-2 text-sm">
               {people.map((person) => (
                 <li key={person.membershipId}>
-                  {person.displayName} ({person.email}) · {roleLabel(person.role)}
+                  {person.displayName}
+                  {person.email ? ` (${person.email})` : ""} · {roleLabel(person.role)}
                 </li>
               ))}
             </ul>
-            <SafeForm className="grid gap-3 md:grid-cols-[1fr_180px_auto]" pending={pending} onSubmit={invite}>
-              <Input name="email" type="email" aria-label={t("inviteEmail")} placeholder={t("invitePlaceholder")} required />
-              <Select name="role" aria-label={t("inviteRole")} defaultValue="SALES">
-                {roles.map((role) => (
-                  <option key={role} value={role}>
-                    {roleLabel(role)}
-                  </option>
-                ))}
-              </Select>
-              <SubmitButton pending={pending} pendingLabel={common("saving")}>
-                {t("invite")}
-              </SubmitButton>
-            </SafeForm>
+            {canInvite ? (
+              <SafeForm className="grid gap-3 md:grid-cols-[1fr_180px_auto]" pending={pending} onSubmit={invite}>
+                <Input name="email" type="email" aria-label={t("inviteEmail")} placeholder={t("invitePlaceholder")} required />
+                <Select name="role" aria-label={t("inviteRole")} defaultValue="SALES">
+                  {roles.map((role) => (
+                    <option key={role} value={role}>
+                      {roleLabel(role)}
+                    </option>
+                  ))}
+                </Select>
+                <SubmitButton pending={pending} pendingLabel={common("saving")}>
+                  {t("invite")}
+                </SubmitButton>
+              </SafeForm>
+            ) : null}
             <ul className="space-y-2 text-sm">
               {invitations.map((invitation) => (
                 <li key={invitation.id} className="flex flex-wrap items-center gap-2">
                   <span>
                     {invitation.email} · {roleLabel(invitation.role)} · {statusLabel(invitation.status)}
                   </span>
-                  {invitation.status === "PENDING" ? (
+                  {invitation.status === "PENDING" && canInvite ? (
                     <>
                       <button type="button" className="font-medium text-primary" onClick={() => void invitationAction(invitation.id, "resend")}>
                         {t("resend")}

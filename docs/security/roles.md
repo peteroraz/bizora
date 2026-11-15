@@ -42,6 +42,12 @@ Only SALES, CASHIER, INVENTORY and EMPLOYEE can be created as PIN staff.
 | tenant.manage | ✓ | ✓ | | | | | | | |
 | onboarding.complete | ✓ | ✓ | | | | | | | |
 
+The web app hides menu items, Settings tabs and buttons the role cannot use (`apps/web/src/lib/access.ts`). This is only for clarity: the API checks every request either way.
+
+- PIN staff see only Settings → Look (theme and language). They have no email, password or Google sign-in to manage.
+- Staff appears in the menu only with `staff.manage` or `devices.manage`. Customers needs `customers.read`, and adding, importing, noting or deleting customers needs `customers.manage`.
+- Opening a page by its link without the permission shows "This page is not for your role".
+
 Scope still applies on top of the matrix. A branch-scoped manager has `staff.manage` only for their own branch.
 
 `prices.cost.read` and `reports.profit.read` are reserved. Products (Sprint 4) and profit reports will check them; nothing reads them yet.
