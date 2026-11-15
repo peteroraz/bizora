@@ -1,6 +1,8 @@
 import { Badge, EmptyState } from "@bizora/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { RequireAccess } from "../../../components/require-access";
+import { moduleRule } from "../../../lib/access";
 import { comingSoonModules } from "../../../lib/nav";
 
 export default async function ComingSoonPage({ params }: { params: Promise<{ module: string }> }) {
@@ -15,5 +17,9 @@ export default async function ComingSoonPage({ params }: { params: Promise<{ mod
     money: { title: t("moneyTitle"), body: t("moneyBody") },
     reports: { title: t("reportsTitle"), body: t("reportsBody") },
   }[key];
-  return <EmptyState title={copy.title} description={copy.body} action={<Badge tone="info">{t("badge")}</Badge>} />;
+  return (
+    <RequireAccess anyOf={[...(moduleRule(key) ?? [])]}>
+      <EmptyState title={copy.title} description={copy.body} action={<Badge tone="info">{t("badge")}</Badge>} />
+    </RequireAccess>
+  );
 }

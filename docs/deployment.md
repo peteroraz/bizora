@@ -390,6 +390,8 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
 - Shop staff auto-lock after 5 minutes without input in the browser. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`).
 - Customer CSV import takes at most 2,000 rows and 1.5 MB per file.
+- A cashier's customer search (counter lookup) needs at least 3 letters or 7 digits and returns at most 10 results, but it has no rate limit of its own yet.
+- Roles are fixed (see `docs/security/roles.md`). There are no per-person permission toggles or custom roles yet.
 
 ## What CI checks
 

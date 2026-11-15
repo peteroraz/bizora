@@ -72,6 +72,18 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
 
   // A cashier on the shop device sees no staff, shop or sign-in settings.
   await expect(page.getByRole("link", { name: "Staff" })).toHaveCount(0);
+  // Home shows the cashier's own work, not the shop's money.
+  await expect(page.getByText("My sales today")).toBeVisible();
+  await expect(page.getByText("Money in vs out")).toHaveCount(0);
+  await expect(page.getByText("Cash at hand")).toHaveCount(0);
+  // Customers is a counter lookup, not a list.
+  await page.goto("/app/customers");
+  await expect(page.getByRole("heading", { name: "Find a customer" })).toBeVisible();
+  await page.getByLabel("Search customers").fill("ch");
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByText("Type at least 3 letters of the name, or 7 digits of the phone number.")).toBeVisible();
+  await page.goto("/app/money");
+  await expect(page.getByText("This page is not for your role")).toBeVisible();
   await page.goto("/app/settings");
   await expect(page.getByRole("tab", { name: "Look" })).toBeVisible();
   for (const tab of ["Business", "Shop details", "Setup", "Shops", "Staff", "Sign-in"]) {

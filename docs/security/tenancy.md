@@ -37,6 +37,10 @@ Switching to an organization without an active membership returns 403.
 
 Staff without email sign in with a PIN, only on a shop device enrolled by an owner or manager. The session is bound to that device through the httpOnly `bizora_device` cookie and is re-checked on every request and refresh. Removing or suspending the device ends its sessions. See `docs/adr/ADR-010-staff-pin-devices-and-plans.md` and `docs/security/roles.md`.
 
+## Access by job function
+
+What each role may do, which rows it gets back (branch, own follow-ups, counter lookup) and which fields (a cashier gets a customer's name and the last 4 digits of the phone only) are set out in `docs/security/roles.md` and `docs/adr/ADR-011-job-function-access.md`.
+
 ## Invite lifecycle
 
 Pending invites are unique per tenant+email. Accept is a single `PENDING` → `ACCEPTED` update. Revoke and resend exist. Tokens appear in API responses only when `INVITE_TOKEN_EXPOSE=true`. The accept link is always included in the invitation email.

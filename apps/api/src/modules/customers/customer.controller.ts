@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGu
 import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
-import { RequirePermissions } from "../rbac/permissions.js";
+import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
 import { CustomerService } from "./customer.service.js";
 
@@ -28,8 +28,9 @@ export class CustomersController {
     return success(await this.customers.importCsv(tenant, body), tenant.correlationId);
   }
 
+  // Full list for customers.read; counter lookup (search only, few fields) for customers.lookup.
   @Get("customers")
-  @RequirePermissions(Permission.CUSTOMERS_READ)
+  @RequireAnyPermission(Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP)
   async list(@CurrentTenant() tenant: TenantContext, @Query("q") q?: string, @Query("page") page?: string) {
     const parsed = Number(page);
     return success(await this.customers.list(tenant, q ?? "", Number.isFinite(parsed) ? parsed : 1), tenant.correlationId);
@@ -71,7 +72,7 @@ export class CustomersController {
   }
 
   @Get("customers/:id")
-  @RequirePermissions(Permission.CUSTOMERS_READ)
+  @RequireAnyPermission(Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP)
   async get(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
     return success({ customer: await this.customers.get(tenant, id) }, tenant.correlationId);
   }

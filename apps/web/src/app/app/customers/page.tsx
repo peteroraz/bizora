@@ -1,17 +1,19 @@
 "use client";
 
-import { CUSTOMER_PAGE_SIZE, Permission } from "@bizora/contracts";
+import { CUSTOMER_PAGE_SIZE, LOOKUP_MIN_QUERY, LOOKUP_RESULT_LIMIT, Permission } from "@bizora/contracts";
 import { EmptyState, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { can } from "../../../lib/access";
+import { RequireAccess } from "../../../components/require-access";
+import { can, customerMode } from "../../../lib/access";
 import { useAccess } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 
 type Customer = { id: string; name: string; phoneE164: string | null; isWalkIn: boolean; email: string | null };
+type LookupResult = { id: string; name: string; isWalkIn: boolean; phoneLast4: string | null };
 
-export default function CustomersPage() {
+function CustomerListScreen() {
   const t = useTranslations("customers");
   const canManage = can(useAccess(), Permission.CUSTOMERS_MANAGE);
   const common = useTranslations("common");
@@ -108,5 +110,89 @@ export default function CustomersPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Cashier: find one customer at the counter. No list to browse, and only the name and the end of the phone number. */
+function CustomerLookupScreen() {
+  const t = useTranslations("customers");
+  const common = useTranslations("common");
+  const [query, setQuery] = useState("");
+  const [items, setItems] = useState<LookupResult[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function search() {
+    const needle = query.trim();
+    const digits = needle.replace(/\D/g, "").replace(/^0+/, "");
+    if (needle.length < LOOKUP_MIN_QUERY || (/^[\d\s+()-]+$/.test(needle) && digits.length < 7)) {
+      setError(t("lookupTooShort", { min: LOOKUP_MIN_QUERY }));
+      return;
+    }
+    setError(null);
+    setPending(true);
+    const response = await api(`/api/v1/customers?${new URLSearchParams({ q: needle }).toString()}`);
+    const payload = await response.json().catch(() => null);
+    setPending(false);
+    if (!response.ok) {
+      setError(payload?.error?.message ?? t("lookupFailed"));
+      return;
+    }
+    setItems(payload?.data?.items ?? []);
+    setSearched(true);
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title={t("lookupTitle")} description={t("lookupLead")} />
+      <SafeForm
+        className="flex flex-wrap items-end gap-3"
+        pending={pending}
+        onSubmit={() => {
+          void search();
+        }}
+      >
+        <FormField id="customer-lookup" label={t("searchLabel")}>
+          <Input id="customer-lookup" value={query} placeholder={t("searchPlaceholder")} onChange={(event) => setQuery(event.target.value)} />
+        </FormField>
+        <SubmitButton pending={pending} pendingLabel={common("loading")}>
+          {t("search")}
+        </SubmitButton>
+      </SafeForm>
+      {error ? (
+        <p className="text-sm text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {searched && items.length === 0 ? <p className="text-sm text-muted">{t("noResults")}</p> : null}
+      {items.length > 0 ? (
+        <ul className="divide-y divide-border rounded-card border border-border bg-card">
+          {items.map((customer) => (
+            <li key={customer.id}>
+              <Link href={`/app/customers/${customer.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="text-sm font-medium">{customer.name}</span>
+                <span className="text-sm text-muted">
+                  {customer.isWalkIn || !customer.phoneLast4 ? t("walkIn") : t("phoneEnds", { digits: customer.phoneLast4 })}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {items.length >= LOOKUP_RESULT_LIMIT ? <p className="text-sm text-muted">{t("lookupMore", { count: LOOKUP_RESULT_LIMIT })}</p> : null}
+      <p className="text-xs text-muted">{t("limitedNote")}</p>
+    </div>
+  );
+}
+
+export default function CustomersPage() {
+  const mode = customerMode(useAccess());
+  if (mode === "list") return <CustomerListScreen />;
+  if (mode === "lookup") return <CustomerLookupScreen />;
+  return (
+    <RequireAccess anyOf={[Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP]}>
+      <CustomerListScreen />
+    </RequireAccess>
   );
 }

@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { can } from "../../../../lib/access";
+import { RequireAccess } from "../../../../components/require-access";
+import { can, customerMode } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { dayKey, formatWhen } from "../../../../i18n/format";
@@ -25,7 +26,7 @@ type Note = { id: string; body: string; createdAt: string };
 type Followup = { id: string; reason: string; dueAt: string; status: string };
 type Assignee = { membershipId: string; displayName: string | null; role: string };
 
-export default function CustomerPage() {
+function CustomerFullScreen() {
   const params = useParams<{ id: string }>();
   const t = useTranslations("customers");
   const access = useAccess();
@@ -278,5 +279,53 @@ export default function CustomerPage() {
         {t("back")}
       </Link>
     </div>
+  );
+}
+
+type LimitedCustomer = { id: string; name: string; isWalkIn: boolean; phoneLast4: string | null };
+
+/** Cashier view of one customer: name and the end of the phone number only. */
+function CustomerLimitedScreen() {
+  const params = useParams<{ id: string }>();
+  const t = useTranslations("customers");
+  const common = useTranslations("common");
+  const [customer, setCustomer] = useState<LimitedCustomer | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const response = await api(`/api/v1/customers/${params.id}`);
+      if (!response.ok) {
+        setMissing(true);
+        return;
+      }
+      setCustomer((await response.json()).data?.customer ?? null);
+    })();
+  }, [params.id]);
+
+  if (missing) return <p className="text-sm">{t("noResults")}</p>;
+  if (!customer) return <p className="text-sm text-muted">{common("loading")}</p>;
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={customer.name}
+        description={customer.isWalkIn || !customer.phoneLast4 ? t("walkIn") : t("phoneEnds", { digits: customer.phoneLast4 })}
+      />
+      <p className="text-xs text-muted">{t("limitedNote")}</p>
+      <Link href="/app/customers" className="inline-block text-sm font-medium text-primary">
+        {t("back")}
+      </Link>
+    </div>
+  );
+}
+
+export default function CustomerPage() {
+  const mode = customerMode(useAccess());
+  if (mode === "list") return <CustomerFullScreen />;
+  if (mode === "lookup") return <CustomerLimitedScreen />;
+  return (
+    <RequireAccess anyOf={[Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP]}>
+      <CustomerFullScreen />
+    </RequireAccess>
   );
 }

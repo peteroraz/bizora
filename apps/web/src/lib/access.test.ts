@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { navAllowed, visibleSettingsTabs, type Access } from "./access";
+import { ROLE_PERMISSIONS } from "@bizora/contracts";
+import { customerMode, homeCards, navAllowed, visibleSettingsTabs, type Access } from "./access";
 
 const owner: Access = {
   staffSession: false,
@@ -63,5 +64,51 @@ describe("menu", () => {
     expect(navAllowed(pinCashier, "customers")).toBe(true);
     expect(navAllowed(storekeeper, "customers")).toBe(false);
     expect(navAllowed(storekeeper, "home")).toBe(true);
+  });
+});
+
+describe("job functions (real ROLE_PERMISSIONS)", () => {
+  const as = (role: keyof typeof ROLE_PERMISSIONS, staffSession = false): Access => ({
+    permissions: ROLE_PERMISSIONS[role],
+    staffSession,
+  });
+  const menu = (access: Access) =>
+    ["home", "sales", "stock", "customers", "debtors", "money", "staff", "reports", "settings"].filter((id) => navAllowed(access, id));
+
+  it("gives each role the menu for its job", () => {
+    expect(menu(as("OWNER"))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "staff", "reports", "settings"]);
+    expect(menu(as("MANAGER"))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "staff", "reports", "settings"]);
+    expect(menu(as("CASHIER", true))).toEqual(["home", "sales", "stock", "customers", "debtors", "settings"]);
+    expect(menu(as("SALES", true))).toEqual(["home", "sales", "stock", "customers", "settings"]);
+    expect(menu(as("INVENTORY", true))).toEqual(["home", "stock", "reports", "settings"]);
+    expect(menu(as("ACCOUNTANT"))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "reports", "settings"]);
+    expect(menu(as("EMPLOYEE", true))).toEqual(["home", "settings"]);
+  });
+
+  it("hides unknown menu items", () => {
+    expect(navAllowed(as("OWNER"), "payroll")).toBe(false);
+  });
+
+  it("shows home cards that match the job", () => {
+    expect(homeCards(as("OWNER"))).toEqual(["sales", "money", "cash", "debtors", "stock", "staff", "approval", "followups"]);
+    // Cashier: own sales, who owes, stock, and counter lookup. No cash flow, no expected cash (blind count).
+    expect(homeCards(as("CASHIER", true))).toEqual(["mySales", "debtors", "stock", "findCustomer"]);
+    // Sales staff: own sales, stock, own follow-ups. No money or debtors.
+    expect(homeCards(as("SALES", true))).toEqual(["mySales", "stock", "followups"]);
+    expect(homeCards(as("INVENTORY", true))).toEqual(["stock"]);
+    expect(homeCards(as("ACCOUNTANT"))).toEqual(["sales", "money", "cash", "debtors", "stock", "followups"]);
+    expect(homeCards(as("EMPLOYEE", true))).toEqual([]);
+  });
+
+  it("gives a cashier counter lookup, and a storekeeper no customers", () => {
+    expect(customerMode(as("CASHIER", true))).toBe("lookup");
+    expect(customerMode(as("SALES", true))).toBe("list");
+    expect(customerMode(as("INVENTORY", true))).toBe("none");
+    expect(customerMode(as("EMPLOYEE", true))).toBe("none");
+  });
+
+  it("gives a manager only shop and staff settings", () => {
+    expect(visibleSettingsTabs(as("MANAGER"), true)).toEqual(["branches", "team", "appearance", "security"]);
+    expect(visibleSettingsTabs(as("ACCOUNTANT"), true)).toEqual(["appearance", "security"]);
   });
 });
