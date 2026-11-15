@@ -31,7 +31,8 @@ const env: AppEnv = {
 };
 
 const password = "LocalOnly!Passw0rd";
-const today = new Date().toISOString().slice(0, 10);
+// "Today" in the shop's timezone, as Bizora counts it. UTC would be a day behind between 23:00 and midnight UTC.
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
 describe("job-function access", () => {
   let app: INestApplication;
