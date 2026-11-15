@@ -1,4 +1,4 @@
-import { formatMoney } from "@bizora/money";
+import { formatMoney } from "@bizora/money/format";
 
 export function MoneyText({
   amountMinor,

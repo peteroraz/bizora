@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
 import { addressInputSchema } from "./address.js";
 
-export const CUSTOMER_PAGE_SIZE = 25;
+export { CUSTOMER_PAGE_SIZE } from "./constants.js";
 /** Maximum data rows in one customer CSV import (header row not counted). */
 export const CUSTOMER_IMPORT_MAX_ROWS = 2000;
 

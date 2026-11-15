@@ -14,6 +14,7 @@ import { RbacModule } from "./modules/rbac/rbac.module.js";
 import { ReferenceModule } from "./modules/reference/reference.module.js";
 import { DocumentsModule } from "./modules/documents/documents.module.js";
 import { IdempotencyModule } from "./modules/idempotency/idempotency.module.js";
+import { InventoryModule } from "./modules/inventory/inventory.module.js";
 import { LedgerModule } from "./modules/ledger/ledger.module.js";
 import { StaffModule } from "./modules/staff/staff.module.js";
 import { SyncModule } from "./modules/sync/sync.module.js";
@@ -54,6 +55,7 @@ export class AppModule {
         SyncModule,
         DocumentsModule,
         LedgerModule,
+        InventoryModule,
       ],
     };
   }

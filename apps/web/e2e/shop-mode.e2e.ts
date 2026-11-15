@@ -122,7 +122,7 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
 
   // The app may already be on its way to the PIN screen, which aborts this navigation. Either path is fine.
   await page.goto("/app").catch((error: Error) => {
-    if (!error.message.includes("ERR_ABORTED")) throw error;
+    if (!/ERR_ABORTED|interrupted by another navigation/.test(error.message)) throw error;
   });
   await expect(page).toHaveURL(/\/shop$/);
   await expect(page.getByRole("heading", { name: "Shop mode is off on this device" })).toBeVisible();

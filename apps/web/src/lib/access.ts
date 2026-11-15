@@ -7,6 +7,8 @@ export type Access = {
   staffSession: boolean;
   /** Who owns work saved offline on this device (see lib/offline/outbox.ts). */
   owner?: { tenantId: string; membershipId: string } | null;
+  /** The shop currently selected (a PIN device is always in its own shop). */
+  branchId?: string | null;
 };
 
 export const noAccess: Access = { permissions: [], staffSession: false };

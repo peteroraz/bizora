@@ -28,6 +28,8 @@ export type PushFn = (operations: { id: string; type: SyncOperationType; occurre
 
 const DB_NAME = "bizora-offline";
 const STORE = "outbox";
+const DB_VERSION = 2;
+export const CACHE_STORE = "cache";
 const BASE_DELAY_MS = 5_000;
 const MAX_DELAY_MS = 10 * 60_000;
 
@@ -48,12 +50,17 @@ function available() {
   return typeof indexedDB !== "undefined";
 }
 
-function open(): Promise<IDBDatabase> {
+export function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
-      const store = request.result.createObjectStore(STORE, { keyPath: "id" });
-      store.createIndex("owner", ["tenantId", "membershipId"]);
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        const store = db.createObjectStore(STORE, { keyPath: "id" });
+        store.createIndex("owner", ["tenantId", "membershipId"]);
+      }
+      // v2: products and stock downloaded for looking up with no network (lib/offline/catalog.ts).
+      if (!db.objectStoreNames.contains(CACHE_STORE)) db.createObjectStore(CACHE_STORE, { keyPath: "key" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);

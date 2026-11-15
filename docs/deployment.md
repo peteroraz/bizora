@@ -385,14 +385,14 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
 - Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
-- Catalog, sales, payments, inventory, and Ask Zora are not implemented.
+- Sales, payments and Ask Zora are not implemented.
 - There is no billing. Every organization starts on the `starter` plan (1 branch, 2 staff, 2 shop devices). To move one to `business`, run in Cloud SQL Studio: `UPDATE organization_plans SET plan_code = 'business' WHERE tenant_id = '<organization id>';`. `DEFAULT_PLAN_CODE` changes the plan given to new organizations only.
 - Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
 - Shop staff auto-lock after 5 minutes without input in the browser. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`).
 - Customer CSV import takes at most 2,000 rows and 1.5 MB per file.
 - A cashier's customer search (counter lookup) needs at least 3 letters or 7 digits and returns at most 10 results, but it has no rate limit of its own yet.
 - Roles are fixed (see `docs/security/roles.md`). There are no per-person permission toggles or custom roles yet.
-- Offline: only adding a customer works offline so far (ADR-012). Sales and stock join in Sprints 4 and 5. Looking up records offline (pull sync) is not built yet.
+- Offline: adding a customer, stock in and stock counts work offline, and products and stock can be looked up from the copy on the phone (ADR-012, ADR-014). Opening the app from scratch with no network does not work yet: the service worker caches no pages. Sales join in Sprint 5.
 - Idempotency keys are kept until pruned (`IdempotencyService.prune`, 30 days). No scheduled job runs it yet.
 - The ledger (ADR-013) has no screens yet. Its only endpoints are the read-only chart of accounts and trial balance.
 

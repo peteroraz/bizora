@@ -1,19 +1,13 @@
 "use client";
 
-import type { AuthWorkspace } from "@bizora/contracts";
+import { Permission, PIN_LOCKOUT, type AuthWorkspace } from "@bizora/contracts";
 import {
   Avatar,
   Badge,
   Button,
-  DropdownItem,
-  DropdownLabel,
-  DropdownMenu,
   IconButton,
   Select,
-  Sheet,
-  Tooltip,
   useTheme,
-  type ThemeChoice,
 } from "@bizora/ui";
 import {
   Banknote,
@@ -24,7 +18,6 @@ import {
   Home,
   IdCard,
   Lock,
-  LogOut,
   Menu,
   MoreHorizontal,
   Package,
@@ -34,15 +27,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useTranslations } from "next-intl";
-import { PIN_LOCKOUT } from "@bizora/contracts";
+import { LazySheet } from "../../components/lazy-sheet";
 import { api } from "../../lib/api";
+import type { AccountMenuProps } from "./account-menu";
 import { setShopMode } from "../../lib/shop-mode";
 import { navAllowed } from "../../lib/access";
 import { AccessProvider } from "../../lib/access-context";
 import { dismissRejected, subscribe, summary } from "../../lib/offline/outbox";
 import { startBackgroundSync } from "../../lib/offline/sync";
+import { refreshOfflineCatalog } from "../../lib/stock-client";
 import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
@@ -95,7 +90,6 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const t = useTranslations("shell");
   const nav = useTranslations("nav");
   const roles = useTranslations("roles");
-  const themeLabels = useTranslations("theme");
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
@@ -120,8 +114,9 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       permissions: profile.tenant?.permissions ?? [],
       staffSession: Boolean(profile.tenant?.deviceId),
       owner: tenantId && membershipId ? { tenantId, membershipId } : null,
+      branchId: profile.tenant?.branchId ?? null,
     }),
-    [profile.tenant?.permissions, profile.tenant?.deviceId, tenantId, membershipId],
+    [profile.tenant?.permissions, profile.tenant?.deviceId, tenantId, membershipId, profile.tenant?.branchId],
   );
   const [outbox, setOutbox] = useState<{ pending: number; rejected: { id: string; error: { message: string } | null }[] }>({
     pending: 0,
@@ -145,6 +140,17 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       stop();
     };
   }, [tenantId, membershipId]);
+
+  // Keep a copy of products and this shop's stock on the phone for looking up with no network.
+  const currentBranchId = profile.tenant?.branchId ?? null;
+  const readsStock = access.permissions.includes(Permission.STOCK_READ);
+  useEffect(() => {
+    if (!readsStock || !tenantId || !currentBranchId) return;
+    const refresh = () => void refreshOfflineCatalog(tenantId, currentBranchId);
+    refresh();
+    window.addEventListener("online", refresh);
+    return () => window.removeEventListener("online", refresh);
+  }, [readsStock, tenantId, currentBranchId]);
   const items = primaryNav.filter((item) => allowed.has(item.id) && navAllowed(access, item.id));
   const bottom = items.filter((item) => (bottomNav as readonly string[]).includes(item.id));
   const moreItems = items.filter((item) => !(bottomNav as readonly string[]).includes(item.id));
@@ -172,6 +178,13 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   function roleLabel(role: string) {
     return roles.has(role) ? roles(role) : role;
   }
+
+  const [AccountMenu, setAccountMenu] = useState<ComponentType<AccountMenuProps> | null>(null);
+  const accountTrigger = (
+    <button className="rounded-pill" aria-label={t("accountMenu")}>
+      <Avatar name={profile.user?.displayName ?? t("account")} />
+    </button>
+  );
 
   const onboarding = pathname.startsWith("/app/onboarding");
   const workspaces = profile.workspaces ?? [];
@@ -247,12 +260,11 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               {!item.enabled && !compact ? <Badge className="ml-auto">{t("soon")}</Badge> : null}
             </Link>
           );
-          return compact ? (
-            <Tooltip key={item.href} content={item.enabled ? text : t("comingSoon", { label: text })}>
+          // A native tooltip (title) when the sidebar is collapsed keeps the tooltip library out of every screen.
+          return (
+            <div key={item.href} title={compact ? (item.enabled ? text : t("comingSoon", { label: text })) : undefined}>
               {link}
-            </Tooltip>
-          ) : (
-            <div key={item.href}>{link}</div>
+            </div>
           );
         })}
       </nav>
@@ -283,7 +295,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       <div className="min-w-0">
         <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
           <div className="md:hidden">
-            <Sheet
+            <LazySheet
               open={menuOpen}
               onOpenChange={setMenuOpen}
               title={t("menuTitle")}
@@ -294,7 +306,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               }
             >
               {navigation(false)}
-            </Sheet>
+            </LazySheet>
           </div>
           <div className="flex min-w-0 max-w-56 items-center gap-2">
             <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
@@ -354,54 +366,31 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                 <Lock className="h-4 w-4" aria-hidden="true" /> {t("lock")}
               </button>
             ) : null}
-            <DropdownMenu
-              label={t("account")}
-              trigger={
-                <button className="rounded-pill" aria-label={t("accountMenu")}>
-                  <Avatar name={profile.user?.displayName ?? t("account")} />
-                </button>
-              }
-            >
-              <DropdownLabel>
-                <span className="block text-sm font-medium text-fg">{profile.user?.displayName}</span>
-                <span className="block">{profile.user?.email}</span>
-                <span className="mt-1 block">{profile.tenant?.role ? roleLabel(profile.tenant.role) : null}</span>
-              </DropdownLabel>
-              {(["light", "dark", "system"] as ThemeChoice[]).map((choice) => (
-                <DropdownItem key={choice} onSelect={() => setTheme(choice)}>
-                  {themeLabels(choice)}
-                  {theme === choice ? t("currentSuffix") : ""}
-                </DropdownItem>
-              ))}
-              {!staffMode && workspaces.length > 1 ? (
-                <>
-                  <DropdownLabel>{t("switchBusiness")}</DropdownLabel>
-                  {workspaces.map((workspace) => {
-                    const current = workspace.organizationId === currentOrganizationId;
-                    return (
-                      <DropdownItem
-                        key={workspace.organizationId}
-                        onSelect={() => {
-                          if (!current) void switchWorkspace(workspace.organizationId);
-                        }}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Building2 className="h-4 w-4" aria-hidden="true" />
-                          {workspace.organizationName}
-                          {current ? t("currentSuffix") : ""}
-                        </span>
-                      </DropdownItem>
-                    );
-                  })}
-                </>
-              ) : null}
-              <DropdownItem onSelect={() => void logout()}>
-                <span className="inline-flex items-center gap-2">
-                  {staffMode ? <Lock className="h-4 w-4" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}{" "}
-                  {staffMode ? t("lock") : t("logout")}
-                </span>
-              </DropdownItem>
-            </DropdownMenu>
+            {AccountMenu ? (
+              <AccountMenu
+                trigger={accountTrigger}
+                displayName={profile.user?.displayName}
+                email={profile.user?.email}
+                roleText={profile.tenant?.role ? roleLabel(profile.tenant.role) : null}
+                theme={theme}
+                onTheme={setTheme}
+                staffMode={staffMode}
+                workspaces={workspaces}
+                currentOrganizationId={currentOrganizationId}
+                onSwitch={(organizationId) => void switchWorkspace(organizationId)}
+                onLogout={() => void logout()}
+              />
+            ) : (
+              <span
+                className="contents"
+                onClickCapture={(event) => {
+                  event.preventDefault();
+                  void import("./account-menu").then((module) => setAccountMenu(() => module.default));
+                }}
+              >
+                {accountTrigger}
+              </span>
+            )}
           </div>
           {switchError ? (
             <p className="basis-full text-sm text-danger" role="alert">
@@ -453,7 +442,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               </Link>
             );
           })}
-          <Sheet
+          <LazySheet
             open={moreOpen}
             onOpenChange={setMoreOpen}
             title={t("more")}
@@ -471,7 +460,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                 </Link>
               ))}
             </div>
-          </Sheet>
+          </LazySheet>
         </nav>
       </div>
     </div>

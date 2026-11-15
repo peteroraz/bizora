@@ -8,6 +8,7 @@ import { Permission } from "@bizora/contracts";
 import { can, homeCards } from "../../lib/access";
 import { useAccess } from "../../lib/access-context";
 import { api } from "../../lib/api";
+import { useStockText } from "../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../i18n/format";
 
 type Check = { id: string; done: boolean; href: string };
@@ -27,6 +28,24 @@ export default function AppHomePage() {
   const [customerCount, setCustomerCount] = useState(0);
   const [timezone, setTimezone] = useState("Africa/Lagos");
   const [currency, setCurrency] = useState("NGN");
+  const [lowStock, setLowStock] = useState<{ id: string; name: string; baseUnit: string; quantity: string }[]>([]);
+  const [countsToApprove, setCountsToApprove] = useState(0);
+  const stockText = useStockText();
+  const seesStock = shown.includes("stock");
+  const approvesStock = can(access, Permission.STOCK_ADJUST);
+
+  useEffect(() => {
+    if (seesStock) {
+      void api("/api/v1/stock/low")
+        .then(async (response) => (response.ok ? setLowStock((await response.json()).data.items.slice(0, 5)) : undefined))
+        .catch(() => undefined);
+    }
+    if (approvesStock) {
+      void api("/api/v1/stock/counts")
+        .then(async (response) => (response.ok ? setCountsToApprove((await response.json()).data.items.length) : undefined))
+        .catch(() => undefined);
+    }
+  }, [seesStock, approvesStock]);
 
   useEffect(() => {
     void (async () => {
@@ -74,7 +93,27 @@ export default function AppHomePage() {
         {figureCards.map(([id, title, empty]) => (
           <Card key={id}>
             <p className="text-sm text-muted">{title}</p>
-            <p className="mt-2 text-sm">{empty}</p>
+            {id === "stock" ? (
+              lowStock.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {lowStock.map((item) => (
+                    <li key={item.id}>
+                      <Link href={`/app/stock/${item.id}`} className="text-primary">
+                        {t("lowStockItem", { name: item.name, quantity: stockText(item.quantity, item.baseUnit) })}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm">{t("noLowStock")}</p>
+              )
+            ) : id === "approval" && countsToApprove > 0 ? (
+              <Link href="/app/stock" className="mt-2 inline-block text-sm text-primary">
+                {t("approvalCounts", { count: countsToApprove })}
+              </Link>
+            ) : (
+              <p className="mt-2 text-sm">{empty}</p>
+            )}
             {id === "money" ? <p className="mt-2 text-xs text-muted">{t("moneyHint", { amount: formatCurrency(0n, currency, locale) })}</p> : null}
           </Card>
         ))}
