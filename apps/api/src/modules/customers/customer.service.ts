@@ -1,6 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   CUSTOMER_PAGE_SIZE,
+  LOOKUP_MIN_QUERY,
+  LOOKUP_RESULT_LIMIT,
   Permission,
   customerImportSchema,
   customerNoteSchema,
@@ -10,6 +12,7 @@ import {
   formatAddressDisplay,
   normalizePhoneToE164,
   parseCustomerCsv,
+  type PermissionCode,
 } from "@bizora/contracts";
 import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
@@ -84,23 +87,26 @@ export class CustomerService {
       .where(and(eq(memberships.tenantId, tenant.tenantId), eq(memberships.status, "ACTIVE")));
     const address = business.addressId ? await this.findAddress(tenant.tenantId, business.addressId) : null;
     const customerCount = canRead ? Number(countRow?.total ?? 0) : 0;
-    const checklist = [
-      {
+    // The setup checklist is for people who set up the shop; staff do not see it.
+    const has = (code: PermissionCode) => tenant.permissions.includes(code);
+    const checklist: { id: string; done: boolean; href: string }[] = [];
+    if (has(Permission.BUSINESS_SETTINGS_MANAGE)) {
+      checklist.push({
         id: "shop-place",
         done: Boolean(address?.city || address?.marketOrPlaza),
         href: "/app/settings?tab=shop",
-      },
-      { id: "what-you-sell", done: Boolean(business.whatYouSell?.trim()), href: "/app/settings?tab=shop" },
-    ];
-    if (canRead) checklist.splice(1, 0, { id: "first-customer", done: customerCount > 0, href: "/app/customers" });
-    if (business.staffFeaturesEnabled) {
-      checklist.push({
-        id: "invite-staff",
-        done: Number(peopleRow?.total ?? 0) > 1,
-        href: "/app/settings?tab=team",
       });
+      if (has(Permission.CUSTOMERS_MANAGE)) checklist.push({ id: "first-customer", done: customerCount > 0, href: "/app/customers" });
+      checklist.push({ id: "what-you-sell", done: Boolean(business.whatYouSell?.trim()), href: "/app/settings?tab=shop" });
+      if (business.staffFeaturesEnabled && has(Permission.STAFF_MANAGE)) {
+        checklist.push({
+          id: "invite-staff",
+          done: Number(peopleRow?.total ?? 0) > 1,
+          href: "/app/staff",
+        });
+      }
+      if (has(Permission.SALES_CREATE)) checklist.push({ id: "record-sale", done: false, href: "/app/sales" });
     }
-    checklist.push({ id: "record-sale", done: false, href: "/app/sales" });
     return {
       customerCount,
       overdueCount: canRead ? Number(overdueRow?.total ?? 0) : 0,
@@ -124,6 +130,7 @@ export class CustomerService {
 
   async list(tenant: TenantContext, query: string, page: number) {
     const business = await this.requireBusiness(tenant);
+    if (!tenant.permissions.includes(Permission.CUSTOMERS_READ)) return this.lookup(tenant, business, query);
     const filters = [this.customerScope(tenant, business.id)];
     const needle = query.trim();
     if (needle) {
@@ -149,6 +156,7 @@ export class CustomerService {
       .limit(CUSTOMER_PAGE_SIZE)
       .offset((safePage - 1) * CUSTOMER_PAGE_SIZE);
     return {
+      mode: "list" as const,
       items: items.map((item) => this.summary(item)),
       page: safePage,
       pageSize: CUSTOMER_PAGE_SIZE,
@@ -158,7 +166,56 @@ export class CustomerService {
 
   async get(tenant: TenantContext, id: string) {
     const customer = await this.requireCustomer(tenant, id);
+    if (!tenant.permissions.includes(Permission.CUSTOMERS_READ)) return this.lookupSummary(customer);
     return this.present(tenant.tenantId, customer);
+  }
+
+  /**
+   * Counter lookup for roles with customers.lookup only (cashier): find one customer to serve, never browse.
+   * A name needs at least LOOKUP_MIN_QUERY letters; a phone number needs at least 7 digits. Returns a few fields only.
+   */
+  private async lookup(tenant: TenantContext, business: BusinessRow, query: string) {
+    const needle = query.trim();
+    const digits = needle.replace(/\D/g, "").replace(/^0+/, "");
+    const isPhone = /^[\d\s+()-]+$/.test(needle);
+    if (needle.length < LOOKUP_MIN_QUERY || (isPhone && digits.length < 7)) {
+      throw new ApiError(
+        "SEARCH_TOO_SHORT",
+        `Type at least ${LOOKUP_MIN_QUERY} letters of the name, or 7 digits of the phone number.`,
+        400,
+      );
+    }
+    const normalized = isPhone ? normalizePhoneToE164(needle, business.countryCode.trim()) : null;
+    const match = isPhone
+      ? or(
+          normalized ? eq(customers.phoneE164, normalized) : sql`false`,
+          sql`${customers.phoneE164} LIKE ${`%${digits}`}`,
+        )
+      : sql`${customers.name} ILIKE ${like(needle)} ESCAPE '\\'`;
+    const rows = await this.db
+      .select()
+      .from(customers)
+      .where(and(this.customerScope(tenant, business.id), match))
+      .orderBy(asc(customers.name), asc(customers.id))
+      .limit(LOOKUP_RESULT_LIMIT);
+    return {
+      mode: "lookup" as const,
+      items: rows.map((row) => this.lookupSummary(row)),
+      page: 1,
+      pageSize: LOOKUP_RESULT_LIMIT,
+      total: rows.length,
+    };
+  }
+
+  /** What a counter lookup may show: enough to pick the right person, nothing more (NDPA data minimisation). */
+  private lookupSummary(row: CustomerRow) {
+    return {
+      id: row.id,
+      name: row.name,
+      isWalkIn: row.isWalkIn,
+      phoneLast4: row.phoneE164 ? row.phoneE164.slice(-4) : null,
+      limited: true as const,
+    };
   }
 
   async create(tenant: TenantContext, raw: unknown) {
@@ -624,6 +681,11 @@ export class CustomerService {
   private followupScope(tenant: TenantContext, businessId: string) {
     const filters = [eq(customerFollowups.tenantId, tenant.tenantId), eq(customerFollowups.businessId, businessId)];
     if (tenant.membershipBranchId) filters.push(eq(customerFollowups.branchId, tenant.membershipBranchId));
+    // Sales staff see the follow-ups assigned to them or that they created; managers see all of them.
+    if (!tenant.permissions.includes(Permission.FOLLOWUPS_READ_ALL)) {
+      const own = or(eq(customerFollowups.assignedTo, tenant.membershipId), eq(customerFollowups.createdBy, tenant.userId));
+      if (own) filters.push(own);
+    }
     return and(...filters);
   }
 

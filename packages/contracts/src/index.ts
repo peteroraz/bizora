@@ -213,29 +213,9 @@ export type AuthWorkspace = Pick<
   "organizationId" | "organizationName" | "role" | "businessName" | "branchName"
 >;
 
-export const Permission = {
-  TENANT_READ: "tenant.read",
-  TENANT_MANAGE: "tenant.manage",
-  BRANDING_MANAGE: "branding.manage",
-  USERS_READ: "users.read",
-  USERS_INVITE: "users.invite",
-  USERS_MANAGE: "users.manage",
-  ONBOARDING_COMPLETE: "onboarding.complete",
-  BRANCHES_READ: "branches.read",
-  BRANCHES_MANAGE: "branches.manage",
-  ORG_SETTINGS_MANAGE: "org.settings.manage",
-  BUSINESS_SETTINGS_MANAGE: "business.settings.manage",
-  BRANCH_SETTINGS_MANAGE: "branch.settings.manage",
-  CUSTOMERS_READ: "customers.read",
-  CUSTOMERS_MANAGE: "customers.manage",
-  FOLLOWUPS_MANAGE: "followups.manage",
-  PRICES_COST_READ: "prices.cost.read",
-  REPORTS_PROFIT_READ: "reports.profit.read",
-  STAFF_MANAGE: "staff.manage",
-  DEVICES_MANAGE: "devices.manage",
-} as const;
-
-export type PermissionCode = (typeof Permission)[keyof typeof Permission];
+export { Permission } from "./permissions.js";
+export type { PermissionCode } from "./permissions.js";
+export { ROLE_PERMISSIONS, LOOKUP_RESULT_LIMIT, LOOKUP_MIN_QUERY } from "./access.js";
 
 const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Use a 6-digit hex color");
 

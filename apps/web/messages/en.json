@@ -280,7 +280,14 @@
       "what-you-sell": "Write down what you sell",
       "invite-staff": "Invite your staff",
       "record-sale": "Record your first sale"
-    }
+    },
+    "mySales": "My sales today",
+    "myFollowups": "My follow-ups due today",
+    "findCustomer": "Find a customer",
+    "findCustomerBody": "Search by phone number or name when a customer is at the counter.",
+    "findCustomerAction": "Search customers",
+    "nothingYet": "Nothing to show yet",
+    "nothingYetBody": "Your tasks will show here as Bizora adds them for your role."
   },
   "onboarding": {
     "progress": "Question {current} of {total}",
@@ -437,7 +444,14 @@
     "errorEmail": "Email is not valid.",
     "errorPhone": "Phone could not be read as a number for this country.",
     "errorShop": "This phone is already used in another shop.",
-    "csvInvalid": "The file needs name, phone, email, and notes columns."
+    "csvInvalid": "The file needs name, phone, email, and notes columns.",
+    "lookupTitle": "Find a customer",
+    "lookupLead": "Type the customer's phone number, or at least 3 letters of their name.",
+    "lookupTooShort": "Type at least {min} letters of the name, or 7 digits of the phone number.",
+    "lookupFailed": "Could not search. Try again.",
+    "lookupMore": "Showing the first {count}. Type more of the name or number to narrow it down.",
+    "phoneEnds": "Phone ends in {digits}",
+    "limitedNote": "You can see a customer's name and the end of their phone number. Ask a manager if you need more."
   },
   "followups": {
     "title": "Follow-ups",

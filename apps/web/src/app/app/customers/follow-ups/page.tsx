@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { PageHeader } from "@bizora/ui";
 import Link from "next/link";
+import { Permission } from "@bizora/contracts";
+import { RequireAccess } from "../../../../components/require-access";
 import { api } from "../../../../lib/api";
 import { formatWhen } from "../../../../i18n/format";
 
@@ -11,7 +13,7 @@ type Item = { id: string; customerId: string; customerName: string; reason: stri
 
 const buckets = ["today", "overdue", "upcoming"] as const;
 
-export default function FollowupsPage() {
+function FollowupsScreen() {
   const t = useTranslations("followups");
   const locale = useLocale();
   const [items, setItems] = useState<Record<string, Item[]>>({ today: [], overdue: [], upcoming: [] });
@@ -83,5 +85,13 @@ export default function FollowupsPage() {
         </section>
       ))}
     </div>
+  );
+}
+
+export default function FollowupsPage() {
+  return (
+    <RequireAccess anyOf={[Permission.CUSTOMERS_READ]}>
+      <FollowupsScreen />
+    </RequireAccess>
   );
 }

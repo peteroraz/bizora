@@ -3,7 +3,7 @@ import { Reflector } from "@nestjs/core";
 import type { PermissionCode } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
 import { TENANT_CONTEXT_KEY, type TenantContext } from "../../common/tenant-context.js";
-import { PERMISSIONS_KEY } from "./permissions.js";
+import { PERMISSIONS_ANY_KEY, PERMISSIONS_KEY } from "./permissions.js";
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
@@ -14,7 +14,11 @@ export class PermissionGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!required || required.length === 0) {
+    const anyOf = this.reflector.getAllAndOverride<PermissionCode[]>(PERMISSIONS_ANY_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if ((!required || required.length === 0) && (!anyOf || anyOf.length === 0)) {
       return true;
     }
     const request = context.switchToHttp().getRequest<{ [TENANT_CONTEXT_KEY]?: TenantContext }>();
@@ -22,8 +26,9 @@ export class PermissionGuard implements CanActivate {
     if (!tenant) {
       throw new ApiError("UNAUTHENTICATED", "Authentication is required.", 401);
     }
-    const missing = required.filter((code) => !tenant.permissions.includes(code));
-    if (missing.length > 0) {
+    const missing = (required ?? []).filter((code) => !tenant.permissions.includes(code));
+    const noneOf = anyOf && anyOf.length > 0 && !anyOf.some((code) => tenant.permissions.includes(code));
+    if (missing.length > 0 || noneOf) {
       throw new ApiError("FORBIDDEN", "You do not have permission to perform this action.", 403);
     }
     return true;
