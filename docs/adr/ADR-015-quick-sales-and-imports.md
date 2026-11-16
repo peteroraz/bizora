@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Implements Spec Addendum v1.2 roadmap Sprint 5a. Builds on ADR-011 (roles), ADR-012 (offline), ADR-013 (ledger) and ADR-014 (stock). Sprint 5b adds AI capture (photos, handwriting, scans and voice) into the same review screen.
+Accepted. Implements Spec Addendum v1.2 roadmap Sprint 5a. Builds on ADR-011 (roles), ADR-012 (offline), ADR-013 (ledger) and ADR-014 (stock). Sprint 5b adds the desk flow (ADR-016). Sprint 5c adds AI capture (photos, handwriting, scans and voice) into the same review screen.
 
 ## Decision
 
@@ -14,7 +14,7 @@ Accepted. Implements Spec Addendum v1.2 roadmap Sprint 5a. Builds on ADR-011 (ro
   1. The client sends a UUIDv7. Sending it again returns the same sale. The same ID from another organization is refused (`ID_CONFLICT`).
   2. Each line is priced from the product: the base unit price, the pack price, or the base price × pack size. Selling below that price, and a discount on the whole sale, need `sales.discount` (managers and owners).
   3. Payments are cash, transfer or POS, up to three at once (split). Paying more than the total is refused.
-  4. Anything left owing is credit. Credit needs a customer and `debtors.manage`. Cashiers and sales staff cannot sell on credit.
+  4. Anything left owing is credit. Since ADR-016, credit needs a customer approved for credit, `sales.credit` or `debtors.manage`, a due date and a comment.
   5. It takes the next official receipt number (`R-000001`) from `DocumentNumberService`.
   6. For products whose stock is counted, it takes stock out with `StockService.applyMovement({ type: "sold" })`, which posts Dr cost of goods / Cr stock at the weighted average cost.
   7. It posts the sale: Dr cash for the shop, bank (transfer), POS clearing, and debtors for anything owing, plus Dr discounts. Cr sales (Cr service income for service businesses).
@@ -50,7 +50,7 @@ Accepted. Implements Spec Addendum v1.2 roadmap Sprint 5a. Builds on ADR-011 (ro
   - **Count them all:** only for sales from the last 7 days.
   - **History only:** records for reports.
   Counted rows must name an existing product and follow the same discount and credit rules as the sale screen. History rows may name products that are not in Bizora.
-- Sprint 5b will fill the same table from photos of sales books, scanned records and voice notes (Vertex AI in the organization's Google Cloud project). They will be marked as drafts, with audit `actorType` `ai_draft`, and nothing will be saved until a person checks and saves them.
+- Sprint 5c will fill the same table from photos of sales books, scanned records and voice notes (Vertex AI in the organization's Google Cloud project). They will be marked as drafts, with audit `actorType` `ai_draft`, and nothing will be saved until a person checks and saves them.
 
 ## Consequences
 

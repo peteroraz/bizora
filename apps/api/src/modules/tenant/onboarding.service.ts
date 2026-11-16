@@ -330,6 +330,7 @@ export class OnboardingService {
             ? { industryCode: industryForBusinessType(payload.businessType) }
             : {}),
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
+        ...(payload.salesFlow ? { salesFlow: payload.salesFlow } : {}),
         ...(setup
           ? {
               businessType: payload.businessType ?? business.businessType,

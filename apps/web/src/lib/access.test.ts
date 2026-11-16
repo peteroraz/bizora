@@ -96,6 +96,11 @@ describe("job functions (real ROLE_PERMISSIONS)", () => {
     // Sales staff: own sales, stock, own follow-ups. No money or debtors.
     expect(homeCards(as("SALES", true))).toEqual(["mySales", "stock", "followups"]);
     expect(homeCards(as("INVENTORY", true))).toEqual(["stock"]);
+    // Desk flow: the cashier and store keeper see their waiting lists first, and the store keeper gets Sales.
+    expect(homeCards({ ...as("CASHIER", true), salesFlow: "desk" })).toEqual(["toCollect", "mySales", "debtors", "stock", "findCustomer"]);
+    expect(homeCards({ ...as("INVENTORY", true), salesFlow: "desk" })).toEqual(["toRelease", "stock"]);
+    expect(navAllowed({ ...as("INVENTORY", true), salesFlow: "desk" }, "sales")).toBe(true);
+    expect(navAllowed(as("INVENTORY", true), "sales")).toBe(false);
     expect(homeCards(as("ACCOUNTANT"))).toEqual(["sales", "money", "cash", "debtors", "stock", "followups"]);
     expect(homeCards(as("EMPLOYEE", true))).toEqual([]);
   });

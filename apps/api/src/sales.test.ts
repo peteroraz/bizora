@@ -116,7 +116,7 @@ describe("quick sales and imports", () => {
     milkId = milk.body.data.product.id;
     const rice = await request(http).post("/api/v1/products").set(auth(a.token)).send({ name: "Rice 50kg", baseUnit: "bag", priceMinor: "8500000", openingQuantity: "10", openingCostMinor: "75000000" }).expect(201);
     riceId = rice.body.data.product.id;
-    const customer = await request(http).post("/api/v1/customers").set(auth(a.token)).send({ name: "Mama Chika", phone: "08031234567" }).expect(201);
+    const customer = await request(http).post("/api/v1/customers").set(auth(a.token)).send({ name: "Mama Chika", phone: "08031234567", creditAllowed: true }).expect(201);
     customerId = customer.body.data.customer.id;
   });
 
@@ -166,7 +166,7 @@ describe("quick sales and imports", () => {
     const managed = await request(http)
       .post("/api/v1/sales")
       .set(auth(managerToken))
-      .send({ lines: [{ productId: riceId, quantity: "1", unit: "bag" }], discountMinor: "500000", customerId, payments: [{ method: "cash", amountMinor: "5000000" }] })
+      .send({ lines: [{ productId: riceId, quantity: "1", unit: "bag" }], discountMinor: "500000", customerId, payments: [{ method: "cash", amountMinor: "5000000" }], dueDate: "2099-01-31", comment: "Pays on Friday" })
       .expect(201);
     creditSaleId = managed.body.data.sale.id;
     expect(managed.body.data.sale).toMatchObject({ totalMinor: "8000000", paidMinor: "5000000", balanceMinor: "3000000", customerName: "Mama Chika" });

@@ -7,12 +7,18 @@ import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
+import { SaleCollect } from "../../../../components/sale-collect";
+import { SaleComments } from "../../../../components/sale-comments";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
-import { type SaleDetail, whatsAppLink } from "../../../../lib/sales-client";
+import { type SaleDetail, type SaleReleaseDetail, whatsAppLink } from "../../../../lib/sales-client";
+
+type Loaded = (SaleDetail & { view: "full" }) | (SaleReleaseDetail & { view: "release" });
+
+const STAGE_TONE = { awaiting_payment: "warning", awaiting_release: "info", completed: "success", voided: "danger" } as const;
 
 function SaleScreen() {
   const t = useTranslations("sales");
@@ -20,10 +26,11 @@ function SaleScreen() {
   const access = useAccess();
   const unitName = useUnitName();
   const { id } = useParams<{ id: string }>();
-  const [sale, setSale] = useState<SaleDetail | null>(null);
+  const [sale, setSale] = useState<Loaded | null>(null);
   const [missing, setMissing] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState("");
+  const [releaseComment, setReleaseComment] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -41,37 +48,42 @@ function SaleScreen() {
     void load();
   }, [load]);
 
-  async function cancelSale() {
+  async function act(path: "void" | "release", body: object) {
     setError(null);
     setPending(true);
-    const response = await api(`/api/v1/sales/${id}/void`, {
+    const response = await api(`/api/v1/sales/${id}/${path}`, {
       method: "POST",
       headers: { [IDEMPOTENCY_HEADER]: uuidv7() },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify(body),
     }).catch(() => null);
     const payload = response ? await response.json().catch(() => null) : null;
     setPending(false);
     if (response?.ok) {
       setVoiding(false);
+      setReleaseComment("");
       setSale(payload.data.sale);
-      void load();
       return;
     }
-    setError(payload?.error?.message ?? t("failed"));
+    setError(response ? (payload?.error?.message ?? t("failed")) : t("needsNetwork"));
   }
 
   if (missing) return <EmptyState title={t("notFound")} description={t("notFoundBody")} />;
   if (!sale) return <p className="text-sm text-muted">{t("loading")}</p>;
 
-  const money = (minor: string) => formatCurrency(BigInt(minor), sale.currency, locale);
-  const receiptUrl = typeof window === "undefined" ? sale.receiptPath : `${window.location.origin}${sale.receiptPath}`;
-  const canVoid = can(access, Permission.SALES_VOID) && sale.status === "completed" && !sale.historyOnly;
+  const full = sale.view === "full" ? sale : null;
+  const money = (minor: string) => formatCurrency(BigInt(minor), full?.currency ?? "NGN", locale);
+  const when = (value: string) => formatWhen(value, locale, "Africa/Lagos");
+  const ownUnpaid = sale.status === "awaiting_payment" && sale.mine;
+  const canVoid = sale.status !== "voided" && !sale.historyOnly && (can(access, Permission.SALES_VOID) || (ownUnpaid && can(access, Permission.SALES_CREATE)));
+  const canCollect = full !== null && sale.status === "awaiting_payment" && can(access, Permission.SALES_COLLECT);
+  const canRelease = sale.status === "awaiting_release" && can(access, Permission.SALES_RELEASE);
+  const plural = (quantity: string) => (Number(quantityToString(BigInt(quantity))) === 1 ? 1 : 2);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
-        title={sale.number ?? sale.externalRef ?? t("historyRecord")}
-        description={[formatWhen(sale.soldAt, locale, "Africa/Lagos"), sale.byName, sale.branchName].filter(Boolean).join(" · ")}
+        title={sale.number ?? full?.externalRef ?? t("historyRecord")}
+        description={[when(sale.soldAt), sale.byName, sale.branchName].filter(Boolean).join(" · ")}
         actions={
           <Link href="/app/sales" className="text-sm font-medium text-primary">
             {t("allSales")}
@@ -79,93 +91,141 @@ function SaleScreen() {
         }
       />
       <div className="flex flex-wrap gap-2">
-        {sale.status === "voided" ? <Badge tone="danger">{t("voided")}</Badge> : <Badge tone="success">{t("completed")}</Badge>}
+        <Badge tone={STAGE_TONE[sale.status]}>{t(`stage.${sale.status}`)}</Badge>
+        {sale.status !== "voided" && sale.paymentState !== "unpaid" ? <Badge tone={sale.paymentState === "credit" ? "warning" : "success"}>{t(`payment.${sale.paymentState}`)}</Badge> : null}
         {sale.historyOnly ? <Badge>{t("history")}</Badge> : null}
         {sale.provisionalNumber ? <Badge tone="info">{t("offlineNumber", { number: sale.provisionalNumber })}</Badge> : null}
-        {sale.source === "import" ? <Badge>{t("imported")}</Badge> : null}
+        {full?.source === "import" ? <Badge>{t("imported")}</Badge> : null}
       </div>
+      {sale.status === "awaiting_payment" && !canCollect ? <p className="text-sm">{t("sendCustomerToCashier", { number: sale.number ?? "" })}</p> : null}
+      {sale.status === "awaiting_release" && !canRelease ? <p className="text-sm">{t("waitingForStore")}</p> : null}
       {sale.historyOnly ? <p className="text-sm text-muted">{t("historyExplain")}</p> : null}
-      {sale.voidReason ? <p className="text-sm text-danger">{t("voidedBecause", { reason: sale.voidReason })}</p> : null}
+      {full?.voidReason ? <p className="text-sm text-danger">{t("voidedBecause", { reason: full.voidReason })}</p> : null}
+
+      {!sale.historyOnly ? (
+        <ol className="space-y-1 text-sm" aria-label={t("timeline")}>
+          <li>{t("stepRecorded", { name: sale.byName ?? t("someone"), when: when(sale.soldAt) })}</li>
+          {sale.collectedAt ? (
+            <li>{t(sale.paymentState === "credit" ? "stepCredit" : "stepPaid", { name: sale.collectedByName ?? t("someone"), when: when(sale.collectedAt) })}</li>
+          ) : null}
+          {sale.releasedAt ? <li>{t("stepReleased", { name: sale.releasedByName ?? t("someone"), when: when(sale.releasedAt) })}</li> : null}
+        </ol>
+      ) : null}
+
       <Card>
         <ul className="divide-y divide-border">
-          {sale.lines.map((line, index) => (
-            <li key={index} className="flex items-start justify-between gap-3 py-2 text-sm">
-              <span>
-                <span className="block font-medium">{line.description}</span>
-                <span className="text-muted">
-                  {t("lineDetail", {
-                    quantity: quantityToString(BigInt(line.enteredQuantity)),
-                    unit: unitName(line.enteredUnit, Number(quantityToString(BigInt(line.enteredQuantity))) === 1 ? 1 : 2),
-                    price: money(line.unitPriceMinor),
-                  })}
-                </span>
-                {line.costMinor !== undefined ? <span className="block text-xs text-muted">{t("lineCost", { cost: money(line.costMinor) })}</span> : null}
-              </span>
-              <span className="tabular-nums">{money(line.lineTotalMinor)}</span>
-            </li>
-          ))}
+          {full
+            ? full.lines.map((line, index) => (
+                <li key={index} className="flex items-start justify-between gap-3 py-2 text-sm">
+                  <span>
+                    <span className="block font-medium">{line.description}</span>
+                    <span className="text-muted">
+                      {t("lineDetail", { quantity: quantityToString(BigInt(line.enteredQuantity)), unit: unitName(line.enteredUnit, plural(line.enteredQuantity)), price: money(line.unitPriceMinor) })}
+                    </span>
+                    {line.costMinor !== undefined ? <span className="block text-xs text-muted">{t("lineCost", { cost: money(line.costMinor) })}</span> : null}
+                  </span>
+                  <span className="tabular-nums">{money(line.lineTotalMinor)}</span>
+                </li>
+              ))
+            : sale.lines.map((line, index) => (
+                <li key={index} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <span className="font-medium">{line.description}</span>
+                  <span className="text-base font-semibold">
+                    {quantityToString(BigInt(line.enteredQuantity))} {unitName(line.enteredUnit, plural(line.enteredQuantity))}
+                  </span>
+                </li>
+              ))}
         </ul>
-        <dl className="mt-3 grid grid-cols-2 gap-1 border-t border-border pt-3 text-sm">
-          {BigInt(sale.discountMinor) > 0n ? (
-            <>
-              <dt className="text-muted">{t("discount")}</dt>
-              <dd className="text-right tabular-nums">{money((-BigInt(sale.discountMinor)).toString())}</dd>
-            </>
-          ) : null}
-          <dt className="font-medium">{t("total")}</dt>
-          <dd className="text-right font-medium tabular-nums">{money(sale.totalMinor)}</dd>
-          {sale.payments.map((payment, index) => (
-            <Fragment key={index}>
-              <dt className="text-muted">{t(`mode.${payment.method}`)}</dt>
-              <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
-            </Fragment>
-          ))}
-          {BigInt(sale.balanceMinor) > 0n ? (
-            <>
-              <dt className="text-warning">{t("owing")}</dt>
-              <dd className="text-right tabular-nums text-warning">{money(sale.balanceMinor)}</dd>
-            </>
-          ) : null}
-        </dl>
+        {full ? (
+          <dl className="mt-3 grid grid-cols-2 gap-1 border-t border-border pt-3 text-sm">
+            {BigInt(full.discountMinor) > 0n ? (
+              <>
+                <dt className="text-muted">{t("discount")}</dt>
+                <dd className="text-right tabular-nums">{money((-BigInt(full.discountMinor)).toString())}</dd>
+              </>
+            ) : null}
+            <dt className="font-medium">{t("total")}</dt>
+            <dd className="text-right font-medium tabular-nums">{money(full.totalMinor)}</dd>
+            {full.payments.map((payment, index) => (
+              <Fragment key={index}>
+                <dt className="text-muted">{t(`mode.${payment.method}`)}</dt>
+                <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
+              </Fragment>
+            ))}
+            {sale.status !== "awaiting_payment" && BigInt(full.balanceMinor) > 0n ? (
+              <>
+                <dt className="text-warning">{t("owing")}</dt>
+                <dd className="text-right tabular-nums text-warning">{money(full.balanceMinor)}</dd>
+              </>
+            ) : null}
+            {full.dueDate ? (
+              <>
+                <dt className="text-muted">{t("dueDate")}</dt>
+                <dd className="text-right">{full.dueDate}</dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
       </Card>
-      {sale.customerName ? (
+      {full?.customerName ? (
         <p className="text-sm">
-          {sale.customerPhoneLast4 ? t("customerWithPhone", { name: sale.customerName, last4: sale.customerPhoneLast4 }) : t("customerName", { name: sale.customerName })}
+          {full.customerPhoneLast4 ? t("customerWithPhone", { name: full.customerName, last4: full.customerPhoneLast4 }) : t("customerName", { name: full.customerName })}
         </p>
       ) : null}
-      {sale.note ? <p className="text-sm text-muted">{sale.note}</p> : null}
-      {sale.number ? (
+      {full?.note ? <p className="text-sm text-muted">{full.note}</p> : null}
+
+      {canCollect && full ? <SaleCollect sale={full} onDone={(next) => setSale(next)} /> : null}
+
+      {canRelease ? (
+        <Card>
+          <SafeForm className="space-y-3" pending={pending} onSubmit={() => void act("release", releaseComment.trim() ? { comment: releaseComment.trim() } : {})}>
+            <p className="text-sm font-medium">{t("releaseTitle")}</p>
+            <p className="text-sm text-muted">{t(sale.paymentState === "credit" ? "releaseCredit" : "releasePaid")}</p>
+            <FormField id="release-comment" label={t("storeComment")} hint={t("optional")}>
+              <Input id="release-comment" value={releaseComment} maxLength={500} onChange={(event) => setReleaseComment(event.target.value)} />
+            </FormField>
+            <SubmitButton pending={pending} pendingLabel={t("saving")}>
+              {t("releaseConfirm")}
+            </SubmitButton>
+          </SafeForm>
+        </Card>
+      ) : null}
+
+      {full && sale.number && sale.status !== "awaiting_payment" ? (
         <div className="flex flex-wrap gap-3">
-          <a href={whatsAppLink(sale, typeof window === "undefined" ? "" : window.location.origin)} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-fg">
-            {sale.whatsApp.phone ? t("sendWhatsAppCustomer") : t("sendWhatsApp")}
+          <a href={whatsAppLink(full, typeof window === "undefined" ? "" : window.location.origin)} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-fg">
+            {full.whatsApp.phone ? t("sendWhatsAppCustomer") : t("sendWhatsApp")}
           </a>
           <Button
             type="button"
             variant="secondary"
             onClick={() => {
-              void navigator.clipboard?.writeText(receiptUrl).then(() => setCopied(true));
+              void navigator.clipboard?.writeText(`${window.location.origin}${full.receiptPath}`).then(() => setCopied(true));
             }}
           >
             {copied ? t("copied") : t("copyLink")}
           </Button>
-          <Link href={sale.receiptPath} className="self-center text-sm text-primary" target="_blank">
+          <Link href={full.receiptPath} className="self-center text-sm text-primary" target="_blank">
             {t("viewReceipt")}
           </Link>
         </div>
       ) : null}
+
+      {!sale.historyOnly ? <SaleComments saleId={sale.id} comments={sale.comments} onAdded={() => void load()} /> : null}
+
+      {error ? (
+        <p className="text-sm text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
       {canVoid ? (
         voiding ? (
           <Card>
-            <SafeForm className="space-y-3" pending={pending} onSubmit={() => void cancelSale()}>
-              <p className="text-sm">{t("voidExplain")}</p>
+            <SafeForm className="space-y-3" pending={pending} onSubmit={() => void act("void", { reason })}>
+              <p className="text-sm">{sale.status === "awaiting_payment" ? t("voidExplainUnpaid") : t("voidExplain")}</p>
               <FormField id="void-reason" label={t("voidReason")}>
                 <Input id="void-reason" value={reason} required maxLength={200} onChange={(event) => setReason(event.target.value)} />
               </FormField>
-              {error ? (
-                <p className="text-sm text-danger" role="alert">
-                  {error}
-                </p>
-              ) : null}
               <div className="flex gap-3">
                 <SubmitButton pending={pending} pendingLabel={t("saving")}>
                   {t("voidConfirm")}
@@ -188,7 +248,7 @@ function SaleScreen() {
 
 export default function SalePage() {
   return (
-    <RequireAccess anyOf={[Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL]}>
+    <RequireAccess anyOf={[Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL, Permission.SALES_COLLECT, Permission.SALES_RELEASE]}>
       <SaleScreen />
     </RequireAccess>
   );

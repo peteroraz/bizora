@@ -21,6 +21,10 @@ export const customerWriteSchema = z
     tags: z.array(z.string().trim().min(1).max(32)).max(12).optional(),
     branchId: z.string().uuid().optional(),
     address: addressInputSchema.optional(),
+    /** Approve the customer to buy on credit (needs debtors.manage). */
+    creditAllowed: z.boolean().optional(),
+    /** Most they may owe at once, in kobo. Empty: no limit. */
+    creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter an amount in kobo."), z.null()]).optional(),
   })
   .superRefine((value, ctx) => {
     const walkIn = value.isWalkIn === true;
@@ -40,6 +44,12 @@ export const customerWriteSchema = z
       });
     }
   });
+
+/** A manager or owner approves a customer for credit and sets the most they may owe (empty: no limit). */
+export const customerCreditSchema = z.object({
+  creditAllowed: z.boolean(),
+  creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter an amount in kobo."), z.null()]).optional(),
+});
 
 export const customerNoteSchema = z.object({
   body: z.string().trim().min(1).max(4000),

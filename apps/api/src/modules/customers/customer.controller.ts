@@ -86,7 +86,14 @@ export class CustomersController {
     return success({ customer: await this.customers.update(tenant, id, body) }, tenant.correlationId);
   }
 
-  @Delete("customers/:id")
+  /** Approve a customer for credit, or change their limit (managers and owners). */
+  @Patch("customers/:id/credit")
+  @RequirePermissions(Permission.DEBTORS_MANAGE)
+  async credit(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
+    return success({ customer: await this.customers.setCredit(tenant, id, body) }, tenant.correlationId);
+  }
+
+    @Delete("customers/:id")
   @RequirePermissions(Permission.CUSTOMERS_MANAGE)
   async remove(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
     return success(await this.customers.remove(tenant, id), tenant.correlationId);

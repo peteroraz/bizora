@@ -233,6 +233,8 @@ export const updateBusinessSchema = z.object({
   multiCurrencyEnabled: z.boolean().optional(),
   staffFeaturesEnabled: z.boolean().optional(),
   visibleModules: z.array(traderModuleSchema).optional(),
+  /** simple: one person records and takes payment. desk: sales person, then cashier, then store keeper (ADR-016). */
+  salesFlow: z.enum(["simple", "desk"]).optional(),
 });
 
 export const updateBranchSchema = z.object({

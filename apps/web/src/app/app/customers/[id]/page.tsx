@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { CustomerCredit, type CustomerCreditView } from "../../../../components/customer-credit";
 import { RequireAccess } from "../../../../components/require-access";
 import { can, customerMode } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
@@ -21,6 +22,8 @@ type Customer = {
   tags: string[];
   notesSummary: string | null;
   addressFormatted: string | null;
+  credit: CustomerCreditView;
+  owingMinor: string;
 };
 type Note = { id: string; body: string; createdAt: string };
 type Followup = { id: string; reason: string; dueAt: string; status: string };
@@ -171,6 +174,7 @@ function CustomerFullScreen() {
         {customer.tags.length > 0 ? <p>{customer.tags.join(", ")}</p> : null}
         {customer.notesSummary ? <p className="text-muted">{customer.notesSummary}</p> : null}
       </div>
+      <CustomerCredit customerId={customer.id} credit={customer.credit} owingMinor={customer.owingMinor} onSaved={() => void load()} />
       {error ? (
         <p className="text-sm text-danger" role="alert">
           {error}
@@ -282,7 +286,7 @@ function CustomerFullScreen() {
   );
 }
 
-type LimitedCustomer = { id: string; name: string; isWalkIn: boolean; phoneLast4: string | null };
+type LimitedCustomer = { id: string; name: string; isWalkIn: boolean; phoneLast4: string | null; credit: CustomerCreditView; owingMinor: string };
 
 /** Cashier view of one customer: name and the end of the phone number only. */
 function CustomerLimitedScreen() {
@@ -312,6 +316,7 @@ function CustomerLimitedScreen() {
         description={customer.isWalkIn || !customer.phoneLast4 ? t("walkIn") : t("phoneEnds", { digits: customer.phoneLast4 })}
       />
       <p className="text-xs text-muted">{t("limitedNote")}</p>
+      <CustomerCredit customerId={customer.id} credit={customer.credit} owingMinor={customer.owingMinor} onSaved={() => undefined} />
       <Link href="/app/customers" className="inline-block text-sm font-medium text-primary">
         {t("back")}
       </Link>

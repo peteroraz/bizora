@@ -37,6 +37,15 @@ export default function AppHomePage() {
   const seesSales = shown.includes("sales") || shown.includes("mySales");
   const sells = can(access, Permission.SALES_CREATE);
   const [sales, setSales] = useState<SaleSummary | null>(null);
+  const [queues, setQueues] = useState<{ awaitingPayment: number | null; awaitingRelease: number | null } | null>(null);
+  const seesQueues = shown.includes("toCollect") || shown.includes("toRelease");
+
+  useEffect(() => {
+    if (!seesQueues) return;
+    void api("/api/v1/sales/queues")
+      .then(async (response) => (response.ok ? setQueues((await response.json()).data) : undefined))
+      .catch(() => undefined);
+  }, [seesQueues]);
 
   useEffect(() => {
     if (!seesSales) return;
@@ -82,6 +91,8 @@ export default function AppHomePage() {
 
   const figureCards = (
     [
+      ["toCollect", t("toCollect"), t("toCollectEmpty")],
+      ["toRelease", t("toRelease"), t("toReleaseEmpty")],
       ["sales", t("sales"), t("emptySales")],
       ["mySales", t("mySales"), t("emptySales")],
       ["money", t("money"), t("emptyMoney")],
@@ -118,6 +129,18 @@ export default function AppHomePage() {
               ) : (
                 <p className="mt-2 text-sm">{t("noLowStock")}</p>
               )
+            ) : id === "toCollect" || id === "toRelease" ? (
+              (() => {
+                const count = (id === "toCollect" ? queues?.awaitingPayment : queues?.awaitingRelease) ?? 0;
+                return count > 0 ? (
+                  <Link href="/app/sales" className="mt-1 block" data-testid={`home-${id}`}>
+                    <span className="block text-xl font-semibold">{count}</span>
+                    <span className="text-sm text-primary">{t(id === "toCollect" ? "toCollectAction" : "toReleaseAction")}</span>
+                  </Link>
+                ) : (
+                  <p className="mt-2 text-sm">{empty}</p>
+                );
+              })()
             ) : (id === "sales" || id === "mySales") && sales && sales.count > 0 ? (
               <>
                 <p className="mt-1 text-xl font-semibold tabular-nums" data-testid="home-sales-total">

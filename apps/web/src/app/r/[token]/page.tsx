@@ -12,7 +12,7 @@ type Receipt = {
   customerName: string | null;
   number: string | null;
   provisionalNumber: string | null;
-  status: "completed" | "voided";
+  status: "awaiting_payment" | "awaiting_release" | "completed" | "voided";
   soldAt: string;
   currency: string;
   subtotalMinor: string;
@@ -54,6 +54,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
       {receipt.status === "voided" ? (
         <p className="rounded-card border border-danger bg-danger-bg px-3 py-2 text-sm text-danger" role="status">
           {t("voided")}
+        </p>
+      ) : null}
+      {receipt.status === "awaiting_payment" ? (
+        <p className="rounded-card border border-warning bg-warning-bg px-3 py-2 text-sm text-warning" role="status">
+          {t("unpaid")}
         </p>
       ) : null}
       {receipt.customerName ? <p className="text-sm">{t("customer", { name: receipt.customerName })}</p> : null}

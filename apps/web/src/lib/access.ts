@@ -9,6 +9,8 @@ export type Access = {
   owner?: { tenantId: string; membershipId: string } | null;
   /** The shop currently selected (a PIN device is always in its own shop). */
   branchId?: string | null;
+  /** How the business sells (ADR-016): simple, or sales desk → cashier → store keeper. */
+  salesFlow?: "simple" | "desk";
 };
 
 export const noAccess: Access = { permissions: [], staffSession: false };
@@ -24,7 +26,7 @@ export function can(access: Access, ...anyOf: string[]) {
 const moduleRules: Record<string, readonly string[] | null> = {
   home: null,
   settings: null,
-  sales: [Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL],
+  sales: [Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL, Permission.SALES_COLLECT, Permission.SALES_RELEASE],
   stock: [Permission.STOCK_READ],
   customers: [Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP],
   debtors: [Permission.DEBTORS_READ],
@@ -44,6 +46,10 @@ export function moduleRule(id: string): readonly string[] | null {
 export function navAllowed(access: Access, id: string) {
   const rule = moduleRules[id];
   if (rule === undefined) return false;
+  // A store keeper only needs Sales in the desk flow, to see what goods to give out.
+  if (id === "sales" && access.salesFlow !== "desk") {
+    return can(access, Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL, Permission.SALES_COLLECT);
+  }
   return rule === null || can(access, ...rule);
 }
 
@@ -63,12 +69,17 @@ export type HomeCard =
   | "stock"
   | "staff"
   | "approval"
+  | "toCollect"
+  | "toRelease"
   | "followups"
   | "findCustomer";
 
 /** Home dashboard cards for this person's job. Each card needs the permission that shows its figures. */
 export function homeCards(access: Access): HomeCard[] {
   const cards: HomeCard[] = [];
+  // Desk flow: the cashier's and store keeper's waiting lists come first.
+  if (access.salesFlow === "desk" && can(access, Permission.SALES_COLLECT)) cards.push("toCollect");
+  if (access.salesFlow === "desk" && can(access, Permission.SALES_RELEASE)) cards.push("toRelease");
   if (can(access, Permission.SALES_READ_ALL)) cards.push("sales");
   else if (can(access, Permission.SALES_READ_OWN)) cards.push("mySales");
   if (can(access, Permission.MONEY_READ)) cards.push("money");

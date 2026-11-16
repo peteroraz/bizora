@@ -55,6 +55,9 @@ Permissions decide what a person can do. Scope decides which rows and fields the
 | Record an expense (`expenses.record`) | Accountant, Manager | Owner or Administrator approves (`expenses.approve`). |
 | Check the books (`money.read`, `reports.*`) | Accountant, Auditor | They take no sales and no payments. |
 | Download the customer list (`customers.export`) | Owner, Administrator | — |
+| Desk flow: record a sale (`sales.create`) | Sales person | Cannot take money. May cancel their own sale only while it waits for payment. |
+| Desk flow: take money or give credit (`sales.collect`, `sales.credit`) | Cashier | Credit only for customers a manager or owner approved (`debtors.manage`), within their limit, with a due date and comment. Cannot give out goods. |
+| Desk flow: give out goods (`sales.release`) | Storekeeper | Only for sales the cashier finished. Sees the items, not amounts or the customer. |
 
 ## Permission matrix
 
@@ -99,6 +102,9 @@ Permissions under Sales, Debtors, Stock, Money and Reports are reserved: the mod
 | `sales.read.all` | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |
 | `sales.discount` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
 | `sales.void` | ✓ | ✓ | ✓ |  |  |  |  |  |  |
+| `sales.collect` | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
+| `sales.release` | ✓ | ✓ | ✓ |  |  |  |  | ✓ |  |
+| `sales.credit` | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
 | `payments.record` | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
 | `cash.close` | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
 | `cash.expected.read` | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |
