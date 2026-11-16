@@ -66,7 +66,8 @@ test("core screens stay within the JavaScript and loading-speed budgets", async 
 
   const results: { screen: string; jsKB: number; prefetchKB: number; lcpMs: number }[] = [];
   const check = async (screen: string, url: string, signIn: boolean) => {
-    const context = await browser.newContext({ viewport: { width: 360, height: 780 } });
+    // Service workers are blocked so every file is downloaded and counted, as on a first visit.
+    const context = await browser.newContext({ viewport: { width: 360, height: 780 }, serviceWorkers: "block" });
     const page = await context.newPage();
     if (signIn) {
       await page.goto("/login");
@@ -93,6 +94,7 @@ test("core screens stay within the JavaScript and loading-speed budgets", async 
   await check("home", "/app", true);
   await check("customers", "/app/customers", true);
   await check("stock", "/app/stock", true);
+  await check("quick sale", "/app/sales/new", true);
 
   console.log(JSON.stringify(results, null, 2));
   for (const result of results) {

@@ -97,3 +97,32 @@ export const PAID_FROM = ["cash", "bank", "credit"] as const;
 export const STOCK_REMOVE_REASONS = ["damaged", "expired", "missing", "own_use", "gift", "other"] as const;
 export const STOCK_ADD_REASONS = ["found", "correction"] as const;
 export { PRODUCT_PAGE_SIZE, PULL_PAGE_SIZE } from "./constants.js";
+
+const UNIT_WORDS: Record<string, UnitCode> = {
+  piece: "piece", pieces: "piece", pc: "piece", pcs: "piece", unit: "piece", units: "piece", each: "piece",
+  pack: "pack", packs: "pack", pkt: "pack", pkts: "pack", packet: "pack", packets: "pack",
+  carton: "carton", cartons: "carton", ctn: "carton", ctns: "carton", box: "carton", boxes: "carton",
+  bag: "bag", bags: "bag", sack: "bag", sacks: "bag",
+  sachet: "sachet", sachets: "sachet",
+  bottle: "bottle", bottles: "bottle", btl: "bottle",
+  can: "can", cans: "can",
+  tin: "tin", tins: "tin",
+  crate: "crate", crates: "crate",
+  dozen: "dozen", dozens: "dozen", doz: "dozen",
+  bundle: "bundle", bundles: "bundle",
+  roll: "roll", rolls: "roll",
+  set: "set", sets: "set",
+  pair: "pair", pairs: "pair",
+  paint: "paint", paints: "paint", bucket: "paint", buckets: "paint",
+  kg: "kg", kgs: "kg", kilo: "kg", kilos: "kg", kilogram: "kg", kilograms: "kg",
+  g: "g", gram: "g", grams: "g", gm: "g",
+  l: "litre", ltr: "litre", ltrs: "litre", litre: "litre", litres: "litre", liter: "litre", liters: "litre",
+  ml: "ml",
+  m: "metre", metre: "metre", metres: "metre", meter: "metre", meters: "metre",
+  yard: "yard", yards: "yard", yd: "yard", yds: "yard",
+};
+
+/** Reads the unit words traders write ("ctn", "pcs", "ltr") as a unit code, or null if unknown. */
+export function unitFromText(text: string): UnitCode | null {
+  return UNIT_WORDS[text.trim().toLowerCase().replace(/\.$/, "")] ?? null;
+}

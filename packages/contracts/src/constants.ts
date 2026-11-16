@@ -13,6 +13,9 @@ export const PIN_MAX_LENGTH = 6;
 
 export const CUSTOMER_PAGE_SIZE = 25;
 export const PRODUCT_PAGE_SIZE = 25;
+export const SALE_PAGE_SIZE = 25;
+/** Most rows one import (products, sales) can carry. */
+export const IMPORT_MAX_ROWS = 2000;
 /** How many products or balances one offline download page carries. */
 export const PULL_PAGE_SIZE = 500;
 

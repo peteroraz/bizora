@@ -122,9 +122,14 @@ function StockScreen() {
         description={t("description")}
         actions={
           canAdd ? (
-            <Link href="/app/stock/new" className="text-sm font-medium text-primary">
-              {t("add")}
-            </Link>
+            <div className="flex gap-4">
+              <Link href="/app/stock/import" className="text-sm font-medium text-primary">
+                {t("import")}
+              </Link>
+              <Link href="/app/stock/new" className="text-sm font-medium text-primary">
+                {t("add")}
+              </Link>
+            </div>
           ) : undefined
         }
       />

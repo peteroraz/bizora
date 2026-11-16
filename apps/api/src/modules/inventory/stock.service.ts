@@ -534,9 +534,23 @@ export class StockService {
   }
 
   private postingLines(input: MovementInput, value: bigint, branchId: string): PostingLine[] | null {
-    if (value === 0n || input.type === "transfer_in" || input.type === "transfer_out" || input.type === "sold") return null;
+    if (value === 0n || input.type === "transfer_in" || input.type === "transfer_out") return null;
     const amount = value < 0n ? -value : value;
     const stock = { account: { role: "stock" as const } };
+    // Goods sold leave stock at cost; the sale's own entry records the money and the revenue.
+    if (input.type === "sold") {
+      return [
+        { account: { role: "cogs" }, debitMinor: amount },
+        { ...stock, creditMinor: amount },
+      ];
+    }
+    // Goods back from a cancelled sale return at the cost they left with.
+    if (input.type === "returned" && input.reason === "sale_void") {
+      return [
+        { ...stock, debitMinor: amount },
+        { account: { role: "cogs" }, creditMinor: amount },
+      ];
+    }
     if (input.type === "opening") {
       return [
         { ...stock, debitMinor: amount },
@@ -572,6 +586,10 @@ export class StockService {
         return "Opening stock";
       case "received":
         return "Stock received";
+      case "sold":
+        return "Sold";
+      case "returned":
+        return "Returned from a cancelled sale";
       case "counted":
         return "Stock count difference";
       case "adjusted":
