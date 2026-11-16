@@ -64,6 +64,13 @@ const envSchema = z
     GOOGLE_OAUTH_CLIENT_ID: optionalText,
     GOOGLE_OAUTH_CLIENT_SECRET: optionalText,
     GOOGLE_OAUTH_ISSUER: optionalUrl,
+    // AI capture (ADR-018). off: no AI; vertex: Gemini on Vertex AI in VERTEX_PROJECT; fake: canned drafts for tests.
+    AI_PROVIDER: z.enum(["off", "vertex", "fake"]).default("off"),
+    VERTEX_PROJECT: optionalText,
+    VERTEX_LOCATION: z.string().min(1).default("global"),
+    VERTEX_MODEL: z.string().min(1).default("gemini-3.8-flash"),
+    // Captures each organization may run per day, to keep AI costs predictable.
+    AI_DAILY_CAPTURE_LIMIT: z.coerce.number().int().min(0).default(50),
   })
   .superRefine((value, ctx) => {
     if (value.EMAIL_PROVIDER === "resend") {
@@ -75,6 +82,12 @@ const envSchema = z
       }
     } else if (value.EMAIL_FROM && !fromAddress.safeParse(value.EMAIL_FROM).success) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_FROM"], message: "must be an email address" });
+    }
+    if (value.AI_PROVIDER === "vertex" && !value.VERTEX_PROJECT) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["VERTEX_PROJECT"], message: "is required when AI_PROVIDER is vertex" });
+    }
+    if (value.AI_PROVIDER === "fake" && value.NODE_ENV === "production") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["AI_PROVIDER"], message: "fake is for tests only" });
     }
     if (Boolean(value.GOOGLE_OAUTH_CLIENT_ID) !== Boolean(value.GOOGLE_OAUTH_CLIENT_SECRET)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["GOOGLE_OAUTH_CLIENT_ID"], message: "client id and secret must both be set" });
@@ -96,7 +109,17 @@ export type AppEnv = Omit<
   | "GOOGLE_OAUTH_ISSUER"
   | "DEFAULT_PLAN_CODE"
   | "STAFF_SESSION_TTL"
+  | "AI_PROVIDER"
+  | "VERTEX_PROJECT"
+  | "VERTEX_LOCATION"
+  | "VERTEX_MODEL"
+  | "AI_DAILY_CAPTURE_LIMIT"
 > & {
+  AI_PROVIDER?: "off" | "vertex" | "fake";
+  VERTEX_PROJECT?: string;
+  VERTEX_LOCATION?: string;
+  VERTEX_MODEL?: string;
+  AI_DAILY_CAPTURE_LIMIT?: number;
   COOKIE_SECURE: boolean;
   INVITE_TOKEN_EXPOSE: boolean;
   TRUST_PROXY: boolean;

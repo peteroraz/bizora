@@ -57,3 +57,4 @@ export * from "./csv.js";
 export type { PermissionCode } from "./permissions.js";
 export { ROLE_PERMISSIONS, LOOKUP_RESULT_LIMIT, LOOKUP_MIN_QUERY } from "./access.js";
 export * from "./identity.js";
+export * from "./capture.js";

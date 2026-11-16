@@ -52,7 +52,7 @@ function SalesImportScreen() {
           ))}
         </fieldset>
       </Card>
-      <ImportReview columns={columns} synonyms={SALES_IMPORT_COLUMNS} endpoint="/api/v1/imports/sales" extra={{ mode }} templateName="bizora-sales.csv" templateExample={{ ...EXAMPLE, product: t("exampleProduct") }} />
+      <ImportReview columns={columns} synonyms={SALES_IMPORT_COLUMNS} endpoint="/api/v1/imports/sales" extra={{ mode }} templateName="bizora-sales.csv" templateExample={{ ...EXAMPLE, product: t("exampleProduct") }} capture="sales" />
     </div>
   );
 }

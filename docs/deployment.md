@@ -80,6 +80,30 @@ gcloud storage buckets update gs://bizora-productions-tfstate --versioning
 
 If the organization policy blocks `allUsers`, allow `allUsers` to hold `roles/run.invoker` on these two projects before the Cloud Run IAM bindings will apply. Both services are public for now.
 
+## AI capture (Vertex AI)
+
+Photo, scan and voice capture (ADR-018) uses Gemini on Vertex AI in the same Google Cloud project. Terraform turns it on when `ai_provider = "vertex"` (staging's `terraform.tfvars` has this; production stays `off` until you choose).
+
+Applying does three things:
+
+1. Enables the Vertex AI API (`aiplatform.googleapis.com`).
+2. Gives the API's service account (`bizora-api-run`) the **Vertex AI User** role.
+3. Sets `AI_PROVIDER`, `VERTEX_PROJECT`, `VERTEX_LOCATION` (`global`), `VERTEX_MODEL` (`gemini-3.8-flash`) and `AI_DAILY_CAPTURE_LIMIT` (50) on the API.
+
+```bash
+cd infra/terraform/envs/staging
+terraform init
+terraform plan   # expect: 1 API enabled, 1 IAM binding, bizora-api updated with 5 env vars
+terraform apply
+```
+
+There is no key or secret to add; the API signs in as its service account. Check:
+
+- Signed in as an owner, Stock → Record a delivery shows **Snap the invoice or say what arrived**. If it does not, `AI_PROVIDER` is still `off`.
+- A blurry or empty photo should give "No rows could be read". A clear one fills the table.
+
+Costs: each photo or voice note is one Gemini request, billed to the project by Vertex AI. The daily limit per organization caps them. Change `ai_daily_capture_limit` or `vertex_model` in Terraform when needed, and check the model's retirement date on the Vertex AI model lifecycle page before it arrives.
+
 ## First apply
 
 Run the same sequence in `infra/terraform/envs/staging`, then in `infra/terraform/envs/prod`. Read the plan before you apply. Do not apply production until staging is healthy.
@@ -385,7 +409,7 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
 - Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
-- Debtor payments, money in and out, and Ask Zora are not implemented. Sales are (ADR-015, ADR-016); AI capture from photos and voice comes in Sprint 5d.
+- Debtor payments, money in and out, and Ask Zora are not implemented. Sales are (ADR-015, ADR-016); AI capture from photos and voice is in ADR-018 (switched on per environment, see below).
 - There is no billing. Every organization starts on the `starter` plan (1 branch, 2 staff, 2 shop devices). To move one to `business`, run in Cloud SQL Studio: `UPDATE organization_plans SET plan_code = 'business' WHERE tenant_id = '<organization id>';`. `DEFAULT_PLAN_CODE` changes the plan given to new organizations only.
 - Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
 - Shop staff auto-lock after 5 minutes without input in the browser. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`).
@@ -394,6 +418,7 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Roles are fixed (see `docs/security/roles.md`). There are no per-person permission toggles or custom roles yet.
 - Offline: sales, adding a customer, stock in and stock counts work offline, and products and stock can be looked up from the copy on the phone (ADR-012, ADR-014, ADR-015). Home, the sale screen, Stock, new customer and the shop PIN screen open with no network once they have been opened online on that phone. Other screens show a "no network" page.
 - Desk flow (ADR-016): taking payment and giving out goods need the network; only recording the sale works offline. Notifications are inside the app only (checked every minute); phone notifications and WhatsApp alerts are not built yet. What a customer owes counts credit sales only, until debtor payments arrive in Sprint 6.
+- AI capture (ADR-018) reads photos, PDFs and voice notes into rows a person checks. It can misread handwriting, so the review table and the import checks stay in charge. It needs the network. Photos and recordings are not stored, so they cannot be looked at again later. The daily limit is per organization, not per plan yet.
 - Invoices and receipts (ADR-017) are PDFs that staff send through the phone's share menu (WhatsApp); they are not sent automatically yet. That needs the WhatsApp Business Platform: a verified Meta business account, a dedicated number, an approved message template, and a charge per message. Documents show the shop name, address and phone, but no logo yet.
 - Product and sales CSV imports take at most 2,000 rows and 1.5 MB per file, and need the network. Discounts have no amount limits yet: only managers and owners (`sales.discount`) can give them.
 - Idempotency keys are kept until pruned (`IdempotencyService.prune`, 30 days). No scheduled job runs it yet.

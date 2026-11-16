@@ -110,6 +110,26 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.invite_token_expose ? "true" : "false"
       }
       env {
+        name  = "AI_PROVIDER"
+        value = var.ai_provider
+      }
+      env {
+        name  = "VERTEX_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "VERTEX_LOCATION"
+        value = var.vertex_location
+      }
+      env {
+        name  = "VERTEX_MODEL"
+        value = var.vertex_model
+      }
+      env {
+        name  = "AI_DAILY_CAPTURE_LIMIT"
+        value = tostring(var.ai_daily_capture_limit)
+      }
+      env {
         name = "DATABASE_URL"
         value_source {
           secret_key_ref {
@@ -176,6 +196,7 @@ resource "google_cloud_run_v2_service" "api" {
     google_secret_manager_secret_iam_member.api_google_oauth,
     google_secret_manager_secret_iam_member.api_email,
     google_project_iam_member.api_cloudsql,
+    google_project_iam_member.api_vertex,
     google_service_account_iam_member.deployer_api,
   ]
 }

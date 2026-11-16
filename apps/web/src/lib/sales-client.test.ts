@@ -33,5 +33,8 @@ describe("import templates", () => {
     expect(Object.keys(products).sort()).toEqual(Object.keys(PRODUCT_IMPORT_COLUMNS).sort());
     const sales = matchColumns(Object.values(messages.salesColumns), SALES_IMPORT_COLUMNS);
     expect(Object.keys(sales).sort()).toEqual(Object.keys(SALES_IMPORT_COLUMNS).sort());
+    const { STOCK_IN_IMPORT_COLUMNS } = await import("@bizora/contracts");
+    const stockIn = matchColumns(Object.values(messages.stockInColumns), STOCK_IN_IMPORT_COLUMNS);
+    expect(Object.keys(stockIn).sort()).toEqual(Object.keys(STOCK_IN_IMPORT_COLUMNS).sort());
   });
 });

@@ -20,6 +20,7 @@
     "@bizora/config": "workspace:*",
     "@bizora/contracts": "workspace:*",
     "@bizora/money": "workspace:*",
+    "@google/genai": "3.3.0",
     "@nestjs/common": "^11.1.2",
     "@nestjs/core": "^11.1.2",
     "@nestjs/platform-express": "^11.1.2",

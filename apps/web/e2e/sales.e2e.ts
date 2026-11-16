@@ -86,7 +86,7 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
 
   // Import products and opening stock from a CSV file, checking every row first.
   await page.goto("/app/stock/import");
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[accept=".csv,text/csv"]').setInputFiles({
     name: "products.csv",
     mimeType: "text/csv",
     buffer: Buffer.from("Item Name,Selling Price,Cost Price,Qty,UOM\nGolden Penny Semovita,\"4,500\",3800,20,bag\nPeak Milk,470,,,\n"),
@@ -99,7 +99,7 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
 
   // Import sales: a row with a mistake is fixed in the table before anything is saved.
   await page.goto("/app/sales/import");
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[accept=".csv,text/csv"]').setInputFiles({
     name: "sales.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(`Date,Item,Qty,Rate,Paid by,Receipt No\n${lagosToday()},Semovita,1,4500,cash,B7\n01/11/2026,Old stock item,3,1000,cash,OLD-1\n`),

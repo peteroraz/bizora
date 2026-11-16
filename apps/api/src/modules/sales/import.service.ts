@@ -5,10 +5,13 @@ import {
   parseMoneyInput,
   parseQuantity,
   parseTraderDate,
+  paidFromText,
   paymentFromText,
   Permission,
   productImportSchema,
   salesImportSchema,
+  stockInImportSchema,
+  stockReceiveSchema,
   unitFromText,
   type ImportRowResult,
 } from "@bizora/contracts";
@@ -20,7 +23,9 @@ import type { AppDatabase } from "../../db/database.js";
 import { customers, products } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { productUnitsFor, requireBusiness, resolveBranch, type ProductRow, type ProductUnitRow } from "../inventory/inventory-scope.js";
+import { AuditService } from "../audit/audit.service.js";
 import { ProductService } from "../inventory/product.service.js";
+import { StockService } from "../inventory/stock.service.js";
 import { SaleService } from "./sale.service.js";
 
 const round = (numerator: bigint, denominator: bigint) => (numerator * 2n + denominator) / (denominator * 2n);
@@ -33,7 +38,8 @@ const decimal = (thousandths: bigint) => {
 /**
  * CSV imports for products and sales (ADR-015). Every import is checked first (dry run): each row says what will
  * happen or exactly what is wrong. Nothing is saved while any row has a problem; the person fixes or removes those
- * rows on the review screen and saves again. Photo and voice capture (Sprint 5b) fill the same review screen.
+ * rows on the review screen and saves again. Photo and voice capture (ADR-018) fill the same review screen; such
+ * rows arrive with source "capture" once a person has checked them.
  */
 @Injectable()
 export class ImportService {
@@ -41,6 +47,8 @@ export class ImportService {
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(ProductService) private readonly productService: ProductService,
     @Inject(SaleService) private readonly sales: SaleService,
+    @Inject(StockService) private readonly stock: StockService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async products(tenant: TenantContext, raw: unknown) {
@@ -118,6 +126,7 @@ export class ImportService {
       if (plan.existing) await this.productService.update(tenant, plan.existing.id, plan.body);
       else await this.productService.create(tenant, plan.body);
     }
+    await this.recordImport(tenant, business.id, "products", payload.source, results.length);
     return this.outcome(results, true);
   }
 
@@ -160,8 +169,10 @@ export class ImportService {
       if (product && unit && factor === null) errors.push({ field: "unit", message: `${product.name} is not sold in ${unit}.` });
       const entered = row.quantity.trim() ? parseQuantity(row.quantity) : 1000n;
       if (entered === null) errors.push({ field: "quantity", message: `Can't read the quantity "${row.quantity}".` });
-      const price = this.money(row.price, "price", errors);
       const total = this.money(row.total, "total", errors);
+      // A known product sold without a written price is taken at its list price (common in sales books and voice notes).
+      const listed = product && unit && factor !== null && !row.price.trim() && total === null ? this.listPrice(product, productUnits, unit, factor) : null;
+      const price = listed ?? this.money(row.price, "price", errors);
       if (price === null && total === null) errors.push({ field: "price", message: "Enter the price or the total." });
       const method = paymentFromText(row.payment);
       if (!method) errors.push({ field: "payment", message: `Can't read "${row.payment}". Use cash, transfer, POS or credit.` });
@@ -181,8 +192,7 @@ export class ImportService {
         lineTotal = total ?? round(unitPrice * entered, 1000n);
       }
       if (counts && product && unit && factor !== null && entered !== null) {
-        const pack = productUnits.find((item) => item.unitCode === unit);
-        const listPrice = unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null));
+        const listPrice = this.listPrice(product, productUnits, unit, factor);
         if (listPrice !== null && unitPrice < listPrice && !canDiscount) {
           errors.push({ field: "price", message: `Below the price of ${product.name}. Only a manager can import discounted sales.` });
         }
@@ -238,7 +248,7 @@ export class ImportService {
             ...(group.customerId ? { customerId: group.customerId } : {}),
             ...(group.ref ? { note: `Imported ${group.ref}` } : { note: "Imported" }),
           },
-          { source: "import", soldAt: group.date === today ? new Date() : zonedDateTime(group.date, "12:00:00", business.timezone) },
+          { source: payload.source === "capture" ? "capture" : "import", soldAt: group.date === today ? new Date() : zonedDateTime(group.date, "12:00:00", business.timezone) },
         );
       } else {
         await this.db.transaction((tx) =>
@@ -248,12 +258,80 @@ export class ImportService {
             customerId: group.customerId,
             lines: group.lines,
             paid: group.method === "credit" ? [] : [{ method: group.method, amount: group.lines.reduce((sum, line) => sum + line.lineTotal, 0n) }],
-            source: "import",
+            source: payload.source === "capture" ? "capture" : "import",
           }),
         );
       }
     }
+    await this.recordImport(tenant, business.id, "sales", payload.source, results.length);
     return this.outcome(results, true);
+  }
+
+  /**
+   * A supplier delivery (stock in), from a CSV file or a captured invoice or delivery note. Every product must
+   * already exist. All rows save together or not at all.
+   */
+  async stockIn(tenant: TenantContext, raw: unknown) {
+    const payload = stockInImportSchema.parse(raw);
+    this.assertSize(payload.rows.length);
+    const business = await requireBusiness(this.db, tenant);
+    const productRows = await this.db
+      .select()
+      .from(products)
+      .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)));
+    const byName = new Map(productRows.map((product) => [product.name.trim().toLowerCase(), product]));
+    const units = await productUnitsFor(this.db, tenant.tenantId, productRows.map((product) => product.id));
+    const canPay = tenant.permissions.includes(Permission.PURCHASES_MANAGE);
+
+    const plans: { productId: string; quantity: string; unit: string; totalCostMinor?: string; paidFrom: "cash" | "bank" | "credit"; supplier?: string; note?: string }[] = [];
+    const results: ImportRowResult[] = payload.rows.map((row, index) => {
+      const errors: { field: string; message: string }[] = [];
+      const product = byName.get(row.product.trim().toLowerCase()) ?? null;
+      if (!row.product.trim()) errors.push({ field: "product", message: "Enter the product received." });
+      else if (!product) errors.push({ field: "product", message: `"${row.product}" is not in your products. Add it first, or fix the name.` });
+      else if (!product.trackStock) errors.push({ field: "product", message: `${product.name} does not keep stock.` });
+      const unit = row.unit.trim() ? unitFromText(row.unit) : (product?.baseUnit ?? null);
+      if (row.unit.trim() && !unit) errors.push({ field: "unit", message: `Unknown unit "${row.unit}".` });
+      if (product && unit && this.factor(product, units.get(product.id) ?? [], unit) === null) errors.push({ field: "unit", message: `${product.name} does not come in ${unit}.` });
+      const quantity = row.quantity.trim() ? parseQuantity(row.quantity) : null;
+      if (quantity === null || quantity <= 0n) errors.push({ field: "quantity", message: row.quantity.trim() ? `Can't read the quantity "${row.quantity}".` : "Enter how many were received." });
+      const cost = this.money(row.cost, "cost", errors);
+      const paidFrom = paidFromText(row.paid);
+      if (!paidFrom) errors.push({ field: "paid", message: `Can't read "${row.paid}". Use owed, cash or bank.` });
+      else if (paidFrom !== "credit" && !canPay) errors.push({ field: "paid", message: "Only a manager can record paying the supplier. Leave it as owed." });
+      if (errors.length > 0 || !product || !unit || quantity === null || !paidFrom) return { row: index + 1, status: "error", errors };
+      plans.push({
+        productId: product.id,
+        quantity: decimal(quantity),
+        unit,
+        paidFrom,
+        ...(cost !== null ? { totalCostMinor: cost.toString() } : {}),
+        ...(row.supplier.trim() ? { supplier: row.supplier.trim().slice(0, 160) } : {}),
+        ...(row.ref.trim() ? { note: `Delivery ${row.ref.trim()}`.slice(0, 280) } : {}),
+      });
+      return { row: index + 1, status: "create", message: `${decimal(quantity)} ${unit} of ${product.name} received${paidFrom === "credit" ? ", owed to the supplier" : ""}.` };
+    });
+
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    await this.db.transaction(async (tx) => {
+      for (const plan of plans) await this.stock.receiveIn(tx, tenant, stockReceiveSchema.parse(plan));
+    });
+    await this.recordImport(tenant, business.id, "stock_in", payload.source, results.length);
+    return this.outcome(results, true);
+  }
+
+  private async recordImport(tenant: TenantContext, businessId: string, kind: string, source: "file" | "capture", rows: number) {
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "import.saved",
+      entityType: "import",
+      entityId: null,
+      correlationId: tenant.correlationId,
+      businessId,
+      actorType: tenant.actorType ?? "HUMAN",
+      metadata: { kind, source, rows },
+    });
   }
 
   private updateBody(
@@ -275,6 +353,12 @@ export class ImportService {
       packs,
       ...(changes.seeCost ? { defaultCostMinor: (changes.cost ?? product.defaultCostMinor)?.toString() ?? null } : {}),
     };
+  }
+
+  private listPrice(product: ProductRow, units: ProductUnitRow[], unit: string, factor: bigint) {
+    if (unit === product.baseUnit) return product.priceMinor;
+    const pack = units.find((item) => item.unitCode === unit);
+    return pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null);
   }
 
   private factor(product: ProductRow, units: ProductUnitRow[], unit: string) {

@@ -57,3 +57,8 @@ variable "google_oauth_client_id" {
   type        = string
   description = "Google OAuth client id. Empty leaves Google sign-in off."
 }
+
+variable "ai_provider" {
+  type        = string
+  description = "AI capture of photos and voice notes: off or vertex (ADR-018)."
+}

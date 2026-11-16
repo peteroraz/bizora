@@ -88,8 +88,12 @@ export type SaleImportMode = (typeof SALE_IMPORT_MODES)[number];
 
 const importCell = z.string().max(200).optional().default("");
 
+/** Where import rows came from: a file, or AI capture checked by a person (ADR-018). */
+export const IMPORT_SOURCES = ["file", "capture"] as const;
+
 export const productImportSchema = z.object({
   dryRun: z.boolean().default(true),
+  source: z.enum(IMPORT_SOURCES).default("file"),
   rows: z
     .array(
       z.object({
@@ -111,6 +115,7 @@ export const productImportSchema = z.object({
 
 export const salesImportSchema = z.object({
   dryRun: z.boolean().default(true),
+  source: z.enum(IMPORT_SOURCES).default("file"),
   /** mixed: today's sales count fully, older ones are history only. */
   mode: z.enum(SALE_IMPORT_MODES).default("mixed"),
   rows: z
@@ -149,3 +154,32 @@ export function paymentFromText(text: string): PaymentMethod | "credit" | null {
   if (/^(credit|owe|owing|owed|debt|later|on credit|balance)/.test(value)) return "credit";
   return null;
 }
+
+/** How a delivery was paid for, from words traders write ("owed", "cash", "trf"). Empty means owed to the supplier. */
+export function paidFromText(text: string): "cash" | "bank" | "credit" | null {
+  const value = text.trim().toLowerCase();
+  if (!value || /^(credit|owe|owing|owed|not paid|unpaid|later|balance|supplier)/.test(value)) return "credit";
+  if (["cash", "csh"].includes(value) || value.startsWith("cash")) return "cash";
+  if (/^(bank|transfer|trf|trans|xfer|pos|card|online)/.test(value)) return "bank";
+  return null;
+}
+
+/** A supplier delivery: rows of stock received (ADR-018). */
+export const stockInImportSchema = z.object({
+  dryRun: z.boolean().default(true),
+  source: z.enum(IMPORT_SOURCES).default("file"),
+  rows: z
+    .array(
+      z.object({
+        product: importCell,
+        quantity: importCell,
+        unit: importCell,
+        cost: importCell,
+        supplier: importCell,
+        paid: importCell,
+        ref: importCell,
+      }),
+    )
+    .min(1)
+    .max(5000),
+});

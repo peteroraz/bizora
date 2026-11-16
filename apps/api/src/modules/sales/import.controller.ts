@@ -29,4 +29,13 @@ export class ImportController {
   async sales(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     return success(await this.imports.salesImport(tenant, body), tenant.correlationId);
   }
+
+  /** A supplier delivery (stock in): every product must already exist. Paying the supplier needs purchases.manage. */
+  @Post("stock-in")
+  @HttpCode(200)
+  @RequirePermissions(Permission.STOCK_RECEIVE)
+  @Idempotent()
+  async stockIn(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success(await this.imports.stockIn(tenant, body), tenant.correlationId);
+  }
 }

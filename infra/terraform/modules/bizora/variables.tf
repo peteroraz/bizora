@@ -92,3 +92,32 @@ variable "wif_mode" {
     error_message = "wif_mode must be main_branch or production_environment."
   }
 }
+
+variable "ai_provider" {
+  type        = string
+  description = "AI capture of photos and voice notes (ADR-018). off, or vertex for Gemini on Vertex AI in this project."
+  default     = "off"
+
+  validation {
+    condition     = contains(["off", "vertex"], var.ai_provider)
+    error_message = "ai_provider must be off or vertex."
+  }
+}
+
+variable "vertex_location" {
+  type        = string
+  description = "Vertex AI location for Gemini. global has the widest model availability."
+  default     = "global"
+}
+
+variable "vertex_model" {
+  type        = string
+  description = "Gemini model ID. Check the Vertex AI model lifecycle page before its retirement date."
+  default     = "gemini-3.8-flash"
+}
+
+variable "ai_daily_capture_limit" {
+  type        = number
+  description = "Photo and voice captures each organization may run per day."
+  default     = 50
+}

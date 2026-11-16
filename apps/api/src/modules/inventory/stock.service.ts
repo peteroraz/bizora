@@ -189,26 +189,32 @@ export class StockService {
       const existing = await this.findMovement(tenant, payload.id);
       if (existing) return existing;
     }
-    return this.db.transaction(async (tx) => {
-      const context = await this.context(tx, tenant, payload.productId, payload.branchId);
-      const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
-      const entered = parseQuantity(payload.quantity) as bigint;
-      const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit));
-      const result = await this.applyMovement(tx, context, {
-        ...(payload.id ? { id: payload.id } : {}),
-        type: "received",
-        quantity,
-        enteredQuantity: entered,
-        enteredUnit: payload.unit,
-        supplier: payload.supplier ?? null,
-        note: payload.note ?? null,
-        paidFrom: payload.paidFrom,
-        totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
-        documentType: "stock_in",
-      });
-      await this.record(tx, tenant, "stock.received", result.id, context);
-      return this.presentResult(tenant, result);
+    return this.db.transaction(async (tx) => this.presentResult(tenant, await this.receiveIn(tx, tenant, payload)));
+  }
+
+  /**
+   * Stock in, inside a transaction the caller owns, so a whole supplier delivery saves together (ADR-018).
+   * The caller has already checked who may pay the supplier.
+   */
+  async receiveIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockReceiveSchema.parse>) {
+    const context = await this.context(tx, tenant, payload.productId, payload.branchId);
+    const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
+    const entered = parseQuantity(payload.quantity) as bigint;
+    const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+    const result = await this.applyMovement(tx, context, {
+      ...(payload.id ? { id: payload.id } : {}),
+      type: "received",
+      quantity,
+      enteredQuantity: entered,
+      enteredUnit: payload.unit,
+      supplier: payload.supplier ?? null,
+      note: payload.note ?? null,
+      paidFrom: payload.paidFrom,
+      totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
+      documentType: "stock_in",
     });
+    await this.record(tx, tenant, "stock.received", result.id, context);
+    return result;
   }
 
   // Remove or correct -------------------------------------------------------------------------------------------

@@ -1029,6 +1029,18 @@ export const saleComments = pgTable(
   ],
 );
 
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    day: date("day", { mode: "string" }).notNull(),
+    captures: integer("captures").notNull().default(0),
+    inputBytes: bigint("input_bytes", { mode: "bigint" }).notNull().default(0n),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.day] })],
+);
+
 export const notifications = pgTable(
   "notifications",
   {
@@ -1091,6 +1103,7 @@ export const schema = {
   salePayments,
   saleComments,
   notifications,
+  aiUsage,
 };
 
 export type DatabaseSchema = typeof schema;
