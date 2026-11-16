@@ -29,6 +29,12 @@ export const Permission = {
   SALES_READ_ALL: "sales.read.all",
   SALES_DISCOUNT: "sales.discount",
   SALES_VOID: "sales.void",
+  /** Desk flow (ADR-016): take payment for sales the sales desk sent to the cashier. */
+  SALES_COLLECT: "sales.collect",
+  /** Desk flow: give out the goods once a sale is paid or approved for credit. */
+  SALES_RELEASE: "sales.release",
+  /** Sell on credit to customers approved for credit, within their limit. Approving customers needs debtors.manage. */
+  SALES_CREDIT: "sales.credit",
   PAYMENTS_RECORD: "payments.record",
   CASH_CLOSE: "cash.close",
   CASH_EXPECTED_READ: "cash.expected.read",

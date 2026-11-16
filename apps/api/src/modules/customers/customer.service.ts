@@ -8,6 +8,7 @@ import {
   customerImportSchema,
   customerNoteSchema,
   customerWriteSchema,
+  customerCreditSchema,
   followupCreateSchema,
   followupUpdateSchema,
   formatAddressDisplay,
@@ -175,8 +176,37 @@ export class CustomerService {
 
   async get(tenant: TenantContext, id: string) {
     const customer = await this.requireCustomer(tenant, id);
-    if (!tenant.permissions.includes(Permission.CUSTOMERS_READ)) return this.lookupSummary(customer);
-    return this.present(tenant.tenantId, customer);
+    const owingMinor = (await this.owing(tenant.tenantId, customer.id)).toString();
+    if (!tenant.permissions.includes(Permission.CUSTOMERS_READ)) return { ...this.lookupSummary(customer), owingMinor };
+    return { ...(await this.present(tenant.tenantId, customer)), owingMinor };
+  }
+
+  /** What the customer owes from sales on credit. Debtor payments (Sprint 6) will reduce it. */
+  async owing(tenantId: string, customerId: string) {
+    const [row] = await this.db
+      .select({ total: sql<string>`coalesce(sum(${sales.balanceMinor}), 0)` })
+      .from(sales)
+      .where(and(eq(sales.tenantId, tenantId), eq(sales.customerId, customerId), eq(sales.historyOnly, false), inArray(sales.status, ["awaiting_release", "completed"])));
+    return BigInt(row?.total ?? 0);
+  }
+
+  /** Approving a customer for credit, and their limit, is for managers and owners (debtors.manage). */
+  private credit(tenant: TenantContext, payload: { creditAllowed?: boolean; creditLimitMinor?: string | null }, existing?: CustomerRow) {
+    if (payload.creditAllowed === undefined && payload.creditLimitMinor === undefined) return {};
+    const allowed = payload.creditAllowed ?? existing?.creditAllowed ?? false;
+    const limit = payload.creditLimitMinor !== undefined ? (payload.creditLimitMinor === null ? null : BigInt(payload.creditLimitMinor)) : (existing?.creditLimitMinor ?? null);
+    const unchanged = existing && existing.creditAllowed === allowed && existing.creditLimitMinor === limit;
+    if (unchanged) return {};
+    if (!existing && !allowed && limit === null) return {};
+    if (!tenant.permissions.includes(Permission.DEBTORS_MANAGE)) {
+      throw new ApiError("FORBIDDEN", "Only a manager or owner can approve a customer for credit.", 403, [{ field: "creditAllowed", message: "Ask a manager." }]);
+    }
+    return {
+      creditAllowed: allowed,
+      creditLimitMinor: limit,
+      creditApprovedBy: allowed ? tenant.userId : null,
+      creditApprovedAt: allowed ? new Date() : null,
+    };
   }
 
   /**
@@ -223,6 +253,8 @@ export class CustomerService {
       name: row.name,
       isWalkIn: row.isWalkIn,
       phoneLast4: row.phoneE164 ? row.phoneE164.slice(-4) : null,
+      // The cashier needs to know whether credit is allowed and the limit, to give credit at the counter.
+      credit: { allowed: row.creditAllowed, limitMinor: row.creditLimitMinor?.toString() ?? null },
       limited: true as const,
     };
   }
@@ -241,6 +273,7 @@ export class CustomerService {
       if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
     }
     if (phone) await this.assertPhoneAvailable(tenant.tenantId, business.id, phone, null);
+    const credit = this.credit(tenant, payload);
     const id = clientId ?? newId();
     let addressId: string | null = null;
     await this.db.transaction(async (tx) => {
@@ -260,6 +293,7 @@ export class CustomerService {
         addressId,
         tags: payload.tags ?? [],
         notesSummary: this.summaryText(payload.notesSummary),
+        ...credit,
         createdBy: tenant.userId,
         updatedBy: tenant.userId,
       });
@@ -273,6 +307,7 @@ export class CustomerService {
           correlationId: tenant.correlationId,
           businessId: business.id,
           branchId: branch.id,
+          ...("creditAllowed" in credit ? { metadata: { creditAllowed: credit.creditAllowed, creditLimitMinor: credit.creditLimitMinor?.toString() ?? null } } : {}),
         },
         tx,
       );
@@ -287,6 +322,7 @@ export class CustomerService {
     const branch = await this.resolveBranch(tenant, business.id, payload.branchId ?? existing.branchId ?? undefined);
     const phone = await this.normalize(payload, business);
     if (phone) await this.assertPhoneAvailable(tenant.tenantId, business.id, phone, existing.id);
+    const credit = this.credit(tenant, payload, existing);
     await this.db.transaction(async (tx) => {
       let addressId = existing.addressId;
       if (payload.address) {
@@ -305,6 +341,7 @@ export class CustomerService {
           tags: payload.tags ?? existing.tags,
           notesSummary:
             payload.notesSummary !== undefined ? this.summaryText(payload.notesSummary) : existing.notesSummary,
+          ...credit,
           updatedAt: new Date(),
           updatedBy: tenant.userId,
         })
@@ -319,10 +356,39 @@ export class CustomerService {
           correlationId: tenant.correlationId,
           businessId: business.id,
           branchId: branch.id,
+          ...("creditAllowed" in credit ? { metadata: { creditAllowed: credit.creditAllowed, creditLimitMinor: credit.creditLimitMinor?.toString() ?? null } } : {}),
         },
         tx,
       );
     });
+    return this.get(tenant, id);
+  }
+
+  async setCredit(tenant: TenantContext, id: string, raw: unknown) {
+    const existing = await this.requireCustomer(tenant, id);
+    const payload = customerCreditSchema.parse(raw);
+    const credit = this.credit(tenant, payload, existing);
+    if ("creditAllowed" in credit) {
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(customers)
+          .set({ ...credit, updatedAt: new Date(), updatedBy: tenant.userId })
+          .where(and(eq(customers.id, existing.id), eq(customers.tenantId, tenant.tenantId)));
+        await this.audit.record(
+          {
+            tenantId: tenant.tenantId,
+            actorUserId: tenant.userId,
+            action: "customer.credit_changed",
+            entityType: "customer",
+            entityId: existing.id,
+            correlationId: tenant.correlationId,
+            businessId: existing.businessId,
+            metadata: { creditAllowed: credit.creditAllowed, creditLimitMinor: credit.creditLimitMinor?.toString() ?? null },
+          },
+          tx,
+        );
+      });
+    }
     return this.get(tenant, id);
   }
 
@@ -854,6 +920,7 @@ export class CustomerService {
       tags: row.tags,
       notesSummary: row.notesSummary,
       branchId: row.branchId,
+      credit: { allowed: row.creditAllowed, limitMinor: row.creditLimitMinor?.toString() ?? null, approvedAt: row.creditApprovedAt?.toISOString() ?? null },
       createdAt: row.createdAt.toISOString(),
     };
   }

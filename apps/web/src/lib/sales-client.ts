@@ -17,7 +17,8 @@ export type SaleView = {
   number: string | null;
   provisionalNumber: string | null;
   externalRef: string | null;
-  status: "completed" | "voided";
+  status: SaleStatus;
+  paymentState: "unpaid" | "paid" | "credit";
   historyOnly: boolean;
   source: "pos" | "offline" | "import" | "capture";
   currency: string;
@@ -26,15 +27,52 @@ export type SaleView = {
   totalMinor: string;
   paidMinor: string;
   balanceMinor: string;
+  dueDate: string | null;
   soldAt: string;
   customerId: string | null;
   customerName: string | null;
   byName: string | null;
+  itemCount?: number;
+  view: "full";
 };
 
-export type SaleDetail = SaleView & {
-  customerPhoneLast4: string | null;
+export type SaleStatus = "awaiting_payment" | "awaiting_release" | "completed" | "voided";
+
+/** The store keeper's view of a sale: what to give out, with no amounts or customer (ADR-016). */
+export type SaleReleaseRow = {
+  id: string;
+  number: string | null;
+  provisionalNumber: string | null;
+  status: SaleStatus;
+  paymentState: "unpaid" | "paid" | "credit";
+  historyOnly: boolean;
+  soldAt: string;
+  byName: string | null;
+  itemCount?: number;
+  view: "release";
+};
+
+export type SaleComment = { id: string; kind: "comment" | "credit"; role: string | null; body: string; byName: string | null; createdAt: string };
+
+type Stages = {
+  mine: boolean;
+  requestedPayment: "cash" | "transfer" | "pos" | "split" | "credit" | null;
+  collectedAt: string | null;
+  collectedByName: string | null;
+  releasedAt: string | null;
+  releasedByName: string | null;
+  byName: string | null;
   branchName: string | null;
+  comments: SaleComment[];
+};
+
+export type SaleReleaseDetail = Omit<SaleReleaseRow, "itemCount"> &
+  Stages & { lines: { description: string; enteredQuantity: string; enteredUnit: string }[] };
+
+export type SaleDetail = Omit<SaleView, "itemCount"> &
+  Stages & {
+  customerPhoneLast4: string | null;
+  customerCredit: { allowed: boolean; limitMinor: string | null; owingMinor: string } | null;
   businessName: string | null;
   note: string | null;
   voidReason: string | null;

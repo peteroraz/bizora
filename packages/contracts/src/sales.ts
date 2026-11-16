@@ -25,6 +25,24 @@ export const salePaymentInputSchema = z.object({
   reference: z.string().trim().max(64).optional(),
 });
 
+/** How a business sells (ADR-016). */
+export const SALES_FLOWS = ["simple", "desk"] as const;
+export type SalesFlow = (typeof SALES_FLOWS)[number];
+
+/**
+ * Where a sale is. Simple sales are completed at once. Desk sales wait for the cashier (awaiting_payment), then for
+ * the store keeper to give out the goods (awaiting_release).
+ */
+export const SALE_STATUSES = ["awaiting_payment", "awaiting_release", "completed", "voided"] as const;
+export type SaleStatus = (typeof SALE_STATUSES)[number];
+
+/** What the customer told the sales person they will pay with. The cashier records what was actually paid. */
+export const REQUESTED_PAYMENTS = ["cash", "transfer", "pos", "split", "credit"] as const;
+export type RequestedPayment = (typeof REQUESTED_PAYMENTS)[number];
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
+const comment = z.string().trim().min(1).max(500);
+
 export const saleCreateSchema = z.object({
   id: z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.").optional(),
   /** The number the device printed while offline, e.g. DEV3-000045. */
@@ -37,10 +55,32 @@ export const saleCreateSchema = z.object({
   note: z.string().trim().max(240).optional(),
   /** When the sale happened on the device (offline sales). The server accepts up to 7 days back. */
   soldAt: z.string().datetime({ offset: true }).optional(),
+  /** Desk flow: what the customer said they will pay with. */
+  requestedPayment: z.enum(REQUESTED_PAYMENTS).optional(),
+  /** When a credit sale should be paid. Needed whenever something is left owing. */
+  dueDate: isoDate.optional(),
+  /** A comment, saved on the sale. Needed for credit: why, and how the customer will pay. */
+  comment: comment.optional(),
 });
 export type SaleCreateInput = z.infer<typeof saleCreateSchema>;
 
 export const saleVoidSchema = z.object({ reason: z.string().trim().min(1).max(240) });
+
+/** The cashier takes payment, or gives credit to an approved customer, for a sale from the sales desk. */
+export const saleCollectSchema = z.object({
+  payments: z.array(salePaymentInputSchema).max(3).default([]),
+  customerId: z.string().uuid().optional(),
+  dueDate: isoDate.optional(),
+  comment: comment.optional(),
+});
+export type SaleCollectInput = z.infer<typeof saleCollectSchema>;
+
+/** The store keeper gives out the goods. */
+export const saleReleaseSchema = z.object({ comment: comment.optional() });
+
+export const saleCommentSchema = z.object({ body: comment });
+
+export const notificationReadSchema = z.object({ ids: z.array(z.string().uuid()).max(100).optional(), all: z.boolean().optional() });
 
 /** How imported sales are treated: counted fully (stock and accounts) or kept as history only. */
 export const SALE_IMPORT_MODES = ["mixed", "full", "history"] as const;

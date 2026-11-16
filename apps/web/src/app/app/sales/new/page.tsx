@@ -5,6 +5,7 @@ import { Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitBut
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
+import { CustomerPicker, type PickedCustomer } from "../../../../components/customer-picker";
 import { RequireAccess } from "../../../../components/require-access";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency } from "../../../../i18n/format";
@@ -21,7 +22,6 @@ import { refreshOfflineCatalog } from "../../../../lib/stock-client";
 
 type Line = { key: string; product: CachedProduct; unit: string; quantity: string; price: string };
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";
-type Customer = { id: string; name: string };
 
 /** A kobo amount as typed naira ("4500" or "4500.50"), for showing the list price as a hint. */
 const naira = (minor: bigint) => (minor % 100n === 0n ? (minor / 100n).toString() : `${minor / 100n}.${(minor % 100n).toString().padStart(2, "0")}`);
@@ -33,7 +33,9 @@ function QuickSaleScreen() {
   const unitName = useUnitName();
   const stockText = useStockText();
   const canDiscount = can(access, Permission.SALES_DISCOUNT);
-  const canCredit = can(access, Permission.DEBTORS_MANAGE);
+  const canCredit = can(access, Permission.SALES_CREDIT, Permission.DEBTORS_MANAGE);
+  // Desk flow (ADR-016): the sales person sends the sale to the cashier, who takes the money.
+  const desk = access.salesFlow === "desk";
   const findsCustomers = can(access, Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP);
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof readCatalog>>>(null);
   const [query, setQuery] = useState("");
@@ -41,10 +43,10 @@ function QuickSaleScreen() {
   const [discount, setDiscount] = useState("");
   const [mode, setMode] = useState<PayMode>("cash");
   const [split, setSplit] = useState({ cash: "", transfer: "", pos: "" });
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+  const [customer, setCustomer] = useState<PickedCustomer | null>(null);
   const [note, setNote] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [savedOffline, setSavedOffline] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -80,8 +82,9 @@ function QuickSaleScreen() {
   const subtotal = priced.reduce((sum, item) => sum + (item.total ?? 0n), 0n);
   const discountMinor = canDiscount && discount.trim() ? (parseMoneyInput(discount) ?? 0n) : 0n;
   const total = subtotal - discountMinor;
-  const paidParts =
-    mode === "split"
+  const paidParts = desk
+    ? []
+    : mode === "split"
       ? (["cash", "transfer", "pos"] as const)
           .map((method) => ({ method, amountMinor: split[method].trim() ? parseMoneyInput(split[method]) : 0n }))
           .filter((part) => part.amountMinor !== 0n)
@@ -91,7 +94,7 @@ function QuickSaleScreen() {
           ? [{ method: mode, amountMinor: total }]
           : [];
   const paid = paidParts.reduce((sum, part) => sum + (part.amountMinor ?? 0n), 0n);
-  const balance = total - paid;
+  const balance = desk ? 0n : total - paid;
 
   function addProduct(product: CachedProduct) {
     setLines((current) => [...current, { key: uuidv7(), product, unit: product.baseUnit, quantity: "1", price: "" }]);
@@ -100,16 +103,6 @@ function QuickSaleScreen() {
 
   function updateLine(key: string, change: Partial<Line>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...change } : line)));
-  }
-
-  async function findCustomers() {
-    if (!customerQuery.trim()) return;
-    const response = await api(`/api/v1/customers?q=${encodeURIComponent(customerQuery.trim())}`).catch(() => null);
-    if (!response?.ok) {
-      setCustomerResults([]);
-      return;
-    }
-    setCustomerResults(((await response.json()).data.items as Customer[]).slice(0, 6));
   }
 
   function problem(): string | null {
@@ -123,6 +116,10 @@ function QuickSaleScreen() {
     if (balance < 0n) return t("overpaid");
     if (balance > 0n && !canCredit) return t("creditNotAllowed");
     if (balance > 0n && !customer) return t("creditNeedsCustomer");
+    if (balance > 0n && customer && customer.credit?.allowed === false) return t("creditCustomerNotApproved", { name: customer.name });
+    if (balance > 0n && !dueDate) return t("creditNeedsDate");
+    if (balance > 0n && !comment.trim()) return t("creditNeedsComment");
+    if (desk && mode === "credit" && !customer) return t("creditNeedsCustomer");
     return null;
   }
 
@@ -147,6 +144,9 @@ function QuickSaleScreen() {
       ...(discountMinor > 0n ? { discountMinor: discountMinor.toString() } : {}),
       ...(customer ? { customerId: customer.id } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
+      ...(desk ? { requestedPayment: mode } : {}),
+      ...(balance > 0n ? { dueDate } : {}),
+      ...(comment.trim() ? { comment: comment.trim() } : {}),
     };
     setPending(true);
     try {
@@ -167,6 +167,8 @@ function QuickSaleScreen() {
         setSplit({ cash: "", transfer: "", pos: "" });
         setCustomer(null);
         setNote("");
+        setComment("");
+        setDueDate("");
         setMode("cash");
       } else {
         setError(t("failed"));
@@ -176,11 +178,12 @@ function QuickSaleScreen() {
     }
   }
 
-  const modes: PayMode[] = ["cash", "transfer", "pos", "split", ...(canCredit ? (["credit"] as const) : [])];
+  // At the sales desk any choice is only what the customer said; the cashier decides on credit.
+  const modes: PayMode[] = ["cash", "transfer", "pos", "split", ...(canCredit || desk ? (["credit"] as const) : [])];
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title={t("newTitle")} description={t("newLead")} actions={<Link href="/app/sales" className="text-sm font-medium text-primary">{t("allSales")}</Link>} />
+      <PageHeader title={t("newTitle")} description={desk ? t("newLeadDesk") : t("newLead")} actions={<Link href="/app/sales" className="text-sm font-medium text-primary">{t("allSales")}</Link>} />
       {savedOffline ? (
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
           {t("savedOffline", { number: savedOffline })}
@@ -262,7 +265,7 @@ function QuickSaleScreen() {
           </FormField>
         ) : null}
         <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">{t("paidWith")}</legend>
+          <legend className="text-sm font-medium">{desk ? t("willPayWith") : t("paidWith")}</legend>
           <div className="flex flex-wrap gap-2">
             {modes.map((option) => (
               <Button key={option} type="button" size="sm" variant={mode === option ? "primary" : "secondary"} aria-pressed={mode === option} onClick={() => setMode(option)}>
@@ -270,7 +273,7 @@ function QuickSaleScreen() {
               </Button>
             ))}
           </div>
-          {mode === "split" ? (
+          {mode === "split" && !desk ? (
             <div className="grid gap-2 sm:grid-cols-3">
               {(["cash", "transfer", "pos"] as const).map((method) => (
                 <FormField key={method} id={`split-${method}`} label={t(`mode.${method}`)}>
@@ -283,38 +286,30 @@ function QuickSaleScreen() {
         {findsCustomers ? (
           <Card>
             <p className="text-sm font-medium">{t("customer")}</p>
-            {customer ? (
-              <p className="mt-2 flex items-center justify-between gap-3 text-sm">
-                <span>{customer.name}</span>
-                <button type="button" className="text-primary" onClick={() => setCustomer(null)}>
-                  {t("change")}
-                </button>
-              </p>
-            ) : (
-              <>
-                <div className="mt-2 flex items-end gap-2">
-                  <FormField id="sale-customer" label={t("customerSearch")}>
-                    <Input id="sale-customer" value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} />
-                  </FormField>
-                  <Button type="button" variant="secondary" onClick={() => void findCustomers()}>
-                    {t("find")}
-                  </Button>
-                </div>
-                <ul className="mt-2 space-y-1 text-sm">
-                  {customerResults.map((item) => (
-                    <li key={item.id}>
-                      <button type="button" className="text-primary" onClick={() => setCustomer(item)}>
-                        {item.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
+            <div className="mt-2">
+              <CustomerPicker id="sale-customer" value={customer} onChange={setCustomer} />
+            </div>
           </Card>
         ) : null}
+        {balance > 0n ? (
+          <Card>
+            <p className="text-sm font-medium">{t("creditTitle")}</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <FormField id="sale-due" label={t("dueDate")}>
+                <Input id="sale-due" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+              </FormField>
+              <FormField id="sale-credit-comment" label={t("creditComment")}>
+                <Input id="sale-credit-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
+              </FormField>
+            </div>
+          </Card>
+        ) : desk ? (
+          <FormField id="sale-comment" label={t("deskComment")} hint={t("optional")}>
+            <Input id="sale-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
+          </FormField>
+        ) : null}
         <FormField id="sale-note" label={t("note")} hint={t("optional")}>
-          <Input id="sale-note" value={note} maxLength={280} onChange={(event) => setNote(event.target.value)} />
+          <Input id="sale-note" value={note} maxLength={240} onChange={(event) => setNote(event.target.value)} />
         </FormField>
         <Card>
           <dl className="grid grid-cols-2 gap-1 text-sm">
@@ -344,7 +339,7 @@ function QuickSaleScreen() {
           </p>
         ) : null}
         <SubmitButton pending={pending} pendingLabel={t("saving")}>
-          {t("record")}
+          {desk ? t("sendToCashier") : t("record")}
         </SubmitButton>
       </SafeForm>
     </div>

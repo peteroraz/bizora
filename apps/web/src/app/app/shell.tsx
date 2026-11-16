@@ -30,6 +30,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useTranslations } from "next-intl";
 import { LazySheet } from "../../components/lazy-sheet";
+import { NotificationBell } from "../../components/notification-bell";
 import { api } from "../../lib/api";
 import type { AccountMenuProps } from "./account-menu";
 import { setShopMode } from "../../lib/shop-mode";
@@ -58,6 +59,7 @@ export type ShellBusiness = {
   name: string;
   visibleModules?: string[] | null;
   staffFeaturesEnabled?: boolean;
+  salesFlow?: "simple" | "desk";
 };
 export type ShellBranch = { id: string; name: string; businessId: string };
 
@@ -116,8 +118,9 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       staffSession: Boolean(profile.tenant?.deviceId),
       owner: tenantId && membershipId ? { tenantId, membershipId } : null,
       branchId: profile.tenant?.branchId ?? null,
+      salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
     }),
-    [profile.tenant?.permissions, profile.tenant?.deviceId, tenantId, membershipId, profile.tenant?.branchId],
+    [profile.tenant?.permissions, profile.tenant?.deviceId, tenantId, membershipId, profile.tenant?.branchId, currentBusiness?.salesFlow],
   );
   const [outbox, setOutbox] = useState<{ pending: number; rejected: { id: string; error: { message: string } | null }[] }>({
     pending: 0,
@@ -357,6 +360,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             </Select>
           ) : null}
           <div className="ml-auto flex items-center gap-2">
+            <NotificationBell />
             {staffMode ? (
               <button
                 type="button"

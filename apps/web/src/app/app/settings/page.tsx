@@ -37,6 +37,7 @@ type Business = {
   whatYouSell: string | null;
   staffFeaturesEnabled: boolean;
   visibleModules: string[];
+  salesFlow?: "simple" | "desk";
 };
 type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null };
 type BranchDraft = { name: string; phone: string; address: AddressValue };
@@ -98,6 +99,8 @@ function SettingsScreen() {
   const [branchCount, setBranchCount] = useState("1");
   const [whatYouSell, setWhatYouSell] = useState("");
   const [staffFeatures, setStaffFeatures] = useState(true);
+  const [salesFlow, setSalesFlow] = useState<"simple" | "desk">("simple");
+  const [savedFlow, setSavedFlow] = useState<"simple" | "desk">("simple");
   const [modules, setModules] = useState<string[]>([...TRADER_MODULES]);
 
   async function subdivisionsFor(code: string) {
@@ -149,6 +152,8 @@ function SettingsScreen() {
       setBranchCount(String(current.branchCount ?? 1));
       setWhatYouSell(current.whatYouSell ?? "");
       setStaffFeatures(current.staffFeaturesEnabled !== false);
+      setSalesFlow(current.salesFlow === "desk" ? "desk" : "simple");
+      setSavedFlow(current.salesFlow === "desk" ? "desk" : "simple");
       setModules(current.visibleModules);
     }
     const loadedBranches: Branch[] = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
@@ -236,10 +241,16 @@ function SettingsScreen() {
           whatYouSell: whatYouSell.trim() || null,
           staffFeaturesEnabled: staffFeatures,
           visibleModules: visible,
+          salesFlow,
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? t("saveFailed"));
+      // Menus and screens change with the way of selling, so load the app again.
+      if (salesFlow !== savedFlow) {
+        window.location.reload();
+        return;
+      }
       setNotice(t("savedSetup"));
       await refresh();
     } catch (caught) {
@@ -487,6 +498,18 @@ function SettingsScreen() {
                 <input type="checkbox" checked={staffFeatures} onChange={(event) => setStaffFeatures(event.target.checked)} />
                 {t("staffFeatures")}
               </label>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">{t("salesFlow")}</legend>
+                {(["simple", "desk"] as const).map((option) => (
+                  <label key={option} className="flex items-start gap-2 text-sm">
+                    <input type="radio" name="setup-sales-flow" className="mt-1" checked={salesFlow === option} onChange={() => setSalesFlow(option)} />
+                    <span>
+                      <span className="block font-medium">{t(`salesFlowOption.${option}`)}</span>
+                      <span className="block text-muted">{t(`salesFlowHint.${option}`)}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{t("modules")}</legend>
                 {TRADER_MODULES.map((item) => {

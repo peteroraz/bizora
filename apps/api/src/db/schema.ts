@@ -165,6 +165,7 @@ export const businesses = pgTable(
     whatYouSell: text("what_you_sell"),
     multiCurrencyEnabled: boolean("multi_currency_enabled").notNull().default(false),
     staffFeaturesEnabled: boolean("staff_features_enabled").notNull().default(true),
+    salesFlow: varchar("sales_flow", { length: 10 }).notNull().default("simple"),
     visibleModules: text("visible_modules")
       .array()
       .notNull()
@@ -489,6 +490,10 @@ export const customers = pgTable(
     addressId: uuid("address_id"),
     tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     notesSummary: text("notes_summary"),
+    creditAllowed: boolean("credit_allowed").notNull().default(false),
+    creditLimitMinor: bigint("credit_limit_minor", { mode: "bigint" }),
+    creditApprovedBy: uuid("credit_approved_by"),
+    creditApprovedAt: timestamp("credit_approved_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -919,7 +924,7 @@ export const sales = pgTable(
     saleNumber: varchar("sale_number", { length: 24 }),
     provisionalNumber: varchar("provisional_number", { length: 24 }),
     externalRef: varchar("external_ref", { length: 64 }),
-    status: varchar("status", { length: 10 }).notNull().default("completed"),
+    status: varchar("status", { length: 20 }).notNull().default("completed"),
     historyOnly: boolean("history_only").notNull().default(false),
     source: varchar("source", { length: 10 }).notNull().default("pos"),
     currencyCode: char("currency_code", { length: 3 }).notNull(),
@@ -940,6 +945,14 @@ export const sales = pgTable(
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidedBy: uuid("voided_by"),
     voidReason: varchar("void_reason", { length: 240 }),
+    requestedPayment: varchar("requested_payment", { length: 10 }),
+    dueDate: date("due_date", { mode: "string" }),
+    collectedAt: timestamp("collected_at", { withTimezone: true }),
+    collectedBy: uuid("collected_by"),
+    collectedMembershipId: uuid("collected_membership_id"),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    releasedBy: uuid("released_by"),
+    releasedMembershipId: uuid("released_membership_id"),
   },
   (table) => [
     uniqueIndex("sales_tenant_id_id_key").on(table.tenantId, table.id),
@@ -995,6 +1008,46 @@ export const salePayments = pgTable(
   ],
 );
 
+export const saleComments = pgTable(
+  "sale_comments",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    userId: uuid("user_id"),
+    membershipId: uuid("membership_id"),
+    role: varchar("role", { length: 24 }),
+    kind: varchar("kind", { length: 12 }).notNull().default("comment"),
+    body: varchar("body", { length: 500 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("sale_comments_sale_idx").on(table.tenantId, table.saleId, table.createdAt),
+    foreignKey({ name: "sale_comments_sale_fk", columns: [table.tenantId, table.businessId, table.saleId], foreignColumns: [sales.tenantId, sales.businessId, sales.id] }),
+  ],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    saleId: uuid("sale_id"),
+    actorName: varchar("actor_name", { length: 160 }),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("notifications_inbox_idx").on(table.tenantId, table.membershipId, table.createdAt),
+    foreignKey({ name: "notifications_membership_fk", columns: [table.tenantId, table.membershipId], foreignColumns: [memberships.tenantId, memberships.id] }),
+    foreignKey({ name: "notifications_sale_fk", columns: [table.tenantId, table.saleId], foreignColumns: [sales.tenantId, sales.id] }),
+  ],
+);
+
 export const schema = {
   addresses,
   organizations,
@@ -1035,6 +1088,8 @@ export const schema = {
   sales,
   saleLines,
   salePayments,
+  saleComments,
+  notifications,
 };
 
 export type DatabaseSchema = typeof schema;

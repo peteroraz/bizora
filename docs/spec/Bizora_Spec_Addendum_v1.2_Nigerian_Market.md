@@ -35,7 +35,8 @@ Tagline: *Bizora — Run your business intelligently.*
 | **3D** *(any time)* | Translations: Pidgin, Hausa, Igbo, Yoruba; language switcher; translated emails/messages (§15). |
 | **4** | Products & stock: product list, units, stock ledger per branch, stock in/out/adjust/transfer, low-stock alerts; posts to accounting ledger. |
 | **5a** | Quick sales: record a sale in seconds; payment methods cash / transfer / POS / credit / split; staff attribution; discounts and credit by role; WhatsApp receipt link; works offline, and the core screens open with no network; posts to accounting ledger. **Imports:** products with opening stock, and past sales, from CSV files through a shared "check and edit before saving" screen (ADR-015). |
-| **5b** | AI gateway + capture on Google Vertex AI (in the organization's Google Cloud project): photos of handwritten books, scanned records and voice notes → draft rows in the same review screen as imports, for products, stock-in and sales (§16). Nothing is saved until a person confirms. |
+| **5b** | **Sales desk → cashier → store** (ADR-016), switched on per business: the sales person records the sale; the cashier takes payment or gives credit to customers a manager or owner approved, within their limit, with a due date and comment; the store keeper gives out the goods. Comments from all three, in-app notifications, waiting lists on Home. |
+| **5c** | AI gateway + capture on Google Vertex AI (in the organization's Google Cloud project): photos of handwritten books, scanned records and voice notes → draft rows in the same review screen as imports, for products, stock-in and sales (§16). Nothing is saved until a person confirms. |
 | **6** | Debtors & payments: receivables, partial payments, due dates, WhatsApp reminder links, simple invoices; **reconciliation inbox** and **statement upload (CSV/PDF)** (§17). |
 | **7** | Money in / money out & owner dashboard: expenses, cash position per branch, daily profit, staff activity, discounts/voids report; chart of accounts settings. |
 | **7.5** | Ask Zora: photo/scan → draft expenses; instructions ("remind everyone owing above ₦50k"); questions about the business (§16). |
@@ -166,7 +167,7 @@ Then **auto-configure**: menu modules shown, default units/categories, staff fea
 **Principle (from v1.0 AI permissions): AI drafts, a human confirms.** AI never records or changes money, stock, customers' debts or messages to customers without explicit user confirmation. Audit `actorType` distinguishes `ai_draft`, `ai_suggestion_accepted`, and (future, opt-in only) `ai_executed`.
 
 **Capabilities and timing**
-- Sprint 5b: **voice → draft sale** ("I sell 3 carton Indomie give Chika, she pay 20k transfer, balance na credit"); **photo/scan of supplier invoice, delivery note, handwritten note or WhatsApp screenshot → draft stock-in**.
+- Sprint 5c: **voice → draft sale** ("I sell 3 carton Indomie give Chika, she pay 20k transfer, balance na credit"); **photo/scan of supplier invoice, delivery note, handwritten note or WhatsApp screenshot → draft stock-in**.
 - Sprint 7.5 (Ask Zora): photo → draft expense; **instructions** → proposed action list for approval (e.g. bulk debtor reminders); questions about the business answered from the tenant's own data only.
 
 **Architecture**

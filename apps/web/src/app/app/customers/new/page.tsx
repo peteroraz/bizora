@@ -1,12 +1,13 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, parseMoneyInput, uuidv7 } from "@bizora/contracts";
 import { FormField, Input, PageHeader, SafeForm, SubmitButton, Textarea } from "@bizora/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { RequireAccess } from "../../../../components/require-access";
 import { AddressFields } from "../../../../components/address-fields";
+import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { enqueue } from "../../../../lib/offline/outbox";
@@ -30,7 +31,12 @@ function NewCustomerPageScreen() {
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [savedOffline, setSavedOffline] = useState(false);
-  const { owner } = useAccess();
+  const access = useAccess();
+  const { owner } = access;
+  // Managers and owners can approve a new customer for credit straight away (ADR-016).
+  const canApprove = can(access, Permission.DEBTORS_MANAGE);
+  const [creditAllowed, setCreditAllowed] = useState(false);
+  const [creditLimit, setCreditLimit] = useState("");
 
   useEffect(() => {
     void loadCountries().then(setCountries);
@@ -48,6 +54,8 @@ function NewCustomerPageScreen() {
     setNotes("");
     setTags("");
     setAddress(emptyAddress("NG"));
+    setCreditAllowed(false);
+    setCreditLimit("");
   }
 
   async function save() {
@@ -55,6 +63,12 @@ function NewCustomerPageScreen() {
     setError(null);
     setDuplicateId(null);
     setSavedOffline(false);
+    const limitMinor = creditAllowed && creditLimit.trim() ? parseMoneyInput(creditLimit) : null;
+    if (creditAllowed && creditLimit.trim() && limitMinor === null) {
+      setError(t("creditLimitInvalid"));
+      setPending(false);
+      return;
+    }
     // The device picks the customer's ID, so the same customer is never created twice, online or offline.
     const body = {
       id: uuidv7(),
@@ -68,6 +82,7 @@ function NewCustomerPageScreen() {
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0),
       ...(hasPlace(address) && address.city.trim() ? { address: addressPayload(address) } : {}),
+      ...(canApprove && creditAllowed ? { creditAllowed: true, creditLimitMinor: limitMinor === null ? null : limitMinor.toString() } : {}),
     };
     let response: Response;
     try {
@@ -139,6 +154,19 @@ function NewCustomerPageScreen() {
           <Textarea id="customer-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
         </FormField>
         <AddressFields idPrefix="customer" countries={countries} subdivisions={subdivisions} value={address} onChange={setAddress} />
+        {canApprove ? (
+          <div className="space-y-3 rounded-card border border-border p-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={creditAllowed} onChange={(event) => setCreditAllowed(event.target.checked)} />
+              {t("creditAllowLabel")}
+            </label>
+            {creditAllowed ? (
+              <FormField id="customer-credit-limit" label={t("creditLimitLabel")} hint={t("creditLimitHint")}>
+                <Input id="customer-credit-limit" inputMode="decimal" value={creditLimit} onChange={(event) => setCreditLimit(event.target.value)} />
+              </FormField>
+            ) : null}
+          </div>
+        ) : null}
         {error ? (
           <p className="text-sm text-danger" role="alert">
             {error}{" "}

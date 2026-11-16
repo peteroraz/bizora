@@ -3,6 +3,7 @@ import { DocumentsModule } from "../documents/documents.module.js";
 import { IdempotencyModule } from "../idempotency/idempotency.module.js";
 import { InventoryModule } from "../inventory/inventory.module.js";
 import { LedgerModule } from "../ledger/ledger.module.js";
+import { NotificationsModule } from "../notifications/notifications.module.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { SyncModule } from "../sync/sync.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
@@ -13,7 +14,7 @@ import { SaleSyncHandler } from "./sale-sync.handler.js";
 import { SaleService } from "./sale.service.js";
 
 @Module({
-  imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, InventoryModule],
+  imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, InventoryModule, NotificationsModule],
   controllers: [SaleController, PublicReceiptController, ImportController],
   providers: [SaleService, SaleSyncHandler, ImportService, PermissionGuard],
   exports: [SaleService],

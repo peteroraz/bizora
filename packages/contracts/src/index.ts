@@ -30,6 +30,7 @@ export {
   customerNoteSchema,
   customerWriteSchema,
   customerClientIdSchema,
+  customerCreditSchema,
   followupCreateSchema,
   followupUpdateSchema,
   parseCustomerCsv,

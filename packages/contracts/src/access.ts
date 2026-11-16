@@ -57,6 +57,9 @@ const runTheShop: PermissionCode[] = [
   P.SALES_READ_ALL,
   P.SALES_DISCOUNT,
   P.SALES_VOID,
+  P.SALES_COLLECT,
+  P.SALES_RELEASE,
+  P.SALES_CREDIT,
   P.PAYMENTS_RECORD,
   P.CASH_CLOSE,
   P.CASH_EXPECTED_READ,
@@ -83,6 +86,10 @@ const runTheShop: PermissionCode[] = [
  *
  * Separation of duties built in:
  * - Taking money (CASHIER) is separate from voiding sales and seeing the expected cash in the drawer (MANAGER).
+ * - In the desk flow (ADR-016) the sales person cannot take money, the cashier cannot give out goods, and the store
+ *   keeper (INVENTORY) gives out goods only for sales the cashier has finished, without seeing amounts or customers.
+ * - Approving a customer for credit and setting their limit (debtors.manage) is separate from giving credit within
+ *   that limit at the counter (sales.credit, CASHIER).
  * - Receiving and counting stock (INVENTORY) is separate from adjusting stock and ordering from suppliers (MANAGER).
  * - Recording expenses (ACCOUNTANT, MANAGER) is separate from approving them (OWNER, ADMINISTRATOR).
  * - Checking the books (ACCOUNTANT, AUDITOR) comes without taking sales or payments.
@@ -115,11 +122,13 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
     P.CUSTOMERS_LOOKUP,
     P.SALES_CREATE,
     P.SALES_READ_OWN,
+    P.SALES_COLLECT,
+    P.SALES_CREDIT,
     P.PAYMENTS_RECORD,
     P.CASH_CLOSE,
     P.DEBTORS_READ,
     P.STOCK_READ,
   ],
-  INVENTORY: [...base, P.STOCK_READ, P.STOCK_RECEIVE, P.STOCK_COUNT, P.STOCK_TRANSFER, P.REPORTS_STOCK_READ],
+  INVENTORY: [...base, P.STOCK_READ, P.STOCK_RECEIVE, P.STOCK_COUNT, P.STOCK_TRANSFER, P.SALES_RELEASE, P.REPORTS_STOCK_READ],
   EMPLOYEE: [...base],
 };

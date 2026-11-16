@@ -294,7 +294,13 @@
     "salesCount": "{count, plural, one {# sale} other {# sales}}",
     "seeSales": "See sales",
     "noSalesToday": "No sales yet today.",
-    "recordSale": "Record a sale"
+    "recordSale": "Record a sale",
+    "toCollect": "Waiting for payment",
+    "toCollectEmpty": "No customer is waiting.",
+    "toCollectAction": "Take payment",
+    "toRelease": "Goods to give out",
+    "toReleaseEmpty": "Nothing to give out.",
+    "toReleaseAction": "Give out goods"
   },
   "onboarding": {
     "progress": "Question {current} of {total}",
@@ -377,6 +383,15 @@
       "PENDING": "Waiting",
       "ACCEPTED": "Accepted",
       "REVOKED": "Revoked"
+    },
+    "salesFlow": "How you sell",
+    "salesFlowOption": {
+      "simple": "One person records the sale and takes the money",
+      "desk": "Sales desk, then cashier, then store"
+    },
+    "salesFlowHint": {
+      "simple": "For kiosks and small shops. Stock leaves when the sale is recorded.",
+      "desk": "The sales person records the sale, the cashier takes the money or gives credit, and the store keeper gives out the goods. Stock leaves when the goods are given out."
     }
   },
   "address": {
@@ -459,7 +474,19 @@
     "lookupMore": "Showing the first {count}. Type more of the name or number to narrow it down.",
     "phoneEnds": "Phone ends in {digits}",
     "limitedNote": "You can see a customer's name and the end of their phone number. Ask a manager if you need more.",
-    "savedOffline": "No network. The customer is saved on this phone and will be sent when you are back online."
+    "savedOffline": "No network. The customer is saved on this phone and will be sent when you are back online.",
+    "creditTitle": "Credit",
+    "creditAllowedWithLimit": "Approved for credit, up to {limit}.",
+    "creditAllowedNoLimit": "Approved for credit, with no limit.",
+    "creditNotAllowed": "Not approved for credit.",
+    "creditOwing": "Owes {amount} now.",
+    "creditAllowLabel": "Allowed to buy on credit",
+    "creditLimitLabel": "Credit limit (₦)",
+    "creditLimitHint": "The most they may owe at once. Leave empty for no limit.",
+    "creditLimitInvalid": "Check the credit limit.",
+    "creditSaveFailed": "Could not save. Try again.",
+    "creditSaved": "Credit saved.",
+    "creditSave": "Save credit"
   },
   "followups": {
     "title": "Follow-ups",
@@ -822,7 +849,79 @@
     "voidExplain": "Cancelling puts the items back in stock and reverses the money. The sale stays in the records, marked cancelled.",
     "voidReason": "Why are you cancelling it?",
     "voidConfirm": "Cancel sale",
-    "keep": "Keep it"
+    "keep": "Keep it",
+    "newLeadDesk": "Pick what the customer is buying and how they will pay, then send it to the cashier.",
+    "willPayWith": "Customer will pay with",
+    "sendToCashier": "Send to cashier",
+    "deskComment": "Comment for the cashier and store",
+    "creditTitle": "Credit",
+    "dueDate": "Date they will pay",
+    "creditComment": "Comment: why credit, and how they will pay",
+    "creditNeedsDate": "Enter the date the customer will pay.",
+    "creditNeedsComment": "Write a comment for this credit.",
+    "creditCustomerNotApproved": "{name} is not approved for credit. A manager or owner can approve them on the customer's page.",
+    "customerSearchFailed": "Could not search customers. Check the network.",
+    "noCustomer": "No customer found.",
+    "creditApproved": "Approved for credit",
+    "creditNotApproved": "Not approved for credit",
+    "collectTitle": "Take payment: {total}",
+    "customerSaid": "The customer said they will pay with {method}.",
+    "paidNow": "{method} paid now",
+    "creditLimitLine": "Credit limit {limit}. Owes {owing} now.",
+    "creditNoLimitLine": "No credit limit. Owes {owing} now.",
+    "owingOnCredit": "{amount} will be owed on credit.",
+    "cashierComment": "Comment",
+    "giveCredit": "Give credit",
+    "takePayment": "Payment received",
+    "needsNetwork": "This needs the network. Try again when you are online.",
+    "overLimit": "This is over the customer's credit limit. Take more payment or ask a manager.",
+    "commentsTitle": "Comments",
+    "noComments": "No comments yet.",
+    "creditCommentLabel": "Credit:",
+    "addComment": "Add a comment",
+    "postComment": "Post",
+    "stage": {
+      "awaiting_payment": "Waiting for payment",
+      "awaiting_release": "Waiting for goods",
+      "completed": "Completed",
+      "voided": "Cancelled"
+    },
+    "payment": {
+      "paid": "Paid",
+      "credit": "On credit",
+      "unpaid": "Not paid"
+    },
+    "sendCustomerToCashier": "Send the customer to the cashier with receipt number {number}.",
+    "waitingForStore": "The cashier is done. The store keeper will give out the goods.",
+    "timeline": "What happened",
+    "stepRecorded": "Recorded by {name}, {when}",
+    "stepPaid": "Paid at the cashier ({name}), {when}",
+    "stepCredit": "Credit given by {name}, {when}",
+    "stepReleased": "Goods given out by {name}, {when}",
+    "someone": "someone",
+    "releaseTitle": "Give out the goods",
+    "releasePaid": "The cashier has taken payment. Check the receipt number with the customer, then give out the goods.",
+    "releaseCredit": "Approved for credit by the cashier. Check the receipt number with the customer, then give out the goods.",
+    "storeComment": "Comment from the store",
+    "releaseConfirm": "Goods given out",
+    "voidExplainUnpaid": "Nothing has been paid or taken from stock yet. The sale stays in the records, marked cancelled.",
+    "lists": "Sales lists",
+    "tab": {
+      "day": "By day",
+      "awaiting_payment": "Waiting for payment",
+      "awaiting_release": "Goods to give out"
+    },
+    "tabLead": {
+      "awaiting_payment": "Sales from the sales desk, oldest first. Take payment or give credit.",
+      "awaiting_release": "Paid or approved sales, oldest first. Give out the goods and mark them done."
+    },
+    "emptyTab": {
+      "awaiting_payment": "Nothing waiting for payment",
+      "awaiting_release": "No goods to give out"
+    },
+    "emptyTabBody": "New sales will show here.",
+    "itemCount": "{count, plural, one {# item} other {# items}}",
+    "releaseOnCredit": "Give out (credit)"
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -911,6 +1010,23 @@
       "pos": "POS"
     },
     "owing": "Still owing",
-    "footer": "Receipt sent with Bizora."
+    "footer": "Receipt sent with Bizora.",
+    "unpaid": "Not paid yet. Pay at the cashier with this receipt number."
+  },
+  "notifications": {
+    "bell": "Notifications",
+    "bellUnread": "Notifications, {count} new",
+    "title": "Notifications",
+    "lead": "Sales that need you, and what happened to the sales you handled.",
+    "emptyTitle": "No notifications",
+    "emptyBody": "You will be told here when a sale is paid, given out or gets a comment.",
+    "someone": "Someone",
+    "kind": {
+      "paid": "{number} is paid ({name}). Goods can be given out.",
+      "credit": "{number} was given credit by {name}. Goods can be given out.",
+      "released": "Goods for {number} were given out by {name}.",
+      "comment": "{name} commented on {number}.",
+      "voided": "{number} was cancelled by {name}."
+    }
   }
 }
