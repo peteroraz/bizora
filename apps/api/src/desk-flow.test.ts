@@ -91,6 +91,11 @@ describe("sales desk, cashier and store keeper (desk flow)", () => {
     return product.body.data.product.stock.quantity as string;
   };
   const inbox = async (token: string) => (await request(app.getHttpServer()).get("/api/v1/notifications").set(auth(token)).expect(200)).body.data;
+  const binary = (response: NodeJS.ReadableStream, callback: (error: Error | null, body: Buffer) => void) => {
+    const chunks: Buffer[] = [];
+    response.on("data", (chunk: Buffer) => chunks.push(chunk));
+    response.on("end", () => callback(null, Buffer.concat(chunks)));
+  };
   const tins = (count: number) => ({ lines: [{ productId: milkId, quantity: String(count), unit: "tin" }] });
 
   beforeAll(async () => {
@@ -157,7 +162,7 @@ describe("sales desk, cashier and store keeper (desk flow)", () => {
     expect(paid.body.error.code).toBe("PAY_AT_CASHIER");
     const created = await request(http).post("/api/v1/sales").set(auth(salesToken)).send({ ...tins(2), requestedPayment: "cash" }).expect(201);
     const sale = created.body.data.sale;
-    expect(sale).toMatchObject({ number: "R-000001", status: "awaiting_payment", paymentState: "unpaid", paidMinor: "0", balanceMinor: "90000", requestedPayment: "cash" });
+    expect(sale).toMatchObject({ number: null, invoiceNumber: "INV-000001", status: "awaiting_payment", paymentState: "unpaid", paidMinor: "0", balanceMinor: "90000", requestedPayment: "cash" });
     expect(await onHand()).toBe("96000");
     let trial = await ledger.trialBalance(a.tenantId, a.businessId);
     expect(balance(trial.accounts, "4000")).toBe(0n);
@@ -172,7 +177,7 @@ describe("sales desk, cashier and store keeper (desk flow)", () => {
     expect(queues.body.data).toMatchObject({ salesFlow: "desk", awaitingPayment: 1, awaitingRelease: null });
 
     const collected = await request(http).post(`/api/v1/sales/${sale.id}/collect`).set(auth(cashierToken)).send({ payments: [{ method: "cash", amountMinor: "90000" }] }).expect(200);
-    expect(collected.body.data.sale).toMatchObject({ status: "awaiting_release", paymentState: "paid", paidMinor: "90000", collectedByName: "cashier@desk.test" });
+    expect(collected.body.data.sale).toMatchObject({ number: "R-000001", invoiceNumber: "INV-000001", status: "awaiting_release", paymentState: "paid", paidMinor: "90000", collectedByName: "cashier@desk.test" });
     await request(http).post(`/api/v1/sales/${sale.id}/collect`).set(auth(cashierToken)).send({ payments: [{ method: "cash", amountMinor: "90000" }] }).expect(409);
     trial = await ledger.trialBalance(a.tenantId, a.businessId);
     expect(trial.balanced).toBe(true);
@@ -235,6 +240,34 @@ describe("sales desk, cashier and store keeper (desk flow)", () => {
     expect((await inbox(cashierToken)).items[0]).toMatchObject({ kind: "sale.comment", saleId: creditSaleId });
     expect((await inbox(salesToken)).items[0]).toMatchObject({ kind: "sale.comment", saleId: creditSaleId });
     await request(http).post(`/api/v1/sales/${creditSaleId}/release`).set(auth(storeToken)).send({}).expect(200);
+  });
+
+  it("makes invoice and receipt PDFs for the people who may see the amounts, and for the customer's link", async () => {
+    const http = app.getHttpServer();
+    const unpaid = await request(http).post("/api/v1/sales").set(auth(salesToken)).send({ ...tins(1) }).expect(201);
+    const unpaidId = unpaid.body.data.sale.id as string;
+    expect(unpaid.body.data.sale.documents).toEqual(["invoice"]);
+    const invoice = await request(http).get(`/api/v1/sales/${unpaidId}/documents/invoice`).set(auth(salesToken)).buffer(true).parse(binary).expect(200);
+    expect(invoice.headers["content-type"]).toContain("application/pdf");
+    expect(invoice.headers["content-disposition"]).toContain('filename="Invoice-INV-');
+    expect(Buffer.from(invoice.body).subarray(0, 5).toString()).toBe("%PDF-");
+    const noReceipt = await request(http).get(`/api/v1/sales/${unpaidId}/documents/receipt`).set(auth(salesToken)).expect(404);
+    expect(noReceipt.body.error.code).toBe("NO_DOCUMENT");
+    await request(http).get(`/api/v1/sales/${unpaidId}/documents/statement`).set(auth(salesToken)).expect(404);
+
+    // The credit sale has both. The store keeper, who sees no amounts, gets neither.
+    const credit = await request(http).get(`/api/v1/sales/${creditSaleId}`).set(auth(managerToken)).expect(200);
+    expect(credit.body.data.sale.documents).toEqual(["invoice", "receipt"]);
+    expect(credit.body.data.sale.whatsApp.text).toMatch(/^Receipt R-\d{6} from /);
+    await request(http).get(`/api/v1/sales/${creditSaleId}/documents/invoice`).set(auth(storeToken)).expect(403);
+    await request(http).get(`/api/v1/sales/${creditSaleId}/documents/receipt`).set(auth(b.token)).expect(404);
+    const token = (credit.body.data.sale.receiptPath as string).replace("/r/", "");
+    const publicReceipt = await request(http).get(`/api/v1/public/receipts/${token}`).expect(200);
+    expect(publicReceipt.body.data.receipt).toMatchObject({ documents: ["invoice", "receipt"], dueDate: "2099-01-31" });
+    const publicPdf = await request(http).get(`/api/v1/public/receipts/${token}/documents/invoice.pdf`).buffer(true).parse(binary).expect(200);
+    expect(publicPdf.headers["content-disposition"]).toContain('filename="Credit-invoice-INV-');
+    await request(http).get("/api/v1/public/receipts/not-a-real-receipt-token-xx/documents/receipt").expect(404);
+    await request(http).post(`/api/v1/sales/${unpaidId}/void`).set(auth(salesToken)).send({ reason: "Test" }).expect(200);
   });
 
   it("cancels at any stage and undoes only what happened", async () => {

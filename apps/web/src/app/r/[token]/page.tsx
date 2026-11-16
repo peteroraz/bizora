@@ -11,7 +11,10 @@ type Receipt = {
   branchName: string;
   customerName: string | null;
   number: string | null;
+  invoiceNumber: string | null;
   provisionalNumber: string | null;
+  dueDate: string | null;
+  documents: ("invoice" | "receipt")[];
   status: "awaiting_payment" | "awaiting_release" | "completed" | "voided";
   soldAt: string;
   currency: string;
@@ -46,7 +49,8 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
         <p className="text-sm text-muted">{receipt.branchName}</p>
       </header>
       <p className="text-sm">
-        {t("number", { number: receipt.number ?? "" })}
+        {receipt.number ? t("number", { number: receipt.number }) : t("invoiceNumber", { number: receipt.invoiceNumber ?? "" })}
+        {receipt.number && receipt.invoiceNumber ? ` · ${t("invoiceNumber", { number: receipt.invoiceNumber })}` : ""}
         {receipt.provisionalNumber ? ` · ${t("offlineNumber", { number: receipt.provisionalNumber })}` : ""}
         <br />
         {formatWhen(receipt.soldAt, locale, "Africa/Lagos")}
@@ -98,7 +102,26 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
             <dd className="text-right tabular-nums">{money(receipt.balanceMinor)}</dd>
           </>
         ) : null}
+        {receipt.dueDate && receipt.status !== "awaiting_payment" ? (
+          <>
+            <dt className="text-muted">{t("due")}</dt>
+            <dd className="text-right">{receipt.dueDate}</dd>
+          </>
+        ) : null}
       </dl>
+      {receipt.documents.length > 0 ? (
+        <div className="flex flex-wrap gap-3">
+          {receipt.documents.map((type) => (
+            <a
+              key={type}
+              href={`/api/v1/public/receipts/${token}/documents/${type}.pdf`}
+              className="inline-flex items-center rounded-control border border-border px-3 py-2 text-sm font-medium text-primary"
+            >
+              {t(type === "receipt" ? "downloadReceipt" : BigInt(receipt.balanceMinor) > 0n && receipt.status !== "awaiting_payment" ? "downloadCreditInvoice" : "downloadInvoice")}
+            </a>
+          ))}
+        </div>
+      ) : null}
       <p className="text-xs text-muted">{t("footer")}</p>
     </main>
   );

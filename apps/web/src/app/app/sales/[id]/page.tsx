@@ -9,6 +9,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
 import { SaleCollect } from "../../../../components/sale-collect";
 import { SaleComments } from "../../../../components/sale-comments";
+import { SaleDocuments } from "../../../../components/sale-documents";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
@@ -82,7 +83,7 @@ function SaleScreen() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
-        title={sale.number ?? full?.externalRef ?? t("historyRecord")}
+        title={sale.number ?? sale.invoiceNumber ?? full?.externalRef ?? t("historyRecord")}
         description={[when(sale.soldAt), sale.byName, sale.branchName].filter(Boolean).join(" · ")}
         actions={
           <Link href="/app/sales" className="text-sm font-medium text-primary">
@@ -97,7 +98,8 @@ function SaleScreen() {
         {sale.provisionalNumber ? <Badge tone="info">{t("offlineNumber", { number: sale.provisionalNumber })}</Badge> : null}
         {full?.source === "import" ? <Badge>{t("imported")}</Badge> : null}
       </div>
-      {sale.status === "awaiting_payment" && !canCollect ? <p className="text-sm">{t("sendCustomerToCashier", { number: sale.number ?? "" })}</p> : null}
+      {sale.invoiceNumber && sale.number ? <p className="text-sm text-muted">{t("invoiceNumberLine", { number: sale.invoiceNumber })}</p> : null}
+      {sale.status === "awaiting_payment" && !canCollect ? <p className="text-sm">{t("sendCustomerToCashier", { number: sale.invoiceNumber ?? sale.number ?? "" })}</p> : null}
       {sale.status === "awaiting_release" && !canRelease ? <p className="text-sm">{t("waitingForStore")}</p> : null}
       {sale.historyOnly ? <p className="text-sm text-muted">{t("historyExplain")}</p> : null}
       {full?.voidReason ? <p className="text-sm text-danger">{t("voidedBecause", { reason: full.voidReason })}</p> : null}
@@ -191,24 +193,36 @@ function SaleScreen() {
         </Card>
       ) : null}
 
-      {full && sale.number && sale.status !== "awaiting_payment" ? (
-        <div className="flex flex-wrap gap-3">
-          <a href={whatsAppLink(full, typeof window === "undefined" ? "" : window.location.origin)} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-fg">
-            {full.whatsApp.phone ? t("sendWhatsAppCustomer") : t("sendWhatsApp")}
-          </a>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              void navigator.clipboard?.writeText(`${window.location.origin}${full.receiptPath}`).then(() => setCopied(true));
-            }}
-          >
-            {copied ? t("copied") : t("copyLink")}
-          </Button>
-          <Link href={full.receiptPath} className="self-center text-sm text-primary" target="_blank">
-            {t("viewReceipt")}
-          </Link>
-        </div>
+      {full && full.documents.length > 0 ? (
+        <Card>
+          <p className="text-sm font-medium">{t("docTitle")}</p>
+          <p className="mb-3 text-sm text-muted">{t("docLead")}</p>
+          <SaleDocuments
+            saleId={full.id}
+            documents={full.documents}
+            credit={full.paymentState === "credit"}
+            receiptPath={full.receiptPath}
+            whatsAppPrefix={full.whatsApp.hrefPrefix}
+            whatsAppText={full.whatsApp.text}
+          />
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <a href={whatsAppLink(full, typeof window === "undefined" ? "" : window.location.origin)} target="_blank" rel="noreferrer" className="text-primary">
+              {full.whatsApp.phone ? t("sendWhatsAppCustomer") : t("sendWhatsApp")}
+            </a>
+            <button
+              type="button"
+              className="text-primary"
+              onClick={() => {
+                void navigator.clipboard?.writeText(`${window.location.origin}${full.receiptPath}`).then(() => setCopied(true));
+              }}
+            >
+              {copied ? t("copied") : t("copyLink")}
+            </button>
+            <Link href={full.receiptPath} className="text-primary" target="_blank">
+              {t("viewReceipt")}
+            </Link>
+          </div>
+        </Card>
       ) : null}
 
       {!sale.historyOnly ? <SaleComments saleId={sale.id} comments={sale.comments} onAdded={() => void load()} /> : null}

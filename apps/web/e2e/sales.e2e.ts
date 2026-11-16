@@ -50,6 +50,10 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
   await receipt.goto(receiptPath ?? "/r/missing");
   await expect(receipt.getByRole("heading", { name: "Ada Stores" })).toBeVisible();
   await expect(receipt.getByText("Receipt R-000001")).toBeVisible();
+  const pdfLink = await receipt.getByRole("link", { name: "Download receipt (PDF)" }).getAttribute("href");
+  const pdf = await request.get(pdfLink ?? "/missing");
+  expect(pdf.headers()["content-type"]).toContain("application/pdf");
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
   await stranger.close();
 
   // Home shows today's sales.

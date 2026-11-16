@@ -385,7 +385,7 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
 - Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
-- Debtor payments, money in and out, and Ask Zora are not implemented. Sales are (ADR-015, ADR-016); AI capture from photos and voice comes in Sprint 5c.
+- Debtor payments, money in and out, and Ask Zora are not implemented. Sales are (ADR-015, ADR-016); AI capture from photos and voice comes in Sprint 5d.
 - There is no billing. Every organization starts on the `starter` plan (1 branch, 2 staff, 2 shop devices). To move one to `business`, run in Cloud SQL Studio: `UPDATE organization_plans SET plan_code = 'business' WHERE tenant_id = '<organization id>';`. `DEFAULT_PLAN_CODE` changes the plan given to new organizations only.
 - Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
 - Shop staff auto-lock after 5 minutes without input in the browser. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`).
@@ -394,6 +394,7 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Roles are fixed (see `docs/security/roles.md`). There are no per-person permission toggles or custom roles yet.
 - Offline: sales, adding a customer, stock in and stock counts work offline, and products and stock can be looked up from the copy on the phone (ADR-012, ADR-014, ADR-015). Home, the sale screen, Stock, new customer and the shop PIN screen open with no network once they have been opened online on that phone. Other screens show a "no network" page.
 - Desk flow (ADR-016): taking payment and giving out goods need the network; only recording the sale works offline. Notifications are inside the app only (checked every minute); phone notifications and WhatsApp alerts are not built yet. What a customer owes counts credit sales only, until debtor payments arrive in Sprint 6.
+- Invoices and receipts (ADR-017) are PDFs that staff send through the phone's share menu (WhatsApp); they are not sent automatically yet. That needs the WhatsApp Business Platform: a verified Meta business account, a dedicated number, an approved message template, and a charge per message. Documents show the shop name, address and phone, but no logo yet.
 - Product and sales CSV imports take at most 2,000 rows and 1.5 MB per file, and need the network. Discounts have no amount limits yet: only managers and owners (`sales.discount`) can give them.
 - Idempotency keys are kept until pruned (`IdempotencyService.prune`, 30 days). No scheduled job runs it yet.
 - The ledger (ADR-013) has no screens yet. Its only endpoints are the read-only chart of accounts and trial balance.

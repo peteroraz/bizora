@@ -54,7 +54,10 @@ test("sales desk sends a credit sale to the cashier, the store keeper gives out 
   await owner.page.getByRole("button", { name: "Alhaji Musa" }).click();
   await owner.page.getByLabel("Comment for the cashier and store").fill("Regular customer, pays every Friday");
   await owner.page.getByRole("button", { name: "Send to cashier" }).click();
-  await expect(owner.page.getByRole("heading", { name: "R-000001" })).toBeVisible();
+  await expect(owner.page.getByRole("heading", { name: "INV-000001" })).toBeVisible();
+  // The customer can be sent the invoice to take to the cashier.
+  await expect(owner.page.getByRole("button", { name: "Send invoice PDF" })).toBeVisible();
+  await expect(owner.page.getByRole("button", { name: "Send receipt PDF" })).toHaveCount(0);
   await expect(owner.page.getByText("Waiting for payment").first()).toBeVisible();
   await expect(owner.page.getByText(/Recorded by Ada Owner/)).toBeVisible();
 
@@ -62,7 +65,7 @@ test("sales desk sends a credit sale to the cashier, the store keeper gives out 
   const cashier = await signIn(browser, staff.CASHIER as string);
   await expect(cashier.page.getByTestId("home-toCollect")).toContainText("1");
   await cashier.page.getByTestId("home-toCollect").click();
-  await cashier.page.getByRole("link", { name: /R-000001/ }).click();
+  await cashier.page.getByRole("link", { name: /INV-000001/ }).click();
   await expect(cashier.page.getByText("Take payment: ₦1,350.00")).toBeVisible();
   await expect(cashier.page.getByText("Credit limit ₦50,000.00. Owes ₦0.00 now.")).toBeVisible();
   await cashier.page.getByLabel("Cash paid now").fill("500");
@@ -72,6 +75,13 @@ test("sales desk sends a credit sale to the cashier, the store keeper gives out 
   await cashier.page.getByRole("button", { name: "Give credit" }).click();
   await expect(cashier.page.getByText("Waiting for goods").first()).toBeVisible();
   await expect(cashier.page.getByText(/Credit given by Ngozi Cashier/)).toBeVisible();
+  await expect(cashier.page.getByRole("heading", { name: "R-000001" })).toBeVisible();
+  // A browser that cannot share files saves the PDF instead, and offers a WhatsApp download link.
+  const download = cashier.page.waitForEvent("download");
+  await cashier.page.getByRole("button", { name: "Send receipt PDF" }).click();
+  expect((await download).suggestedFilename()).toBe("Receipt-R-000001.pdf");
+  await expect(cashier.page.getByRole("link", { name: "Send link on WhatsApp" })).toHaveAttribute("href", /documents%2Freceipt\.pdf/);
+  await expect(cashier.page.getByRole("button", { name: "Send credit invoice PDF" })).toBeVisible();
 
   // The store keeper is told, sees what to give out without amounts, and marks it done.
   const store = await signIn(browser, staff.INVENTORY as string);
@@ -80,6 +90,7 @@ test("sales desk sends a credit sale to the cashier, the store keeper gives out 
   await store.page.getByRole("link", { name: /R-000001 was given credit by Ngozi Cashier/ }).click();
   await expect(store.page.getByText("3 tins")).toBeVisible();
   await expect(store.page.getByText(/₦\d/)).toHaveCount(0);
+  await expect(store.page.getByRole("button", { name: /PDF/ })).toHaveCount(0);
   await expect(store.page.getByText("Paid part in cash, balance on Friday")).toBeVisible();
   await store.page.getByLabel("Comment from the store").fill("Loaded into the customer's bus");
   await store.page.getByRole("button", { name: "Goods given out" }).click();

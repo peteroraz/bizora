@@ -169,6 +169,9 @@ describe("quick sales and imports", () => {
       .send({ lines: [{ productId: riceId, quantity: "1", unit: "bag" }], discountMinor: "500000", customerId, payments: [{ method: "cash", amountMinor: "5000000" }], dueDate: "2099-01-31", comment: "Pays on Friday" })
       .expect(201);
     creditSaleId = managed.body.data.sale.id;
+    // A credit sale also gets an invoice for what is owed; a cash sale only a receipt.
+    expect(managed.body.data.sale).toMatchObject({ invoiceNumber: "INV-000001", documents: ["invoice", "receipt"] });
+    expect(split.body.data.sale).toMatchObject({ invoiceNumber: null, documents: ["receipt"] });
     expect(managed.body.data.sale).toMatchObject({ totalMinor: "8000000", paidMinor: "5000000", balanceMinor: "3000000", customerName: "Mama Chika" });
     const trial = await ledger.trialBalance(a.tenantId, a.businessId);
     expect(trial.balanced).toBe(true);
