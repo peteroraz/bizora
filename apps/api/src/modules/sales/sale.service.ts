@@ -83,7 +83,7 @@ export class SaleService {
       const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
       const lines = await this.priceLines(tx, tenant, business, payload);
       // Imports are past records, so they are never sent to a cashier.
-      const desk = business.salesFlow === "desk" && source !== "import";
+      const desk = business.salesFlow === "desk" && source !== "import" && source !== "capture";
 
       const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0n);
       const discount = payload.discountMinor ? BigInt(payload.discountMinor) : 0n;
@@ -762,7 +762,8 @@ export class SaleService {
       if (!manager && !tenant.permissions.includes(Permission.SALES_CREDIT)) {
         throw new ApiError("FORBIDDEN", "You cannot sell on credit. Take full payment, or send the sale to the cashier.", 403, [{ field: "payments", message: "Full payment needed." }]);
       }
-      if (input.source !== "import") {
+      // Imported or captured records were already agreed with the customer; they skip approval checks (ADR-015, ADR-018).
+      if (input.source !== "import" && input.source !== "capture") {
         if (!customer.creditAllowed) {
           throw new ApiError("CREDIT_NOT_APPROVED", `${customer.name} is not approved for credit. A manager or owner can approve them on the customer's page.`, 403, [
             { field: "customerId", message: "Not approved for credit." },

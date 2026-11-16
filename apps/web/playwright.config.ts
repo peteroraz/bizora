@@ -22,6 +22,9 @@ export default defineConfig({
         WEB_ORIGIN: "http://localhost:3000",
         COOKIE_SECURE: "false",
         INVITE_TOKEN_EXPOSE: "true",
+        // AI capture uses canned drafts in tests (ADR-018); the real model is never called.
+        AI_PROVIDER: "fake",
+        AI_DAILY_CAPTURE_LIMIT: "50",
         THROTTLE_AUTH_LIMIT: "200",
         API_PORT: "3001",
         // CI inherits the runner environment. Pin the Sprint 3C settings so an

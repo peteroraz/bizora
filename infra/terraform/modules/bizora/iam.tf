@@ -28,6 +28,13 @@ resource "google_project_iam_member" "api_cloudsql" {
   member  = "serviceAccount:${google_service_account.api.email}"
 }
 
+# AI capture (ADR-018): the API calls Gemini on Vertex AI as its own service account. No API keys.
+resource "google_project_iam_member" "api_vertex" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.api.email}"
+}
+
 resource "google_project_iam_member" "migrate_cloudsql" {
   project = var.project_id
   role    = "roles/cloudsql.client"

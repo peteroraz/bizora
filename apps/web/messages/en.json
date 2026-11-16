@@ -756,14 +756,15 @@
     "archiveConfirm": "Remove this product? Its history is kept.",
     "archived": "Product removed.",
     "updated": "Product updated.",
-    "import": "Import from a file"
+    "import": "Import or snap products",
+    "delivery": "Record a delivery"
   },
   "sales": {
     "title": "Sales",
     "lead": "Every sale in this shop for the day.",
     "mineLead": "The sales you recorded.",
     "new": "New sale",
-    "import": "Import from a file",
+    "import": "Import or snap sales",
     "allSales": "All sales",
     "newTitle": "New sale",
     "newLead": "Pick what the customer is buying, then how they paid. Works without network.",
@@ -1007,7 +1008,22 @@
       "phone": "Phone",
       "ref": "Receipt number"
     },
-    "exampleProduct": "Peak Milk 400g"
+    "exampleProduct": "Peak Milk 400g",
+    "capturedTitle": "{count, plural, one {# row was} other {# rows were}} read from your photo or voice note.",
+    "capturedCheck": "The AI can make mistakes. Check every row against your record before you save.",
+    "heard": "Heard:",
+    "stockInTitle": "Record a delivery",
+    "stockInLead": "Snap the supplier's invoice or delivery note, say what arrived, or upload a file. Check the rows, then save them together.",
+    "stockInColumns": {
+      "product": "Product",
+      "quantity": "Quantity",
+      "unit": "Unit",
+      "cost": "Total cost",
+      "supplier": "Supplier",
+      "paid": "Paid",
+      "ref": "Invoice or delivery no."
+    },
+    "exampleSupplier": "Dangote Distributors"
   },
   "receipt": {
     "number": "Receipt {number}",
@@ -1046,5 +1062,25 @@
       "comment": "{name} commented on {number}.",
       "voided": "{number} was cancelled by {name}."
     }
+  },
+  "capture": {
+    "title": {
+      "products": "Snap your price list or stock book",
+      "sales": "Snap your sales book or say your sales",
+      "stock_in": "Snap the invoice or say what arrived"
+    },
+    "lead": "Take a clear photo, choose a scan or PDF, or record a voice note in English, Pidgin, Yoruba, Igbo or Hausa. The rows appear in the table below for you to check.",
+    "photo": "Photo or scan",
+    "voice": "Record voice note",
+    "stop": "Stop ({seconds}s)",
+    "remaining": "{count, plural, one {# read left today} other {# reads left today}}",
+    "noteLabel": "Anything to add? (optional, e.g. \"these are yesterday's sales\")",
+    "reading": "Reading… this can take up to a minute.",
+    "failed": "That could not be read. Try a clearer photo, or type the rows.",
+    "nothingRead": "No rows could be read. Try a clearer, closer photo in good light.",
+    "offline": "Reading photos and voice notes needs the network.",
+    "tooManyFiles": "Choose at most {max} photos at a time.",
+    "noRecording": "This browser cannot record voice notes. Use a photo instead.",
+    "micDenied": "Allow the microphone to record a voice note."
   }
 }

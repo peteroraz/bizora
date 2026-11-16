@@ -20,7 +20,7 @@ RUN for pkg in config auth contracts; do \
     done
 RUN test -f /out/dist/main.js && test -f /out/dist/db/migrate.js
 RUN node -e "const fs=require('node:fs'); if (fs.existsSync('/out/node_modules/tsx')) { console.error('production image must not include tsx'); process.exit(1); } for (const spec of ['postgres','@bizora/config','@bizora/auth','@bizora/contracts']) { const root='/out/node_modules/'+spec; const resolved=fs.realpathSync(root); if (!resolved.startsWith('/out/')) { console.error(root+' resolves outside the image: '+resolved); process.exit(1); } }"
-RUN cd /out && node --input-type=module -e "await import('postgres'); await import('@bizora/config/env'); await import('@bizora/auth'); await import('@bizora/contracts')"
+RUN cd /out && node --input-type=module -e "await import('postgres'); await import('@bizora/config/env'); await import('@bizora/auth'); await import('@bizora/contracts'); await import('@google/genai')"
 # Invoice and receipt PDFs need pdfkit and the DejaVu font (it has the naira sign) inside the image (ADR-017).
 RUN cd /out && node --input-type=module -e "import { createRequire } from 'node:module'; const r = createRequire('/out/dist/modules/sales/sale-document.js'); r.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf'); r.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf'); await import(r.resolve('pdfkit'))"
 

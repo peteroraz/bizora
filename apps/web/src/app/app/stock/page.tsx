@@ -34,6 +34,7 @@ function StockScreen() {
   const stockText = useStockText();
   const unitName = useUnitName();
   const canAdd = can(access, Permission.PRODUCTS_MANAGE);
+  const canReceive = can(access, Permission.STOCK_RECEIVE);
   const canApprove = can(access, Permission.STOCK_ADJUST);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
@@ -121,14 +122,23 @@ function StockScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          canAdd ? (
-            <div className="flex gap-4">
-              <Link href="/app/stock/import" className="text-sm font-medium text-primary">
-                {t("import")}
-              </Link>
-              <Link href="/app/stock/new" className="text-sm font-medium text-primary">
-                {t("add")}
-              </Link>
+          canAdd || canReceive ? (
+            <div className="flex flex-wrap gap-4">
+              {canReceive ? (
+                <Link href="/app/stock/receive" className="text-sm font-medium text-primary">
+                  {t("delivery")}
+                </Link>
+              ) : null}
+              {canAdd ? (
+                <>
+                  <Link href="/app/stock/import" className="text-sm font-medium text-primary">
+                    {t("import")}
+                  </Link>
+                  <Link href="/app/stock/new" className="text-sm font-medium text-primary">
+                    {t("add")}
+                  </Link>
+                </>
+              ) : null}
             </div>
           ) : undefined
         }

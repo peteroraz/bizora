@@ -40,7 +40,7 @@ function ProductImportScreen() {
           </Link>
         }
       />
-      <ImportReview columns={columns} synonyms={PRODUCT_IMPORT_COLUMNS} endpoint="/api/v1/imports/products" templateName="bizora-products.csv" templateExample={{ ...EXAMPLE, name: t("exampleProduct") }} />
+      <ImportReview columns={columns} synonyms={PRODUCT_IMPORT_COLUMNS} endpoint="/api/v1/imports/products" templateName="bizora-products.csv" templateExample={{ ...EXAMPLE, name: t("exampleProduct") }} capture="products" />
     </div>
   );
 }

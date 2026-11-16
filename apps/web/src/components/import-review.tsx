@@ -1,10 +1,11 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, IMPORT_MAX_ROWS, type ImportRowResult, rowsFromCsv, uuidv7 } from "@bizora/contracts";
+import { type CaptureResult, type CaptureTarget, IDEMPOTENCY_HEADER, IMPORT_MAX_ROWS, type ImportRowResult, rowsFromCsv, uuidv7 } from "@bizora/contracts";
 import { Badge, Button, Card } from "@bizora/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { api } from "../lib/api";
+import { CaptureBar } from "./capture-bar";
 
 /**
  * The shared "check and edit before saving" screen (ADR-015). Rows come from a CSV file today; in Sprint 5b, photos
@@ -22,11 +23,13 @@ type Props<F extends string> = {
   templateName: string;
   templateExample: Record<F, string>;
   onSaved?: (totals: { create: number; update: number }) => void;
+  /** Lets people fill the table from photos, scans and voice notes (ADR-018). */
+  capture?: CaptureTarget;
 };
 
 type Result = { committed: boolean; results: ImportRowResult[]; totals: { create: number; update: number; error: number } };
 
-export function ImportReview<F extends string>({ columns, synonyms, endpoint, extra = {}, templateName, templateExample, onSaved }: Props<F>) {
+export function ImportReview<F extends string>({ columns, synonyms, endpoint, extra = {}, templateName, templateExample, onSaved, capture }: Props<F>) {
   const t = useTranslations("imports");
   const [rows, setRows] = useState<Record<F, string>[]>([]);
   const [fileName, setFileName] = useState("");
@@ -36,10 +39,13 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
   const [saved, setSaved] = useState<Result | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [captured, setCaptured] = useState<{ rows: number; warnings: string[]; transcript: string | null } | null>(null);
 
   const blank = () => Object.fromEntries(columns.map((column) => [column.field, ""])) as Record<F, string>;
   const filled = rows.filter((row) => columns.some((column) => row[column.field].trim()));
-  const key = JSON.stringify([filled, extra]);
+  // Rows read by AI are marked, so the activity log shows they came from a capture a person checked.
+  const sent = { ...extra, source: captured ? "capture" : "file" };
+  const key = JSON.stringify([filled, sent]);
   const upToDate = checked !== null && checkedKey === key;
   const canSave = upToDate && checked.totals.error === 0 && filled.length > 0;
 
@@ -66,7 +72,7 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
       const response = await api(endpoint, {
         method: "POST",
         headers: { [IDEMPOTENCY_HEADER]: uuidv7() },
-        body: JSON.stringify({ ...extra, dryRun, rows: filled }),
+        body: JSON.stringify({ ...sent, dryRun, rows: filled }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -82,6 +88,7 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
         setSaved(result);
         setRows([]);
         setChecked(null);
+        setCaptured(null);
         onSaved?.(result.totals);
       }
     } catch {
@@ -89,6 +96,18 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
     } finally {
       setPending(false);
     }
+  }
+
+  function addCaptured(result: CaptureResult) {
+    const drafts = result.rows.map((row) => Object.fromEntries(columns.map((column) => [column.field, row[column.field] ?? ""])) as Record<F, string>);
+    setSaved(null);
+    setChecked(null);
+    setRows((current) => [...current.filter((row) => columns.some((column) => row[column.field].trim())), ...drafts]);
+    setCaptured((current) => ({
+      rows: (current?.rows ?? 0) + drafts.length,
+      warnings: [...(current?.warnings ?? []), ...result.warnings].slice(-10),
+      transcript: result.transcript ?? current?.transcript ?? null,
+    }));
   }
 
   function edit(index: number, field: F, value: string) {
@@ -112,6 +131,21 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
         <p className="rounded-card border border-success bg-success-bg px-4 py-3 text-sm text-success" role="status">
           {t("saved", { create: saved.totals.create, update: saved.totals.update })}
         </p>
+      ) : null}
+      {capture ? <CaptureBar target={capture} onRows={addCaptured} /> : null}
+      {captured ? (
+        <div className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
+          <p className="font-medium">{t("capturedTitle", { count: captured.rows })}</p>
+          <p>{t("capturedCheck")}</p>
+          {captured.warnings.map((warning, index) => (
+            <p key={index}>• {warning}</p>
+          ))}
+          {captured.transcript ? (
+            <p className="mt-1">
+              <span className="font-medium">{t("heard")}</span> {captured.transcript}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       <Card>
         <div className="flex flex-wrap items-center gap-4">
