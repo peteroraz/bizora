@@ -170,7 +170,7 @@ function SalesScreen() {
             <li key={sale.id}>
               <Link href={`/app/sales/${sale.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{sale.number ?? (sale.view === "full" ? sale.externalRef : null) ?? t("historyRecord")}</span>
+                  <span className="block truncate text-sm font-medium">{sale.number ?? sale.invoiceNumber ?? (sale.view === "full" ? sale.externalRef : null) ?? t("historyRecord")}</span>
                   <span className="block truncate text-sm text-muted">
                     {formatWhen(sale.soldAt, locale, "Africa/Lagos")}
                     {sale.view === "full" && sale.customerName ? ` · ${sale.customerName}` : ""}

@@ -15,6 +15,7 @@ export type SaleLineView = {
 export type SaleView = {
   id: string;
   number: string | null;
+  invoiceNumber: string | null;
   provisionalNumber: string | null;
   externalRef: string | null;
   status: SaleStatus;
@@ -42,6 +43,7 @@ export type SaleStatus = "awaiting_payment" | "awaiting_release" | "completed" |
 export type SaleReleaseRow = {
   id: string;
   number: string | null;
+  invoiceNumber: string | null;
   provisionalNumber: string | null;
   status: SaleStatus;
   paymentState: "unpaid" | "paid" | "credit";
@@ -77,6 +79,7 @@ export type SaleDetail = Omit<SaleView, "itemCount"> &
   note: string | null;
   voidReason: string | null;
   receiptPath: string;
+  documents: ("invoice" | "receipt")[];
   whatsApp: { text: string; phone: string | null; hrefPrefix: string };
   lines: SaleLineView[];
   payments: { method: "cash" | "transfer" | "pos"; amountMinor: string; reference: string | null }[];

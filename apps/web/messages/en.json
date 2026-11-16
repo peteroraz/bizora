@@ -921,7 +921,20 @@
     },
     "emptyTabBody": "New sales will show here.",
     "itemCount": "{count, plural, one {# item} other {# items}}",
-    "releaseOnCredit": "Give out (credit)"
+    "releaseOnCredit": "Give out (credit)",
+    "docTitle": "Invoice and receipt",
+    "docLead": "Send the PDF to the customer. On a phone, pick WhatsApp and the customer's chat.",
+    "doc": {
+      "invoice": "invoice",
+      "creditInvoice": "credit invoice",
+      "receipt": "receipt"
+    },
+    "docSend": "Send {doc} PDF",
+    "docPreparing": "Preparing…",
+    "docSaved": "{name} is saved on this device. Attach it in WhatsApp, or send the customer a download link instead.",
+    "docWhatsAppLink": "Send link on WhatsApp",
+    "docFailed": "The PDF could not be made. Check the network and try again.",
+    "invoiceNumberLine": "Invoice {number}"
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -1011,7 +1024,12 @@
     },
     "owing": "Still owing",
     "footer": "Receipt sent with Bizora.",
-    "unpaid": "Not paid yet. Pay at the cashier with this receipt number."
+    "unpaid": "Not paid yet. Pay at the cashier with this receipt number.",
+    "invoiceNumber": "Invoice {number}",
+    "due": "Payment due",
+    "downloadInvoice": "Download invoice (PDF)",
+    "downloadCreditInvoice": "Download credit invoice (PDF)",
+    "downloadReceipt": "Download receipt (PDF)"
   },
   "notifications": {
     "bell": "Notifications",

@@ -945,6 +945,7 @@ export const sales = pgTable(
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidedBy: uuid("voided_by"),
     voidReason: varchar("void_reason", { length: 240 }),
+    invoiceNumber: varchar("invoice_number", { length: 20 }),
     requestedPayment: varchar("requested_payment", { length: 10 }),
     dueDate: date("due_date", { mode: "string" }),
     collectedAt: timestamp("collected_at", { withTimezone: true }),

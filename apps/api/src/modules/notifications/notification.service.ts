@@ -44,7 +44,7 @@ export class NotificationService {
     const mine = and(eq(notifications.tenantId, tenant.tenantId), eq(notifications.membershipId, tenant.membershipId));
     const [rows, unread] = await Promise.all([
       this.db
-        .select({ notification: notifications, saleNumber: sales.saleNumber })
+        .select({ notification: notifications, saleNumber: sql<string | null>`coalesce(${sales.saleNumber}, ${sales.invoiceNumber})` })
         .from(notifications)
         .leftJoin(sales, and(eq(sales.tenantId, notifications.tenantId), eq(sales.id, notifications.saleId)))
         .where(mine)

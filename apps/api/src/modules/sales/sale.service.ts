@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import {
   businessTypeFromIndustry,
+  formatAddressDisplay,
   parseQuantity,
   Permission,
   ROLE_PERMISSIONS,
@@ -22,7 +23,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { branches, businesses, customers, memberships, products, saleComments, saleLines, salePayments, sales, users } from "../../db/schema.js";
+import { addresses, branches, businesses, customers, memberships, products, saleComments, saleLines, salePayments, sales, users } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
@@ -30,6 +31,7 @@ import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor
 import { StockService } from "../inventory/stock.service.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
+import { availableDocuments, documentModel, renderPdf, type DocumentInput, type SaleDocumentType } from "./sale-document.js";
 
 type SaleRow = typeof sales.$inferSelect;
 type CustomerRow = typeof customers.$inferSelect;
@@ -94,13 +96,14 @@ export class SaleService {
         throw new ApiError("PAY_AT_CASHIER", "In this shop the cashier takes payment. Send the sale to the cashier.", 400, [{ field: "payments", message: "Leave empty." }]);
       }
 
-      const number = await this.numbers.next(tx, tenant.tenantId, business.id, "receipt");
+      // Desk: the customer takes an invoice to the cashier; the receipt number comes with the payment (ADR-017).
+      const receiptNumber = desk ? null : (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
       const now = new Date();
       const settled = desk
         ? null
         : await this.settle(tx, tenant, business, branch, {
             id,
-            number: number.number,
+            number: receiptNumber ?? "",
             subtotal,
             discount,
             total,
@@ -118,7 +121,8 @@ export class SaleService {
         businessId: business.id,
         branchId: branch.id,
         customerId: customer?.id ?? null,
-        saleNumber: number.number,
+        saleNumber: receiptNumber,
+        invoiceNumber: desk || (settled && settled.balance > 0n) ? (await this.numbers.next(tx, tenant.tenantId, business.id, "invoice")).number : null,
         provisionalNumber: payload.provisionalNumber ?? null,
         status: desk ? "awaiting_payment" : "completed",
         historyOnly: false,
@@ -154,7 +158,7 @@ export class SaleService {
       await this.insertLines(tx, tenant, business.id, id, lines, []);
       if (settled) {
         await this.insertPayments(tx, tenant, business.id, id, payload.payments);
-        await this.takeStock(tx, tenant, business, branch, id, number.number, soldAt);
+        await this.takeStock(tx, tenant, business, branch, id, receiptNumber ?? "", soldAt);
       }
       if (payload.comment) await this.addComment(tx, tenant, business.id, id, payload.comment, settled && settled.balance > 0n ? "credit" : "comment");
       await this.audit.record(
@@ -168,7 +172,7 @@ export class SaleService {
           businessId: business.id,
           branchId: branch.id,
           actorType: tenant.actorType ?? "HUMAN",
-          metadata: { number: number.number, totalMinor: total.toString(), source, stage: desk ? "awaiting_payment" : "completed", ...(settled?.overLimit ? { overCreditLimit: true } : {}) },
+          metadata: { number: receiptNumber, totalMinor: total.toString(), source, stage: desk ? "awaiting_payment" : "completed", ...(settled?.overLimit ? { overCreditLimit: true } : {}) },
         },
         tx,
       );
@@ -187,9 +191,10 @@ export class SaleService {
       const customerId = payload.customerId ?? sale.customerId;
       const customer = customerId ? await this.requireCustomer(tx, tenant, business.id, customerId) : null;
       const now = new Date();
+      const receiptNumber = sale.saleNumber ?? (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
       const settled = await this.settle(tx, tenant, business, branch, {
         id: sale.id,
-        number: sale.saleNumber ?? "",
+        number: receiptNumber,
         subtotal: sale.subtotalMinor,
         discount: sale.discountMinor,
         total: sale.totalMinor,
@@ -204,6 +209,8 @@ export class SaleService {
         .update(sales)
         .set({
           status: "awaiting_release",
+          saleNumber: receiptNumber,
+          ...(settled.balance > 0n && !sale.invoiceNumber ? { invoiceNumber: (await this.numbers.next(tx, tenant.tenantId, business.id, "invoice")).number } : {}),
           customerId: customer?.id ?? null,
           paidMinor: settled.paid,
           balanceMinor: settled.balance,
@@ -243,7 +250,7 @@ export class SaleService {
       const business = await requireBusiness(tx, tenant);
       const branch = await findBranch(tx, tenant, business.id, sale.branchId);
       const now = new Date();
-      await this.takeStock(tx, tenant, business, branch, sale.id, sale.saleNumber ?? "", now);
+      await this.takeStock(tx, tenant, business, branch, sale.id, sale.saleNumber ?? sale.invoiceNumber ?? "", now);
       await tx
         .update(sales)
         .set({ status: "completed", releasedAt: now, releasedBy: tenant.userId, releasedMembershipId: tenant.membershipId })
@@ -348,7 +355,7 @@ export class SaleService {
       const business = await requireBusiness(tx, tenant);
       const today = localDate(new Date(), business.timezone);
       if (!sale.historyOnly && sale.journalEntryId) {
-        await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, sale.journalEntryId, { entryDate: today, reason: `Sale ${sale.saleNumber} cancelled: ${reason}` });
+        await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, sale.journalEntryId, { entryDate: today, reason: `Sale ${sale.saleNumber ?? sale.invoiceNumber} cancelled: ${reason}` });
       }
       if (!sale.historyOnly) {
         const lines = await tx.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id)));
@@ -363,7 +370,7 @@ export class SaleService {
             enteredQuantity: line.enteredQuantity,
             enteredUnit: line.enteredUnit,
             reason: "sale_void",
-            note: sale.saleNumber,
+            note: sale.saleNumber ?? sale.invoiceNumber,
             valueMinor: line.costMinor ?? 0n,
           });
         }
@@ -533,7 +540,9 @@ export class SaleService {
     const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     const seeContact = tenant.permissions.includes(Permission.CUSTOMERS_READ);
     const receiptPath = `/r/${sale.receiptToken}`;
-    const message = `Receipt ${sale.saleNumber ?? ""} from ${extra?.businessName ?? ""}. View it here: `;
+    const documents = availableDocuments(sale);
+    const label = documents.includes("receipt") ? `Receipt ${sale.saleNumber}` : sale.balanceMinor > 0n || !sale.collectedAt ? `Invoice ${sale.invoiceNumber ?? ""}` : `Receipt ${sale.saleNumber ?? ""}`;
+    const message = `${label} from ${extra?.businessName ?? ""}. View or download it here: `;
     return {
       ...this.summaryOf(sale),
       ...stages,
@@ -548,6 +557,7 @@ export class SaleService {
       note: sale.note,
       voidReason: sale.voidReason,
       receiptPath,
+      documents,
       // The web app adds its own origin to the link. A customer's number is used only for people who may see it.
       whatsApp: {
         text: message,
@@ -590,8 +600,11 @@ export class SaleService {
       branchName: row.branchName,
       customerName: row.customerName,
       number: row.sale.saleNumber,
+      invoiceNumber: row.sale.invoiceNumber,
       provisionalNumber: row.sale.provisionalNumber,
       status: row.sale.status,
+      dueDate: row.sale.balanceMinor > 0n ? row.sale.dueDate : null,
+      documents: availableDocuments(row.sale),
       soldAt: row.sale.soldAt,
       currency: row.sale.currencyCode.trim(),
       subtotalMinor: row.sale.subtotalMinor.toString(),
@@ -607,6 +620,97 @@ export class SaleService {
         lineTotalMinor: line.lineTotalMinor.toString(),
       })),
       payments: payments.map((payment) => ({ method: payment.method, amountMinor: payment.amountMinor.toString() })),
+    };
+  }
+
+  /** A sale's invoice or receipt as a PDF, for staff who may see the sale in full (not the store keeper's view). */
+  async document(tenant: TenantContext, id: string, type: SaleDocumentType) {
+    const sale = await this.requireSale(this.db, tenant, id);
+    if (this.viewOf(tenant, sale) !== "full") throw new ApiError("FORBIDDEN", "You cannot see the amounts on this sale.", 403);
+    return this.renderDocument(sale, type);
+  }
+
+  /** The same PDF for anyone with the receipt link the customer was sent. */
+  async publicDocument(token: string, type: SaleDocumentType) {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
+    const [sale] = await this.db.select().from(sales).where(eq(sales.receiptToken, token)).limit(1);
+    if (!sale) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
+    return this.renderDocument(sale, type);
+  }
+
+  private async renderDocument(sale: SaleRow, type: SaleDocumentType) {
+    const input = await this.documentInput(sale);
+    if (!availableDocuments(input.sale).includes(type)) {
+      throw new ApiError("NO_DOCUMENT", type === "receipt" ? "There is no receipt yet: the cashier has not taken payment." : "This sale has no invoice.", 404);
+    }
+    const model = documentModel(input, type);
+    return { fileName: model.fileName, pdf: await renderPdf(model) };
+  }
+
+  private async documentInput(sale: SaleRow): Promise<DocumentInput> {
+    const name = (userId: string | null) => (userId ? sql<string | null>`(SELECT display_name FROM users WHERE users.id = ${userId})` : sql<null>`NULL`);
+    const [extra] = await this.db
+      .select({
+        business: businesses,
+        branch: branches,
+        address: addresses,
+        customerName: customers.name,
+        servedBy: name(sale.createdBy),
+        cashier: name(sale.collectedBy),
+      })
+      .from(sales)
+      .innerJoin(businesses, and(eq(businesses.tenantId, sales.tenantId), eq(businesses.id, sales.businessId)))
+      .innerJoin(branches, and(eq(branches.tenantId, sales.tenantId), eq(branches.id, sales.branchId)))
+      .leftJoin(addresses, and(eq(addresses.tenantId, branches.tenantId), eq(addresses.id, branches.addressId)))
+      .leftJoin(customers, and(eq(customers.tenantId, sales.tenantId), eq(customers.id, sales.customerId)))
+      .where(and(eq(sales.tenantId, sale.tenantId), eq(sales.id, sale.id)))
+      .limit(1);
+    if (!extra) throw new ApiError("NOT_FOUND", "Sale not found.", 404);
+    const [lines, payments] = await Promise.all([
+      this.db.select().from(saleLines).where(and(eq(saleLines.tenantId, sale.tenantId), eq(saleLines.saleId, sale.id))).orderBy(asc(saleLines.lineNo)),
+      this.db.select().from(salePayments).where(and(eq(salePayments.tenantId, sale.tenantId), eq(salePayments.saleId, sale.id))).orderBy(asc(salePayments.createdAt)),
+    ]);
+    const address = extra.address
+      ? formatAddressDisplay({
+          shopNumber: extra.address.shopNumber,
+          lineOrBlock: extra.address.lineOrBlock,
+          marketOrPlaza: extra.address.marketOrPlaza,
+          line1: extra.address.line1,
+          city: extra.address.city,
+          subdivisionName: null,
+        })
+      : null;
+    return {
+      sale: {
+        status: sale.status as SaleStatus,
+        historyOnly: sale.historyOnly,
+        saleNumber: sale.saleNumber,
+        invoiceNumber: sale.invoiceNumber,
+        provisionalNumber: sale.provisionalNumber,
+        collectedAt: sale.collectedAt,
+        soldAt: sale.soldAt,
+        dueDate: sale.dueDate,
+        currency: sale.currencyCode.trim(),
+        subtotalMinor: sale.subtotalMinor,
+        discountMinor: sale.discountMinor,
+        totalMinor: sale.totalMinor,
+        paidMinor: sale.paidMinor,
+        balanceMinor: sale.balanceMinor,
+        voidReason: sale.voidReason,
+      },
+      business: { name: extra.business.name, phone: extra.business.phoneE164, timezone: extra.business.timezone },
+      branch: { name: extra.branch.name, address: address || null, phone: extra.branch.phoneE164 },
+      customerName: extra.customerName,
+      servedBy: extra.servedBy,
+      cashier: extra.cashier,
+      lines: lines.map((line) => ({
+        description: line.description,
+        enteredQuantity: line.enteredQuantity,
+        enteredUnit: line.enteredUnit,
+        unitPriceMinor: line.unitPriceMinor,
+        lineTotalMinor: line.lineTotalMinor,
+      })),
+      payments: payments.map((payment) => ({ method: payment.method, amountMinor: payment.amountMinor })),
     };
   }
 
@@ -801,7 +905,7 @@ export class SaleService {
         businessId: sale.businessId,
         branchId: sale.branchId,
         actorType: tenant.actorType ?? "HUMAN",
-        metadata: { number: sale.saleNumber, ...metadata },
+        metadata: { number: sale.saleNumber, invoiceNumber: sale.invoiceNumber, ...metadata },
       },
       tx,
     );
@@ -938,6 +1042,7 @@ export class SaleService {
     return {
       id: sale.id,
       number: sale.saleNumber,
+      invoiceNumber: sale.invoiceNumber,
       provisionalNumber: sale.provisionalNumber,
       status: sale.status as SaleStatus,
       paymentState: this.paymentState(sale),
@@ -950,6 +1055,7 @@ export class SaleService {
     return {
       id: sale.id,
       number: sale.saleNumber,
+      invoiceNumber: sale.invoiceNumber,
       provisionalNumber: sale.provisionalNumber,
       externalRef: sale.externalRef,
       status: sale.status as SaleStatus,

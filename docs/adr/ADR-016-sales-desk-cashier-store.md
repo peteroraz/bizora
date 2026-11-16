@@ -24,7 +24,7 @@ No single person can both take money and release goods, which protects against t
 
 | Status | Who acts next | What has happened |
 | --- | --- | --- |
-| `awaiting_payment` | Cashier | The sales person recorded the items, the customer and what the customer said they will pay with (`requested_payment`). The sale has its receipt number. No money, stock or ledger. |
+| `awaiting_payment` | Cashier | The sales person recorded the items, the customer and what the customer said they will pay with (`requested_payment`). The sale has its invoice number (ADR-017); the receipt number comes with the payment. No money, stock or ledger. |
 | `awaiting_release` | Store keeper | The cashier took payment or gave credit. The money and revenue are posted (Dr cash/bank/POS/debtors, Cr sales). |
 | `completed` | — | The store keeper gave out the goods. Stock leaves now and cost of goods is posted (Dr cost of goods, Cr stock). |
 | `voided` | — | Cancelled at any stage. Whatever had happened is reversed. |
