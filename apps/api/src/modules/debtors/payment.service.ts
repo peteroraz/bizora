@@ -14,6 +14,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { requireBusiness, resolveBranch } from "../inventory/inventory-scope.js";
 import { LedgerPostingService } from "../ledger/ledger-posting.service.js";
+import { BrandingService } from "../branding/branding.service.js";
 import { renderPdf, type DocumentModel } from "../sales/sale-document.js";
 
 type SaleRow = typeof sales.$inferSelect;
@@ -38,6 +39,7 @@ export class PaymentService {
     @Inject(LedgerPostingService) private readonly ledger: LedgerPostingService,
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(BrandingService) private readonly branding: BrandingService,
   ) {}
 
   async record(tenant: TenantContext, customerId: string, raw: unknown, options: { source?: "online" | "offline" } = {}) {
@@ -419,7 +421,7 @@ export class PaymentService {
         ],
         notices: owing > 0n ? [{ text: `Please pay ${money(owing)}${overdue > 0n ? `. ${money(overdue)} is overdue` : ""}.`, tone: overdue > 0n ? "danger" : "warning" }] : [{ text: "Nothing is owed. Thank you.", tone: "info" }],
       };
-      return { fileName: model.fileName, pdf: await renderPdf(model) };
+      return { fileName: model.fileName, pdf: await renderPdf(model, await this.branding.documentBrand(this.db, customer.tenantId, "statement")) };
     };
     return { view, pdf };
   }
@@ -470,7 +472,7 @@ export class PaymentService {
           ? [{ text: `CANCELLED${payment.voidReason ? `: ${payment.voidReason}` : ""}. This receipt is no longer valid.`, tone: "danger" }]
           : [{ text: owing > 0n ? `Thank you. ${money(owing)} is still owed.` : "Thank you. Nothing more is owed.", tone: owing > 0n ? "warning" : "info" }],
     };
-    return { fileName: model.fileName, pdf: await renderPdf(model) };
+    return { fileName: model.fileName, pdf: await renderPdf(model, await this.branding.documentBrand(this.db, payment.tenantId, "payment_receipt")) };
   }
 
   private async present(tenant: TenantContext, payment: PaymentRow) {

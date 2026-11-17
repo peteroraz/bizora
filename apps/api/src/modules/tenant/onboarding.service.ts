@@ -5,7 +5,6 @@ import {
   completeOnboardingSchema,
   deriveTraderSetup,
   industryForBusinessType,
-  updateBrandingSchema,
   updateBranchSchema,
   updateBusinessSchema,
   updateOrganizationSchema,
@@ -118,7 +117,6 @@ export class OnboardingService {
           name: payload.organizationName ?? organization.name,
           primaryColor: payload.primaryColor ?? organization.primaryColor,
           accentColor: payload.accentColor ?? organization.accentColor,
-          logoUrl: payload.logoUrl === "" ? null : (payload.logoUrl ?? organization.logoUrl),
           onboardingCompletedAt: new Date(),
           ...(traderAnswers
             ? {
@@ -247,34 +245,6 @@ export class OnboardingService {
       branchId: tenant.branchId,
     });
 
-    return this.tenants.findOrganization(tenant.tenantId);
-  }
-
-  async updateBranding(tenant: TenantContext, raw: unknown) {
-    if (!canManageOrganizationSettings(tenant)) {
-      throw new ApiError("FORBIDDEN", "Organization settings require organization-wide authority.", 403);
-    }
-    const payload = updateBrandingSchema.parse(raw);
-    await this.db
-      .update(organizations)
-      .set({
-        ...(payload.primaryColor ? { primaryColor: payload.primaryColor } : {}),
-        ...(payload.accentColor ? { accentColor: payload.accentColor } : {}),
-        ...(payload.logoUrl !== undefined
-          ? { logoUrl: payload.logoUrl === "" || payload.logoUrl === null ? null : payload.logoUrl }
-          : {}),
-        updatedBy: tenant.userId,
-      })
-      .where(eq(organizations.id, tenant.tenantId));
-
-    await this.audit.record({
-      tenantId: tenant.tenantId,
-      actorUserId: tenant.userId,
-      action: "branding.updated",
-      entityType: "organization",
-      entityId: tenant.tenantId,
-      correlationId: tenant.correlationId,
-    });
     return this.tenants.findOrganization(tenant.tenantId);
   }
 

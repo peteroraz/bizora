@@ -31,6 +31,7 @@ import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor
 import { StockService } from "../inventory/stock.service.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
+import { BrandingService } from "../branding/branding.service.js";
 import { availableDocuments, documentModel, renderPdf, type DocumentInput, type SaleDocumentType } from "./sale-document.js";
 
 type SaleRow = typeof sales.$inferSelect;
@@ -65,6 +66,7 @@ export class SaleService {
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NotificationService) private readonly notifications: NotificationService,
+    @Inject(BrandingService) private readonly branding: BrandingService,
   ) {}
 
   async create(tenant: TenantContext, raw: unknown, options: { source?: SaleSource; soldAt?: Date; allowOlder?: boolean } = {}) {
@@ -664,7 +666,7 @@ export class SaleService {
       throw new ApiError("NO_DOCUMENT", type === "receipt" ? "There is no receipt yet: the cashier has not taken payment." : "This sale has no invoice.", 404);
     }
     const model = documentModel(input, type);
-    return { fileName: model.fileName, pdf: await renderPdf(model) };
+    return { fileName: model.fileName, pdf: await renderPdf(model, await this.branding.documentBrand(this.db, sale.tenantId, type)) };
   }
 
   private async documentInput(sale: SaleRow): Promise<DocumentInput> {

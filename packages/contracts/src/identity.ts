@@ -185,7 +185,6 @@ export const completeOnboardingSchema = z.object({
   branchName: z.string().min(1).max(160).optional(),
   primaryColor: hexColor.optional(),
   accentColor: hexColor.optional(),
-  logoUrl: z.union([z.string().url().max(2048), z.literal("")]).optional(),
   address: addressInputSchema.optional(),
   phoneE164: optionalPhoneSchema,
   marketOrPlaza: z.string().trim().max(200).optional(),
@@ -212,11 +211,6 @@ export const completeOnboardingSchema = z.object({
   }
 });
 
-export const updateBrandingSchema = z.object({
-  logoUrl: z.union([z.string().url().max(2048), z.literal(""), z.null()]).optional(),
-  primaryColor: hexColor.optional(),
-  accentColor: hexColor.optional(),
-});
 
 export const updateBusinessSchema = z.object({
   name: z.string().min(1).max(160).optional(),

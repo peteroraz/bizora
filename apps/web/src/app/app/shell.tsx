@@ -66,6 +66,8 @@ export type ShellBranch = { id: string; name: string; businessId: string };
 export type ShellProfile = {
   user?: { displayName: string; email: string | null; emailVerifiedAt?: string | null; kind?: string } | null;
   organization?: { name: string } | null;
+  /** Changes when the company logo changes (ADR-021); null when there is no logo. */
+  logoVersion?: string | null;
   tenant?: {
     role: string;
     tenantId: string;
@@ -193,6 +195,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const onboarding = pathname.startsWith("/app/onboarding");
   const workspaces = profile.workspaces ?? [];
   const currentOrganizationId = profile.tenant?.tenantId;
+  const [logoFailed, setLogoFailed] = useState(false);
   const organizationName = profile.organization?.name ?? t("currentBusiness");
 
   async function switchWorkspace(organizationId: string) {
@@ -313,7 +316,18 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             </LazySheet>
           </div>
           <div className="flex min-w-0 max-w-56 items-center gap-2">
-            <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            {profile.logoVersion && !logoFailed ? (
+              // a private, signed-in picture; next/image cannot fetch it
+              <img
+                src={`/api/v1/organizations/current/logo?v=${profile.logoVersion}`}
+                alt=""
+                className="h-8 max-w-16 shrink-0 object-contain"
+                data-testid="shell-logo"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : (
+              <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            )}
             <p className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-primary">{t("currentBusiness")}</span>
               <span className="block truncate text-sm font-semibold">{organizationName}</span>

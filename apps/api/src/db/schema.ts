@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, char, check, date, foreignKey, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { bigint, boolean, char, check, customType, date, foreignKey, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -78,6 +78,9 @@ export const organizations = pgTable(
     logoUrl: varchar("logo_url", { length: 2048 }),
     primaryColor: varchar("primary_color", { length: 7 }).notNull().default("#1D4ED8"),
     accentColor: varchar("accent_color", { length: 7 }).notNull().default("#0F172A"),
+    receiptMessage: varchar("receipt_message", { length: 300 }),
+    invoiceMessage: varchar("invoice_message", { length: 500 }),
+    documentTerms: varchar("document_terms", { length: 1000 }),
     onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
     addressId: uuid("address_id"),
     phoneE164: varchar("phone_e164", { length: 20 }),
@@ -1185,6 +1188,26 @@ export const notifications = pgTable(
   ],
 );
 
+/** Binary column: postgres.js returns a Buffer, PGlite a Uint8Array; both become a Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => "bytea",
+  toDriver: (value) => value,
+  fromDriver: (value) => Buffer.from(value),
+});
+
+/** The company logo (migration 0022, ADR-021). One per organization. */
+export const organizationLogos = pgTable("organization_logos", {
+  tenantId: uuid("tenant_id").primaryKey(),
+  contentType: varchar("content_type", { length: 20 }).notNull(),
+  data: bytea("data").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  sha256: char("sha256", { length: 64 }).notNull(),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const schema = {
   addresses,
   organizations,
@@ -1233,6 +1256,7 @@ export const schema = {
   statementImports,
   statementRules,
   statementLines,
+  organizationLogos,
 };
 
 export type DatabaseSchema = typeof schema;
