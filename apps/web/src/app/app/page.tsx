@@ -40,6 +40,15 @@ export default function AppHomePage() {
   const [queues, setQueues] = useState<{ awaitingPayment: number | null; awaitingRelease: number | null } | null>(null);
   const seesQueues = shown.includes("toCollect") || shown.includes("toRelease");
   const seesDebtors = shown.includes("debtors");
+  const reconciles = can(access, Permission.BANK_RECONCILE) && shown.includes("money");
+  const [bank, setBank] = useState<{ open: number } | null>(null);
+
+  useEffect(() => {
+    if (!reconciles) return;
+    void api("/api/v1/reconciliation/counts")
+      .then(async (response) => (response.ok ? setBank((await response.json()).data) : undefined))
+      .catch(() => undefined);
+  }, [reconciles]);
   const [debtors, setDebtors] = useState<{ currency: string; owingMinor: string; overdueMinor: string; debtors: number } | null>(null);
 
   useEffect(() => {
@@ -183,6 +192,11 @@ export default function AppHomePage() {
               <p className="mt-2 text-sm">{empty}</p>
             )}
             {id === "money" ? <p className="mt-2 text-xs text-muted">{t("moneyHint", { amount: formatCurrency(0n, currency, locale) })}</p> : null}
+            {id === "money" && bank && bank.open > 0 ? (
+              <Link href="/app/money/bank" className="mt-2 block text-sm font-medium text-primary" data-testid="home-bank">
+                {t("bankToCheck", { count: bank.open })}
+              </Link>
+            ) : null}
           </Card>
         ))}
         {shown.includes("findCustomer") ? (

@@ -13,5 +13,6 @@ import { PaymentService } from "./payment.service.js";
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule],
   controllers: [PaymentController, PublicStatementController],
   providers: [PaymentService, PaymentSyncHandler, PermissionGuard],
+  exports: [PaymentService],
 })
 export class DebtorsModule {}

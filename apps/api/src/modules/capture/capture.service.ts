@@ -17,6 +17,7 @@ const TARGET_PERMISSION: Record<CaptureTarget, string> = {
   products: Permission.PRODUCTS_MANAGE,
   sales: Permission.SALES_CREATE,
   stock_in: Permission.STOCK_RECEIVE,
+  statement: Permission.BANK_RECONCILE,
 };
 
 const TIMEOUT_MS = 90_000;

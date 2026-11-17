@@ -1065,6 +1065,74 @@ export const paymentAllocations = pgTable(
   ],
 );
 
+export const statementImports = pgTable(
+  "statement_imports",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    accountLabel: varchar("account_label", { length: 80 }).notNull(),
+    source: varchar("source", { length: 10 }).notNull().default("file"),
+    linesNew: integer("lines_new").notNull().default(0),
+    linesDuplicate: integer("lines_duplicate").notNull().default(0),
+    linesOutSkipped: integer("lines_out_skipped").notNull().default(0),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("statement_imports_tenant_id_id_key").on(table.tenantId, table.id)],
+);
+
+export const statementRules = pgTable(
+  "statement_rules",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    pattern: varchar("pattern", { length: 80 }).notNull(),
+    target: jsonb("target").$type<Record<string, unknown>>().notNull(),
+    timesUsed: integer("times_used").notNull().default(0),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("statement_rules_tenant_id_id_key").on(table.tenantId, table.id), uniqueIndex("statement_rules_pattern_key").on(table.tenantId, table.businessId, table.pattern)],
+);
+
+export const statementLines = pgTable(
+  "statement_lines",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    importId: uuid("import_id").notNull(),
+    accountLabel: varchar("account_label", { length: 80 }).notNull(),
+    txnDate: date("txn_date", { mode: "string" }).notNull(),
+    description: varchar("description", { length: 300 }).notNull().default(""),
+    reference: varchar("reference", { length: 120 }),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    fingerprint: varchar("fingerprint", { length: 64 }).notNull(),
+    status: varchar("status", { length: 10 }).notNull().default("open"),
+    matchKind: varchar("match_kind", { length: 20 }),
+    matchDetail: varchar("match_detail", { length: 40 }),
+    salePaymentId: uuid("sale_payment_id"),
+    customerPaymentId: uuid("customer_payment_id"),
+    createdPayment: boolean("created_payment").notNull().default(false),
+    customerId: uuid("customer_id"),
+    journalEntryId: uuid("journal_entry_id"),
+    ruleId: uuid("rule_id"),
+    autoMatched: boolean("auto_matched").notNull().default(false),
+    note: varchar("note", { length: 200 }),
+    matchedBy: uuid("matched_by"),
+    matchedAt: timestamp("matched_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("statement_lines_fingerprint_key").on(table.tenantId, table.businessId, table.fingerprint),
+    index("statement_lines_inbox_idx").on(table.tenantId, table.businessId, table.status, table.txnDate),
+    foreignKey({ name: "statement_lines_import_fk", columns: [table.tenantId, table.importId], foreignColumns: [statementImports.tenantId, statementImports.id] }),
+  ],
+);
+
 export const saleComments = pgTable(
   "sale_comments",
   {
@@ -1162,6 +1230,9 @@ export const schema = {
   aiUsage,
   customerPayments,
   paymentAllocations,
+  statementImports,
+  statementRules,
+  statementLines,
 };
 
 export type DatabaseSchema = typeof schema;

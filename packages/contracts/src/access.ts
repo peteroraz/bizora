@@ -96,8 +96,8 @@ const runTheShop: PermissionCode[] = [
  * - Checking the books (ACCOUNTANT, AUDITOR) comes without taking sales or payments.
  */
 export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
-  OWNER: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ],
-  ADMINISTRATOR: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ],
+  OWNER: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ, P.BANK_RECONCILE],
+  ADMINISTRATOR: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ, P.BANK_RECONCILE],
   MANAGER: [
     ...base,
     P.USERS_READ,
@@ -107,7 +107,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
     P.DEVICES_MANAGE,
     ...runTheShop,
   ],
-  ACCOUNTANT: [...base, ...readFigures, P.EXPENSES_RECORD],
+  // Matching bank statements is the owner's or accountant's job (ADR-020), not the shop floor's.
+  ACCOUNTANT: [...base, ...readFigures, P.EXPENSES_RECORD, P.BANK_RECONCILE],
   AUDITOR: [...base, ...readFigures, P.USERS_READ, P.AUDIT_READ],
   SALES: [
     ...base,

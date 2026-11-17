@@ -11,7 +11,6 @@ export default async function ComingSoonPage({ params }: { params: Promise<{ mod
   const t = await getTranslations("comingSoon");
   const key = module as keyof typeof comingSoonModules;
   const copy = {
-    money: { title: t("moneyTitle"), body: t("moneyBody") },
     reports: { title: t("reportsTitle"), body: t("reportsBody") },
   }[key];
   return (

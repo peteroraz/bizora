@@ -22,6 +22,10 @@ export class FakeCaptureModel implements CaptureModel {
         { date: today, product: first, quantity: "2", unit: "", price: "", total: "", payment: "cash", customer: "", phone: "", ref: "S1" },
         { date: today, product: echo || first, quantity: "1", payment: "transfer", ref: "S2", secret: "dropped" },
       ],
+      statement: [
+        { date: today, description: echo || "NIP CR/MAMA CHIKA/GTB/payment for rice", reference: "S0001", moneyIn: "10000", moneyOut: "" },
+        { date: today, description: "POS SETTLEMENT MONIEPOINT", reference: "S0002", moneyIn: "25000", moneyOut: "" },
+      ],
       stock_in: [{ product: first, quantity: "2", unit: "", cost: "", supplier: "Dangote Distributors", paid: "owed", ref: "DN-114" }],
     };
     return {

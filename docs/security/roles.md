@@ -59,6 +59,7 @@ Permissions decide what a person can do. Scope decides which rows and fields the
 | Desk flow: take money or give credit (`sales.collect`, `sales.credit`) | Cashier | Credit only for customers a manager or owner approved (`debtors.manage`), within their limit, with a due date and comment. Cannot give out goods. |
 | Add a customer while selling (`customers.add`) | Cashier | Name and phone only. Cannot list, see in full or edit customers, or approve credit. |
 | Take a debtor payment (`payments.record`) | Cashier | Cannot cancel payments or replace statement links (`debtors.manage`). |
+| Match bank statement lines (`bank.reconcile`) | Owner, Administrator, Accountant | Every match is in the activity log and can be undone. A debtor payment it records can be cancelled by a manager (`debtors.manage`). Cashiers and managers cannot upload statements. |
 | Desk flow: give out goods (`sales.release`) | Storekeeper | Only for sales the cashier finished. Sees the items, not amounts or the customer. |
 
 ## Permission matrix
