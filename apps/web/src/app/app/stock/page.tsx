@@ -14,6 +14,7 @@ import { api } from "../../../lib/api";
 import { readCatalog, searchCatalog } from "../../../lib/offline/catalog";
 import { isNetworkFailure } from "../../../lib/offline/sync";
 import { type ProductView, refreshOfflineCatalog } from "../../../lib/stock-client";
+import { ActionLink } from "../../../components/action-link";
 
 type PendingCount = {
   id: string;
@@ -120,26 +121,24 @@ function StockScreen() {
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={t("description")}
+        intro={t("description")}
         actions={
           canAdd || canReceive ? (
-            <div className="flex flex-wrap gap-4">
+            <>
               {canReceive ? (
-                <Link href="/app/stock/receive" className="text-sm font-medium text-primary">
+                <ActionLink href="/app/stock/receive" variant={canAdd ? "outline" : "primary"}>
                   {t("delivery")}
-                </Link>
+                </ActionLink>
               ) : null}
               {canAdd ? (
                 <>
-                  <Link href="/app/stock/import" className="text-sm font-medium text-primary">
-                    {t("import")}
-                  </Link>
-                  <Link href="/app/stock/new" className="text-sm font-medium text-primary">
+                  <ActionLink href="/app/stock/import">{t("import")}</ActionLink>
+                  <ActionLink href="/app/stock/new" variant="primary">
                     {t("add")}
-                  </Link>
+                  </ActionLink>
                 </>
               ) : null}
-            </div>
+            </>
           ) : undefined
         }
       />

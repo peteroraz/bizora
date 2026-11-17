@@ -12,7 +12,7 @@ async function shot(page: import("@playwright/test").Page, name: string) {
 
 test("public pages render for a logged-out visitor", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Know who to call/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Know your money/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Privacy" })).toBeVisible();
   await shot(page, "public-home-360");
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -59,21 +59,24 @@ test("onboarding, customers, follow-ups, and csv import", async ({ page }) => {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("What you sell").fill("Rice");
+  await page.getByRole("button", { name: "Provisions" }).click();
+  await page.getByLabel("Anything else?").fill("Rice");
   await page.getByRole("button", { name: "Finish setup" }).click();
 
   await expect(page.getByRole("heading", { name: /Welcome, Ngozi Okafor/ })).toBeVisible();
-  await expect(page.getByText("Start recording sales to see this.").first()).toBeVisible();
+  await expect(page.getByTestId("home-checklist")).toContainText("Add your products");
   await expect(page.getByText("Follow-ups due today", { exact: true })).toBeVisible();
   await shot(page, "home-360");
 
   await page.goto("/");
   await expect(page).toHaveURL(/\/app$/);
 
-  await page.locator("nav[aria-label='Mobile']").getByRole("link", { name: "Customers" }).click();
+  // Customers sits under More for owners (the bottom bar keeps Sales, Stock and Debtors).
+  await page.goto("/app/customers");
   await page.getByRole("link", { name: "Add customer" }).click();
   await page.getByLabel("Name").fill("Ada Okeke");
   await page.getByRole("textbox", { name: "Phone", exact: true }).fill("08031234567");
+  await page.getByRole("button", { name: "+ Email, notes and address" }).click();
   await page.getByLabel("Shop number").fill("B12");
   await page.getByLabel("Line or block").fill("4");
   await page.getByLabel("Market or plaza").fill("Main Market");

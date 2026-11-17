@@ -62,6 +62,8 @@ export const planLimitsSchema = z.object({
   max_branches: z.number().int().positive(),
   max_staff: z.number().int().nonnegative(),
   max_devices: z.number().int().nonnegative(),
+  /** Photo and voice reads a day (6d). Absent: the server's own daily limit applies. */
+  ai_daily_reads: z.number().int().nonnegative().optional(),
   features: z.object({
     multi_currency: z.boolean().default(false),
     whatsapp_automation: z.boolean().default(false),

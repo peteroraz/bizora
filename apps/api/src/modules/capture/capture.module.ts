@@ -3,6 +3,7 @@ import type { AppEnv } from "@bizora/config/env";
 import { APP_ENV } from "../../tokens.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { TenantModule } from "../tenant/tenant.module.js";
+import { EntitlementsModule } from "../entitlements/entitlements.module.js";
 import { CAPTURE_MODEL } from "./capture-model.js";
 import { CaptureController } from "./capture.controller.js";
 import { CaptureService } from "./capture.service.js";
@@ -10,7 +11,7 @@ import { FakeCaptureModel } from "./fake-capture.model.js";
 import { VertexCaptureModel } from "./vertex-capture.model.js";
 
 @Module({
-  imports: [TenantModule],
+  imports: [TenantModule, EntitlementsModule],
   controllers: [CaptureController],
   providers: [
     CaptureService,

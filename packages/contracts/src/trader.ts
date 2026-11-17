@@ -1,6 +1,18 @@
 import { z } from "zod";
 
-export const businessTypeSchema = z.enum(["shop", "market-stall", "wholesale", "food", "services", "other"]);
+/** What the trader sells. The trade types (6d) let Bizora switch on what each trade needs later: expiry for pharmacies, sizes for fashion. */
+export const businessTypeSchema = z.enum([
+  "shop",
+  "market-stall",
+  "wholesale",
+  "pharmacy",
+  "fashion",
+  "electronics",
+  "building",
+  "food",
+  "services",
+  "other",
+]);
 export type BusinessType = z.infer<typeof businessTypeSchema>;
 
 export const staffCountBandSchema = z.enum(["1", "2-5", "6-20", "21+"]);

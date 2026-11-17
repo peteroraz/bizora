@@ -93,7 +93,7 @@ function NewProductScreen() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <PageHeader title={t("newTitle")} description={t("newLead")} />
+      <PageHeader title={t("newTitle")} intro={t("newLead")} />
       <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
         <FormField id="product-name" label={t("name")}>
           <Input id="product-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />

@@ -56,18 +56,6 @@ export default function RegisterPage() {
     return confirmPasswordError(nextPassword, nextConfirmation) ? passwordText("mismatch") : null;
   }
 
-  const selected = countries.find((item) => item.code === countryCode);
-  const currencyItems = [...new Set(countries.map((item) => item.defaultCurrencyCode))]
-    .sort()
-    .map((code) => ({ value: code, label: code }));
-  if (currency && !currencyItems.some((item) => item.value === currency)) {
-    currencyItems.unshift({ value: currency, label: currency });
-  }
-  const timezoneItems = (selected?.timezones.length ? selected.timezones : timezone ? [timezone] : []).map((zone) => ({
-    value: zone,
-    label: zone,
-  }));
-
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
     if (!event.currentTarget.reportValidity()) return;
@@ -148,28 +136,7 @@ export default function RegisterPage() {
               placeholder={common("searchCountries")}
             />
           </FormField>
-          <FormField id="currency" label={t("currency")}>
-            <Combobox
-              id="currency"
-              label={t("currency")}
-              emptyLabel={common("noMatches")}
-              items={currencyItems}
-              value={currency}
-              onValueChange={setCurrency}
-              placeholder={common("searchCurrencies")}
-            />
-          </FormField>
-          <FormField id="timezone" label={t("timezone")}>
-            <Combobox
-              id="timezone"
-              label={t("timezone")}
-              emptyLabel={common("noMatches")}
-              items={timezoneItems}
-              value={timezone}
-              onValueChange={setTimezone}
-              placeholder={common("searchTimezones")}
-            />
-          </FormField>
+          {/* Currency and time zone follow the country; setup and Settings can change them (6d). */}
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           <SubmitButton pending={pending} pendingLabel={t("pending")} className="w-full">
             {t("submit")}

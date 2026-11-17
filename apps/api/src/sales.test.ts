@@ -215,7 +215,10 @@ describe("quick sales and imports", () => {
     const token = (sale.body.data.sale.receiptPath as string).replace("/r/", "");
     const receipt = await request(http).get(`/api/v1/public/receipts/${token}`).expect(200);
     expect(receipt.body.data.receipt).toMatchObject({ businessName: "Shop a", number: "R-000001", status: "voided", totalMinor: "2090000" });
-    expect(JSON.stringify(receipt.body.data.receipt)).not.toMatch(/cost|phone|tenant/i);
+    // The shop's own contact is shown on purpose (6d); costs, the customer's phone and the account never are.
+    const { shop, ...rest } = receipt.body.data.receipt as { shop: { phone: string | null; address: string | null } };
+    expect(Object.keys(shop).sort()).toEqual(["address", "phone"]);
+    expect(JSON.stringify(rest)).not.toMatch(/cost|phone|tenant/i);
     await request(http).get("/api/v1/public/receipts/not-a-real-receipt-token-xx").expect(404);
     // The customer's number goes into the WhatsApp link only for staff who may see customer contacts.
     const owner = await request(http).get(`/api/v1/sales/${creditSaleId}`).set(auth(a.token)).expect(200);

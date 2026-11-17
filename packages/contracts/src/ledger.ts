@@ -78,6 +78,10 @@ const extras: Record<BusinessType, AccountTemplate[]> = {
   shop: [],
   "market-stall": [],
   wholesale: [{ code: "6250", name: "Loading and offloading", type: "expense", role: "expense" }],
+  pharmacy: [],
+  fashion: [],
+  electronics: [],
+  building: [{ code: "6250", name: "Loading and offloading", type: "expense", role: "expense" }],
   food: [{ code: "6810", name: "Gas and cooking fuel", type: "expense", role: "expense" }],
   services: [
     { code: "4000", name: "Service income", type: "income", role: "service_income" },

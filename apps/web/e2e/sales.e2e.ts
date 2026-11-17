@@ -37,14 +37,19 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
   await page.goto("/app/sales/new");
   await page.getByLabel("Find a product").fill("peak");
   await page.getByRole("button", { name: /Peak Milk/ }).click();
-  await page.getByLabel("How many").fill("2");
+  // Tapping + adds one more; the cash given shows the change.
+  await page.getByRole("button", { name: "One more Peak Milk" }).click();
   await expect(page.getByTestId("sale-total")).toHaveText("₦900.00");
+  await page.getByLabel("Cash given (₦)").fill("1000");
+  await expect(page.getByTestId("sale-change")).toHaveText("Change: ₦100.00");
   await page.getByRole("button", { name: "Record sale" }).click();
   await expect(page.getByRole("heading", { name: "R-000001" })).toBeVisible();
+  await expect(page.getByTestId("next-sale")).toBeVisible();
+  await page.getByText("More ways to share").click();
   await expect(page.getByRole("link", { name: "Share receipt on WhatsApp" })).toHaveAttribute("href", /^https:\/\/wa\.me\/\?text=.*%2Fr%2F/);
 
   // Anyone with the link sees the receipt, without signing in.
-  const receiptPath = await page.getByRole("link", { name: "View receipt" }).getAttribute("href");
+  const receiptPath = await page.getByRole("link", { name: "See what the customer sees" }).getAttribute("href");
   const stranger = await browser.newContext();
   const receipt = await stranger.newPage();
   await receipt.goto(receiptPath ?? "/r/missing");

@@ -24,6 +24,7 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await country.click();
   await country.fill("Nigeria");
   await page.getByRole("option", { name: "Nigeria" }).click();
+  await page.getByRole("button", { name: "+ Street and postal code" }).click();
   await page.getByLabel("Street").fill("12 Broad Street");
   await page.getByLabel("City").fill("Lagos");
   const state = page.getByRole("combobox", { name: "State" });
@@ -31,7 +32,7 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await state.fill("Lagos");
   await page.getByRole("option", { name: "Lagos", exact: true }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Which currency do you take?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which money do you take?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "How many people work with you?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();

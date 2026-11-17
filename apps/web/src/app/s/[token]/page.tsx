@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { formatCurrency, formatWhen } from "../../../i18n/format";
+import { ShopHeading, ShopMessage } from "../../../components/shop-heading";
+import { formatCurrency, formatDay, formatWhen } from "../../../i18n/format";
 
 /** A customer's statement, opened from the WhatsApp link without signing in (ADR-019). */
 type Statement = {
   businessName: string;
+  shop?: { phone: string | null };
+  message?: string | null;
+  hasLogo?: boolean;
   customerName: string;
   currency: string;
   asOf: string;
@@ -31,10 +35,8 @@ export default async function StatementPage({ params }: { params: Promise<{ toke
 
   return (
     <main className="mx-auto max-w-md space-y-4 p-6">
-      <header>
-        <h1 className="text-xl font-semibold">{statement.businessName}</h1>
-        <p className="text-sm text-muted">{t("title", { name: statement.customerName, date: statement.asOf })}</p>
-      </header>
+      <ShopHeading name={statement.businessName} phone={statement.shop?.phone} logoSrc={statement.hasLogo ? `/api/v1/public/statements/${token}/logo` : null} />
+      <p className="text-sm text-muted">{t("title", { name: statement.customerName, date: formatDay(statement.asOf, locale) })}</p>
       <div className="rounded-card border border-border p-4">
         <p className="text-sm text-muted">{t("owing")}</p>
         <p className="text-2xl font-semibold tabular-nums">{money(statement.owingMinor)}</p>
@@ -50,7 +52,7 @@ export default async function StatementPage({ params }: { params: Promise<{ toke
                   <span className="block font-medium">{sale.number}</span>
                   <span className={sale.overdue ? "text-danger" : "text-muted"}>
                     {formatWhen(sale.soldAt, locale, "Africa/Lagos")}
-                    {sale.dueDate ? ` · ${t("due", { date: sale.dueDate })}` : ""}
+                    {sale.dueDate ? ` · ${t("due", { date: formatDay(sale.dueDate, locale) })}` : ""}
                   </span>
                 </span>
                 <span className="tabular-nums">{money(sale.balanceMinor)}</span>
@@ -76,10 +78,16 @@ export default async function StatementPage({ params }: { params: Promise<{ toke
           </ul>
         </section>
       ) : null}
+      {BigInt(statement.owingMinor) > 0n ? <ShopMessage title={t("howToPay")} text={statement.message ?? null} /> : null}
       <a href={`/api/v1/public/statements/${token}/pdf`} className="inline-flex items-center rounded-control border border-border px-3 py-2 text-sm font-medium text-primary">
         {t("download")}
       </a>
-      <p className="text-xs text-muted">{t("footer")}</p>
+      <p className="text-xs text-muted">
+        {t("footer")}{" "}
+        <a href="/" className="text-primary">
+          {t("footerLink")}
+        </a>
+      </p>
     </main>
   );
 }

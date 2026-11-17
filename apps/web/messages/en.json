@@ -63,7 +63,17 @@
     "noMatches": "No matches",
     "tryAgain": "Try again",
     "signOut": "Sign out",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "previousDay": "Day before",
+    "nextDay": "Next day",
+    "pickDay": "Pick a day",
+    "inWeek": "In 1 week",
+    "inTwoWeeks": "In 2 weeks",
+    "inMonth": "In 1 month",
+    "otherDay": "Other day…",
+    "dueOn": "To be paid by {date}"
   },
   "footer": {
     "privacy": "Privacy",
@@ -72,15 +82,57 @@
     "register": "Create your business"
   },
   "public": {
-    "kicker": "For shop owners",
-    "title": "Know who to call, who owes you, and what is left in the shop.",
-    "lead": "Bizora is a simple place to keep customers, follow-ups, and the day-to-day of a Nigerian shop. It is light, fast, and it does not track you.",
+    "kicker": "For Nigerian shops, markets and wholesalers",
+    "title": "Know your money. Control your stock. Follow your customers.",
+    "lead": "Record sales in seconds, even with no network. See who owes you and remind them on WhatsApp. Know what is left on the shelf in every shop.",
     "create": "Create your business",
     "signIn": "Sign in",
-    "painCustomers": "Customers live in your phone, not in a book you can search.",
-    "painDebt": "You remember who owes you until the shop gets busy.",
-    "painStock": "Goods finish before you notice.",
-    "painMoney": "Money in and money out get mixed together."
+    "whatsapp": "Chat with us on WhatsApp",
+    "whatsappText": "Hello Bizora, I want to know more.",
+    "works": "Works on any Android phone or laptop. No app to install.",
+    "featuresTitle": "What Bizora does for your business",
+    "feature": {
+      "sell": {
+        "title": "Sell fast, even with no network",
+        "body": "Tap the product, take cash, transfer or POS, and send the receipt on WhatsApp. Sales wait on the phone when the network is down."
+      },
+      "collect": {
+        "title": "Collect what you are owed",
+        "body": "Credit only for customers you approve, with a date to pay. Bizora shows who is late and sends the reminder for you."
+      },
+      "stock": {
+        "title": "Never run out by surprise",
+        "body": "Cartons, packs and pieces counted for you in every shop. Low stock shows on Home before the goods finish."
+      },
+      "staff": {
+        "title": "Stop leakage from staff",
+        "body": "Sales desk, cashier and store keeper each do their part. Every sale, discount and cancellation has a name on it."
+      },
+      "bank": {
+        "title": "Match your bank alerts",
+        "body": "Upload your bank statement. Transfers match your sales and debtors, and POS settlements are not counted twice."
+      },
+      "capture": {
+        "title": "Snap or speak instead of typing",
+        "body": "Photograph a supplier's invoice or record a voice note in English, Pidgin, Hausa, Igbo or Yoruba. Bizora fills the rows for you to check."
+      }
+    },
+    "screensTitle": "See it on a phone",
+    "screen": {
+      "sale": {
+        "alt": "The new sale screen with product buttons, quantity and the total at the bottom",
+        "caption": "Record a sale in a few taps, with change worked out."
+      },
+      "debtors": {
+        "alt": "The debtors list showing who owes and how many days late",
+        "caption": "See who owes you, most late first, and remind them."
+      },
+      "home": {
+        "alt": "Home showing today's sales, top debtors and low stock",
+        "caption": "Today's sales, who owes you and what is running low."
+      }
+    },
+    "trust": "Your records are yours. Bizora has no ads and no tracking, keeps every business's data apart, and follows the Nigeria Data Protection Act 2023."
   },
   "legal": {
     "draft": "Draft — to be reviewed by counsel",
@@ -262,7 +314,10 @@
     "shopMode": "Shop mode",
     "syncWaiting": "{count, plural, one {# change waiting to sync} other {# changes waiting to sync}}",
     "syncRejected": "{count, plural, one {# change could not be saved} other {# changes could not be saved}}",
-    "syncDismiss": "Dismiss"
+    "syncDismiss": "Dismiss",
+    "switchPlace": "Business and shop",
+    "switchPlaceLabel": "Change business or shop (now {place})",
+    "hideForNow": "Hide for a week"
   },
   "nav": {
     "home": "Home",
@@ -303,16 +358,15 @@
     "emptyStock": "Start recording sales to see this.",
     "emptyStaff": "Start recording sales to see this.",
     "emptyApproval": "Nothing is waiting for you.",
-    "moneyHint": "Amounts will look like {amount}.",
     "noFollowups": "No follow-ups due today.",
     "overdue": "{count, plural, one {# overdue} other {# overdue}}",
     "seeFollowups": "See follow-ups",
     "checklist": {
       "shop-place": "Add the market or shop address",
       "first-customer": "Add your first customer",
-      "what-you-sell": "Write down what you sell",
       "invite-staff": "Invite your staff",
-      "record-sale": "Record your first sale"
+      "record-sale": "Record your first sale",
+      "first-products": "Add your products (type them, import a list or snap a photo)"
     },
     "mySales": "My sales today",
     "myFollowups": "My follow-ups due today",
@@ -337,21 +391,25 @@
     "toReleaseAction": "Give out goods",
     "debtorsCount": "{count, plural, one {# customer owes} other {# customers owe}}",
     "debtorsOverdue": "{amount} overdue",
-    "bankToCheck": "{count, plural, one {# bank line to check} other {# bank lines to check}}"
+    "bankToCheck": "{count, plural, one {# bank line to check} other {# bank lines to check}}",
+    "bankTitle": "Bank lines to check",
+    "newSale": "New sale",
+    "setupProgress": "{done} of {total} done",
+    "start": "Start"
   },
   "onboarding": {
     "progress": "Question {current} of {total}",
     "typeTitle": "What kind of business do you run?",
-    "typeShop": "Shop",
+    "typeShop": "Provisions or general shop",
     "typeMarket": "Market stall",
-    "typeWholesale": "Wholesale",
-    "typeFood": "Food",
-    "typeServices": "Services",
+    "typeWholesale": "Wholesale or distribution",
+    "typeFood": "Food, restaurant or bakery",
+    "typeServices": "Services (salon, tailor, repairs)",
     "typeOther": "Something else",
     "placeTitle": "Where do you trade?",
     "placeLead": "A market, plaza, and city is enough. You can add a street later.",
-    "currencyTitle": "Which currency do you take?",
-    "otherCurrencies": "Do you also take other currencies?",
+    "currencyTitle": "Which money do you take?",
+    "otherCurrencies": "Do you also buy or sell in dollars or other currencies?",
     "staffTitle": "How many people work with you?",
     "staff1": "Just me",
     "staff2": "2 to 5",
@@ -360,12 +418,34 @@
     "shopsTitle": "How many shops do you have?",
     "shopsHint": "Count each place you sell from.",
     "sellTitle": "What do you sell?",
-    "sellHint": "You can skip this and add it later.",
-    "sellLabel": "What you sell",
+    "sellHint": "Tap all that apply. You can change this later.",
+    "sellLabel": "Anything else?",
     "finish": "Finish setup",
     "saving": "Saving…",
     "failed": "Unable to finish setup.",
-    "placeRequired": "Add a city, and a market, shop number, or street."
+    "placeRequired": "Add your city or town, and a market, plaza, shop number or street.",
+    "typePharmacy": "Pharmacy or cosmetics",
+    "typeFashion": "Fashion, fabrics or shoes",
+    "typeElectronics": "Phones or electronics",
+    "typeBuilding": "Building materials or auto parts",
+    "mainCurrency": "Your main currency is {currency}.",
+    "changeCurrency": "Change",
+    "currencyLabel": "Main currency",
+    "otherYes": "Yes, sometimes",
+    "otherNo": "No, only {currency}",
+    "sellPick": "Pick what you sell",
+    "sellNext": "Next, Home shows you how to add your products: type them, import a list, or snap a photo of your price list.",
+    "sellChoices": {
+      "shop": "Provisions|Drinks|Toiletries|Snacks|Household items",
+      "market-stall": "Foodstuff|Grains|Vegetables and pepper|Clothes|Household items",
+      "wholesale": "Provisions|Drinks|Grains|Cartons and bulk goods|Building materials",
+      "pharmacy": "Medicines|Cosmetics|Baby care|Toiletries|Supplements",
+      "fashion": "Clothes|Fabrics and lace|Shoes|Bags|Jewellery",
+      "electronics": "Phones|Accessories|Home appliances|Computers|Repairs",
+      "building": "Cement and blocks|Roofing|Plumbing|Electrical|Auto parts",
+      "food": "Meals|Drinks|Snacks and small chops|Pastries and bread|Groceries",
+      "services": "Hair and beauty|Tailoring|Repairs|Laundry|Printing"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -430,7 +510,8 @@
     "salesFlowHint": {
       "simple": "For kiosks and small shops. Stock leaves when the sale is recorded.",
       "desk": "The sales person records the sale, the cashier takes the money or gives credit, and the store keeper gives out the goods. Stock leaves when the goods are given out."
-    }
+    },
+    "deskNeedsStaff": "The sales desk flow needs 3 staff: a sales person, a cashier and a store keeper. Your {plan} plan allows {limit}. The Business plan allows more."
   },
   "address": {
     "country": "Country",
@@ -441,7 +522,9 @@
     "line2": "Address line 2",
     "city": "City",
     "postal": "Postal code",
-    "searchSubdivision": "Search {label}"
+    "searchSubdivision": "Search {label}",
+    "moreDetails": "+ Street and postal code",
+    "marketHint": "A market, plaza, shop number or street is enough."
   },
   "customers": {
     "title": "Customers",
@@ -479,8 +562,6 @@
     "tabFollowups": "Follow-ups",
     "tabPurchases": "Purchases",
     "tabOwes": "Owes",
-    "purchasesBody": "Purchases will show here once you start recording sales.",
-    "owesBody": "What this customer owes will show here once payments are switched on.",
     "noteLabel": "Note",
     "addNote": "Add note",
     "noteFailed": "Could not add the note.",
@@ -525,7 +606,18 @@
     "creditSaveFailed": "Could not save. Try again.",
     "creditSaved": "Credit saved.",
     "creditSave": "Save credit",
-    "seeAccount": "See account"
+    "seeAccount": "See account and record a payment",
+    "purchasesHidden": "Only people who see all sales can see a customer's purchases.",
+    "noPurchases": "No purchases yet.",
+    "spentLine": "{count, plural, one {# sale} other {# sales}}, {amount} in all.",
+    "owesNow": "Owes {amount} now.",
+    "owesNothing": "Owes nothing.",
+    "moreActions": "More",
+    "remove": "Remove customer",
+    "removeConfirm": "Remove {name}? Their past sales and receipts stay. They will no longer show in lists or searches.",
+    "removeYes": "Yes, remove",
+    "removeKeep": "Keep",
+    "moreDetails": "+ Email, notes and address"
   },
   "followups": {
     "title": "Follow-ups",
@@ -833,7 +925,7 @@
     "customer": "Customer",
     "customerSearch": "Phone number or name",
     "find": "Find",
-    "change": "Change",
+    "change": "Change: {amount}",
     "note": "Note",
     "subtotal": "Subtotal",
     "total": "Total",
@@ -960,7 +1052,7 @@
       "awaiting_release": "No goods to give out"
     },
     "emptyTabBody": "New sales will show here.",
-    "itemCount": "{count, plural, one {# item} other {# items}}",
+    "itemCount": "{count, plural, =0 {No items yet} one {# item} other {# items}}",
     "releaseOnCredit": "Give out (credit)",
     "docTitle": "Invoice and receipt",
     "docLead": "Send the PDF to the customer. On a phone, pick WhatsApp and the customer's chat.",
@@ -985,7 +1077,25 @@
     "newCustomerName": "Enter the customer's name.",
     "newCustomerFailed": "The customer could not be added. Try again.",
     "alreadyCustomer": "That phone number is already a customer. Pick them below.",
-    "paidLater": "Paid later ({number})"
+    "paidLater": "Paid later ({number})",
+    "quickPicks": "Quick picks",
+    "less": "One less {name}",
+    "more": "One more {name}",
+    "changePrice": "Change price",
+    "cashGiven": "Cash given (₦)",
+    "shortBy": "Short by {amount}",
+    "customerOptional": "Customer (optional)",
+    "addDiscountOrNote": "+ Add a discount or note",
+    "addNote": "+ Add a note",
+    "discountShort": "{amount} off",
+    "owingShort": "{amount} owing",
+    "tooMuchShort": "{amount} too much",
+    "nextSale": "Next sale",
+    "moreWaysToShare": "More ways to share",
+    "sendInvoiceLink": "Share invoice link on WhatsApp",
+    "sendInvoiceLinkCustomer": "Send invoice link to customer on WhatsApp",
+    "copyLinkPlain": "Copy link",
+    "viewAsCustomer": "See what the customer sees"
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -1089,13 +1199,16 @@
       "pos": "POS"
     },
     "owing": "Still owing",
-    "footer": "Receipt sent with Bizora.",
+    "footer": "Sent with Bizora.",
     "unpaid": "Not paid yet. Pay at the cashier with this receipt number.",
     "invoiceNumber": "Invoice {number}",
     "due": "Payment due",
     "downloadInvoice": "Download invoice (PDF)",
     "downloadCreditInvoice": "Download credit invoice (PDF)",
-    "downloadReceipt": "Download receipt (PDF)"
+    "downloadReceipt": "Download receipt (PDF)",
+    "howToPay": "How to pay",
+    "fromShop": "From the shop",
+    "footerLink": "Run your shop with Bizora"
   },
   "notifications": {
     "bell": "Notifications",
@@ -1192,7 +1305,9 @@
     "sendReceipt": "Send receipt PDF",
     "cancelPayment": "Cancel this payment",
     "cancelReason": "Why?",
-    "cancelConfirm": "Cancel payment"
+    "cancelConfirm": "Cancel payment",
+    "daysLate": "{count, plural, one {# day late} other {# days late}}",
+    "call": "Call"
   },
   "statement": {
     "title": "Statement for {name}, {date}",
@@ -1203,7 +1318,9 @@
     "nothingOwed": "Nothing is owed. Thank you.",
     "paymentsTitle": "Recent payments",
     "download": "Download statement (PDF)",
-    "footer": "Statement sent with Bizora."
+    "footer": "Sent with Bizora.",
+    "howToPay": "How to pay",
+    "footerLink": "Run your shop with Bizora"
   },
   "money": {
     "title": "Money",
@@ -1305,5 +1422,9 @@
       "moneyIn": "Money in",
       "moneyOut": "Money out"
     }
+  },
+  "publicShop": {
+    "call": "Call {phone}",
+    "whatsapp": "Chat on WhatsApp"
   }
 }

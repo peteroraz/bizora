@@ -34,7 +34,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title={t("title")} description={t("lead")} />
+      <PageHeader title={t("title")} intro={t("lead")} />
       {items && items.length === 0 ? <EmptyState title={t("emptyTitle")} description={t("emptyBody")} /> : null}
       {items && items.length > 0 ? (
         <ul className="divide-y divide-border rounded-card border border-border bg-card">

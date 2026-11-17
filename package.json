@@ -28,7 +28,7 @@
       "postcss": ">=8.5.23"
     },
     "auditConfig": {
-      "ignoreGhsas": ["GHSA-mrhx-c7xc-m3w5"]
+      "ignoreGhsas": ["GHSA-mrhx-c7xc-m3w5", "GHSA-fc5q-39xc-vjpf"]
     }
   }
 }

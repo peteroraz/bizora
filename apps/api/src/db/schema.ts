@@ -498,6 +498,7 @@ export const customers = pgTable(
     creditApprovedBy: uuid("credit_approved_by"),
     creditApprovedAt: timestamp("credit_approved_at", { withTimezone: true }),
     statementToken: varchar("statement_token", { length: 64 }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [

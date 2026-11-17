@@ -14,10 +14,11 @@ export const buttonVariants = cva(
         danger: "bg-danger text-danger-bg hover:opacity-90",
       },
       size: {
-        sm: "h-8 px-3 text-xs",
-        md: "h-10 px-4",
-        lg: "h-12 px-6",
-        icon: "h-10 w-10",
+        // Finger-sized: 44 px for the normal size, 40 px for compact rows (ADR-022).
+        sm: "h-10 px-3 text-sm",
+        md: "h-11 px-4",
+        lg: "h-12 px-6 text-base",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },

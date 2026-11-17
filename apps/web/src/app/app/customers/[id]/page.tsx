@@ -1,7 +1,7 @@
 "use client";
 
 import { Permission, whatsAppHref } from "@bizora/contracts";
-import { FormField, Input, PageHeader, SafeForm, Select, SubmitButton, Tab, TabPanel, TabsRoot, Textarea } from "@bizora/ui";
+import { Button, buttonVariants, FormField, Input, PageHeader, SafeForm, Select, SubmitButton, Tab, TabPanel, TabsRoot, Textarea } from "@bizora/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -11,7 +11,8 @@ import { RequireAccess } from "../../../../components/require-access";
 import { can, customerMode } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
-import { dayKey, formatWhen } from "../../../../i18n/format";
+import { dayKey, formatCurrency, formatPhone, formatWhen } from "../../../../i18n/format";
+import type { SaleView } from "../../../../lib/sales-client";
 
 type Customer = {
   id: string;
@@ -53,6 +54,16 @@ function CustomerFullScreen() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [purchases, setPurchases] = useState<SaleView[] | null>(null);
+  const seesSales = can(access, Permission.SALES_READ_ALL);
+
+  useEffect(() => {
+    if (tab !== "purchases" || purchases !== null || !seesSales) return;
+    void api(`/api/v1/sales?customerId=${params.id}`)
+      .then(async (response) => setPurchases(response.ok ? (await response.json()).data.items : []))
+      .catch(() => setPurchases([]));
+  }, [tab, purchases, seesSales, params.id]);
 
   async function load() {
     const [customerResponse, notesResponse, followupResponse, assigneeResponse, meResponse, dashboardResponse] = await Promise.all([
@@ -129,7 +140,9 @@ function CustomerFullScreen() {
       window.location.href = "/app/customers";
       return;
     }
-    setError(t("deleteFailed"));
+    const payload = await response.json().catch(() => null);
+    setError(payload?.error?.message ?? t("deleteFailed"));
+    setConfirmRemove(false);
     setPending(false);
   }
 
@@ -152,20 +165,20 @@ function CustomerFullScreen() {
     <div className="space-y-6">
       <PageHeader
         title={customer.name}
-        description={customer.isWalkIn ? t("walkIn") : (customer.phoneE164 ?? undefined)}
+        description={customer.isWalkIn ? t("walkIn") : customer.phoneE164 ? formatPhone(customer.phoneE164) : undefined}
         actions={
-          <div className="flex flex-wrap gap-3 text-sm font-medium">
+          <>
             {customer.phoneE164 ? (
-              <a href={`tel:${customer.phoneE164}`} className="text-primary">
+              <a href={`tel:${customer.phoneE164}`} className={buttonVariants({ variant: "outline" })}>
                 {t("call")}
               </a>
             ) : null}
             {greeting ? (
-              <a href={greeting} className="text-primary">
+              <a href={greeting} className={buttonVariants({ variant: "primary" })}>
                 {t("whatsapp")}
               </a>
             ) : null}
-          </div>
+          </>
         }
       />
       <div className="space-y-1 text-sm">
@@ -266,22 +279,84 @@ function CustomerFullScreen() {
           ) : null}
         </TabPanel>
         <TabPanel value="purchases">
-          <p className="text-sm text-muted">{t("purchasesBody")}</p>
+          {!seesSales ? (
+            <p className="text-sm text-muted">{t("purchasesHidden")}</p>
+          ) : purchases === null ? (
+            <p className="text-sm text-muted">{common("loading")}</p>
+          ) : purchases.length === 0 ? (
+            <p className="text-sm text-muted">{t("noPurchases")}</p>
+          ) : (
+            <>
+              <p className="mb-2 text-sm text-muted" data-testid="customer-spent">
+                {t("spentLine", {
+                  count: purchases.length,
+                  amount: formatCurrency(
+                    purchases.filter((sale) => sale.status !== "voided").reduce((sum, sale) => sum + BigInt(sale.totalMinor), 0n),
+                    purchases[0]?.currency ?? "NGN",
+                    locale,
+                  ),
+                })}
+              </p>
+              <ul className="divide-y divide-border rounded-card border border-border bg-card">
+                {purchases.map((sale) => (
+                  <li key={sale.id}>
+                    <Link href={`/app/sales/${sale.id}`} className="flex min-h-12 items-center justify-between gap-3 px-4 py-2 text-sm">
+                      <span>
+                        <span className="block font-medium">{sale.number ?? sale.invoiceNumber}</span>
+                        <span className="block text-muted">{formatWhen(sale.soldAt, locale, timezone)}</span>
+                      </span>
+                      <span className={`tabular-nums ${sale.status === "voided" ? "text-muted line-through" : ""}`}>{formatCurrency(BigInt(sale.totalMinor), sale.currency, locale)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </TabPanel>
         <TabPanel value="owes">
-          <p className="text-sm text-muted">{t("owesBody")}</p>
+          {BigInt(customer.owingMinor) > 0n ? (
+            <p className="text-sm">
+              {t("owesNow", { amount: formatCurrency(BigInt(customer.owingMinor), "NGN", locale) })}{" "}
+              <Link href={`/app/debtors/${customer.id}`} className="font-medium text-primary">
+                {t("seeAccount")}
+              </Link>
+            </p>
+          ) : (
+            <p className="text-sm text-muted">{t("owesNothing")}</p>
+          )}
         </TabPanel>
       </TabsRoot>
-      {canManage ? (
-        <SafeForm pending={pending} onSubmit={remove}>
-          <SubmitButton pending={pending} pendingLabel={t("saving")} variant="danger">
-            {t("delete")}
-          </SubmitButton>
-        </SafeForm>
-      ) : null}
-      <Link href="/app/customers" className="inline-block text-sm font-medium text-primary">
-        {t("back")}
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <Link href="/app/customers" className="inline-flex min-h-11 items-center text-sm font-medium text-primary">
+          ‹ {t("back")}
+        </Link>
+        {canManage ? (
+          <details className="text-sm">
+            <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-control px-3 text-muted" aria-label={t("moreActions")}>
+              ⋯ {t("moreActions")}
+            </summary>
+            <div className="mt-2 rounded-card border border-border bg-card p-3">
+              {confirmRemove ? (
+                <SafeForm className="space-y-3" pending={pending} onSubmit={remove}>
+                  <p>{t("removeConfirm", { name: customer.name })}</p>
+                  <div className="flex gap-2">
+                    <SubmitButton pending={pending} pendingLabel={t("saving")} variant="danger">
+                      {t("removeYes")}
+                    </SubmitButton>
+                    <Button type="button" variant="ghost" onClick={() => setConfirmRemove(false)}>
+                      {t("removeKeep")}
+                    </Button>
+                  </div>
+                </SafeForm>
+              ) : (
+                <Button type="button" variant="ghost" className="text-danger" onClick={() => setConfirmRemove(true)}>
+                  {t("remove")}
+                </Button>
+              )}
+            </div>
+          </details>
+        ) : null}
+      </div>
     </div>
   );
 }

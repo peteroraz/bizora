@@ -6,10 +6,10 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../components/require-access";
-import { formatCurrency } from "../../../i18n/format";
+import { formatCurrency, formatDay, formatPhone } from "../../../i18n/format";
 import { api } from "../../../lib/api";
 
-type Debtor = { customerId: string; name: string; phoneLast4: string | null; owingMinor: string; overdueMinor: string; oldestDueDate: string | null; openSales: number };
+type Debtor = { customerId: string; name: string; phoneLast4: string | null; phone?: string | null; owingMinor: string; overdueMinor: string; oldestDueDate: string | null; openSales: number };
 type Data = { currency: string; today: string; totals: { owingMinor: string; overdueMinor: string; debtors: number; overdueDebtors: number }; items: Debtor[]; page: number; pageSize: number };
 
 function DebtorsScreen() {
@@ -37,10 +37,15 @@ function DebtorsScreen() {
   }, [load]);
 
   const money = (minor: string) => formatCurrency(BigInt(minor), data?.currency ?? "NGN", locale);
+  /** "12 days late" once the oldest due date has passed, otherwise "due 5 Dec 2026". */
+  const lateText = (due: string) => {
+    const days = data ? Math.round((Date.parse(`${data.today}T00:00:00Z`) - Date.parse(`${due}T00:00:00Z`)) / 86_400_000) : 0;
+    return days > 0 ? t("daysLate", { count: days }) : t("dueFrom", { date: formatDay(due, locale) });
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("title")} description={t("lead")} />
+      <PageHeader title={t("title")} intro={t("lead")} />
       {offline ? (
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
           {t("offline")}
@@ -101,10 +106,10 @@ function DebtorsScreen() {
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{debtor.name}</span>
                   <span className="block truncate text-sm text-muted">
-                    {debtor.phoneLast4 ? t("phoneEnding", { last4: debtor.phoneLast4 }) : t("noPhone")}
+                    {debtor.phone ? formatPhone(debtor.phone) : debtor.phoneLast4 ? t("phoneEnding", { last4: debtor.phoneLast4 }) : t("noPhone")}
                     {" · "}
                     {t("openSales", { count: debtor.openSales })}
-                    {debtor.oldestDueDate ? ` · ${t("dueFrom", { date: debtor.oldestDueDate })}` : ""}
+                    {debtor.oldestDueDate ? ` · ${lateText(debtor.oldestDueDate)}` : ""}
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">

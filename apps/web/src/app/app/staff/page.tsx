@@ -186,7 +186,7 @@ function StaffPageScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("title")} description={t("description")} />
+      <PageHeader title={t("title")} intro={t("description")} />
       {notice ? (
         <p className="rounded-control border border-success bg-success-bg px-3 py-2 text-sm text-success" role="status">
           {notice}

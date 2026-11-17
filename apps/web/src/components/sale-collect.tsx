@@ -4,7 +4,8 @@ import { IDEMPOTENCY_HEADER, Permission, parseMoneyInput, uuidv7 } from "@bizora
 import { Button, Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
-import { formatCurrency } from "../i18n/format";
+import { dayKey, formatCurrency } from "../i18n/format";
+import { DueDatePicker } from "./day-switcher";
 import { can } from "../lib/access";
 import { useAccess } from "../lib/access-context";
 import { api } from "../lib/api";
@@ -35,6 +36,9 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [given, setGiven] = useState("");
+  const givenMinor = given.trim() ? parseMoneyInput(given) : null;
+  const change = givenMinor !== null ? givenMinor - total : null;
   const money = (minor: bigint) => formatCurrency(minor, sale.currency, locale);
 
   const parts =
@@ -112,6 +116,18 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
             </Button>
           ))}
         </div>
+        {mode === "cash" ? (
+          <div className="flex flex-wrap items-end gap-3">
+            <FormField id="collect-given" label={t("cashGiven")} hint={t("optional")}>
+              <Input id="collect-given" inputMode="decimal" className="max-w-40" value={given} onChange={(event) => setGiven(event.target.value)} />
+            </FormField>
+            {change !== null ? (
+              <p className={`pb-6 text-base font-semibold tabular-nums ${change < 0n ? "text-danger" : "text-success"}`} role="status">
+                {change < 0n ? t("shortBy", { amount: money(-change) }) : t("change", { amount: money(change) })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {mode === "split" || mode === "credit" ? (
           <div className="grid gap-2 sm:grid-cols-3">
             {(["cash", "transfer", "pos"] as const).map((method) => (
@@ -133,10 +149,10 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
           ) : null}
         </div>
         {balance > 0n ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <p className="text-sm text-warning sm:col-span-2">{t("owingOnCredit", { amount: money(balance) })}</p>
+          <div className="space-y-3">
+            <p className="text-sm text-warning">{t("owingOnCredit", { amount: money(balance) })}</p>
             <FormField id="collect-due" label={t("dueDate")}>
-              <Input id="collect-due" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+              <DueDatePicker id="collect-due" value={dueDate} today={dayKey(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} onChange={setDueDate} />
             </FormField>
             <FormField id="collect-comment" label={t("creditComment")}>
               <Input id="collect-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />

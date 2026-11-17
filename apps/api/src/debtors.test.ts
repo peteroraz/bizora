@@ -196,7 +196,10 @@ describe("debtors and payments", () => {
     const token = (account.body.data.account.statementPath as string).replace("/s/", "");
     const statement = await request(http).get(`/api/v1/public/statements/${token}`).expect(200);
     expect(statement.body.data.statement).toMatchObject({ customerName: "Mama Chika", owingMinor: "2400000", overdueMinor: "1000000" });
-    expect(JSON.stringify(statement.body.data.statement)).not.toMatch(/phone|tenant|cost|234803/i);
+    // The shop's own contact is shown on purpose (6d); nothing about the customer's phone or the account is.
+    const { shop, ...rest } = statement.body.data.statement as { shop: { phone: string | null } };
+    expect(shop.phone ?? "").not.toMatch(/234803/);
+    expect(JSON.stringify(rest)).not.toMatch(/phone|tenant|cost|234803/i);
     expect(statement.body.data.statement.payments.map((item: { number: string }) => item.number)).toEqual(["PAY-000002"]);
     const pdf = await request(http).get(`/api/v1/public/statements/${token}/pdf`).buffer(true).parse(binary).expect(200);
     expect(Buffer.from(pdf.body).subarray(0, 5).toString()).toBe("%PDF-");

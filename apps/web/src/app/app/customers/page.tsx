@@ -9,6 +9,8 @@ import { RequireAccess } from "../../../components/require-access";
 import { can, customerMode } from "../../../lib/access";
 import { useAccess } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
+import { formatPhone } from "../../../i18n/format";
+import { ActionLink } from "../../../components/action-link";
 
 type Customer = { id: string; name: string; phoneE164: string | null; isWalkIn: boolean; email: string | null };
 type LookupResult = { id: string; name: string; isWalkIn: boolean; phoneLast4: string | null };
@@ -48,17 +50,15 @@ function CustomerListScreen() {
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={t("description")}
+        intro={t("description")}
         actions={
           canManage ? (
-            <div className="flex gap-3 text-sm font-medium">
-              <Link href="/app/customers/import" className="text-primary">
-                {t("import")}
-              </Link>
-              <Link href="/app/customers/new" className="text-primary">
+            <>
+              <ActionLink href="/app/customers/import">{t("import")}</ActionLink>
+              <ActionLink href="/app/customers/new" variant="primary">
                 {t("add")}
-              </Link>
-            </div>
+              </ActionLink>
+            </>
           ) : undefined
         }
       />
@@ -90,7 +90,7 @@ function CustomerListScreen() {
               <Link href={`/app/customers/${customer.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
                 <span>
                   <span className="block text-sm font-medium">{customer.name}</span>
-                  <span className="block text-sm text-muted">{customer.isWalkIn ? t("walkIn") : customer.phoneE164}</span>
+                  <span className="block text-sm text-muted">{customer.isWalkIn ? t("walkIn") : formatPhone(customer.phoneE164)}</span>
                 </span>
                 {customer.email ? <span className="text-sm text-muted">{customer.email}</span> : null}
               </Link>
@@ -145,7 +145,7 @@ function CustomerLookupScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("lookupTitle")} description={t("lookupLead")} />
+      <PageHeader title={t("lookupTitle")} intro={t("lookupLead")} />
       <SafeForm
         className="flex flex-wrap items-end gap-3"
         pending={pending}

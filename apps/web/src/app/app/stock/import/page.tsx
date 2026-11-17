@@ -2,12 +2,12 @@
 
 import { PRODUCT_IMPORT_COLUMNS, Permission, type ProductImportField } from "@bizora/contracts";
 import { PageHeader } from "@bizora/ui";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { type ImportColumn, ImportReview } from "../../../../components/import-review";
 import { RequireAccess } from "../../../../components/require-access";
 import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
+import { BackLink } from "../../../../components/action-link";
 
 const EXAMPLE: Record<ProductImportField, string> = {
   name: "",
@@ -35,9 +35,7 @@ function ProductImportScreen() {
         title={t("productsTitle")}
         description={t("productsLead")}
         actions={
-          <Link href="/app/stock" className="text-sm font-medium text-primary">
-            {t("backToStock")}
-          </Link>
+          <BackLink href="/app/stock">{t("backToStock")}</BackLink>
         }
       />
       <ImportReview columns={columns} synonyms={PRODUCT_IMPORT_COLUMNS} endpoint="/api/v1/imports/products" templateName="bizora-products.csv" templateExample={{ ...EXAMPLE, name: t("exampleProduct") }} capture="products" />

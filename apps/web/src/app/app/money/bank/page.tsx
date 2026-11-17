@@ -2,12 +2,12 @@
 
 import { IDEMPOTENCY_HEADER, Permission, type ReconcileTarget, uuidv7 } from "@bizora/contracts";
 import { Badge, Button, Card, Checkbox, EmptyState, FormField, Input, PageHeader, Select, Tab, TabPanel, TabsRoot } from "@bizora/ui";
-import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
-import { formatCurrency } from "../../../../i18n/format";
+import { formatCurrency, formatDay } from "../../../../i18n/format";
 import { api } from "../../../../lib/api";
+import { ActionLink } from "../../../../components/action-link";
 
 type Suggestion = { target: ReconcileTarget; confidence: "exact" | "likely" | "possible"; label: string; detail: Record<string, string | null> };
 type Line = {
@@ -160,11 +160,11 @@ function BankInbox() {
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={t("lead")}
+        intro={t("lead")}
         actions={
-          <Link href="/app/money/bank/upload" className="text-sm font-medium text-primary">
+          <ActionLink href="/app/money/bank/upload" variant="primary">
             {t("upload")}
-          </Link>
+          </ActionLink>
         }
       />
       {notice ? (
@@ -264,12 +264,13 @@ function BankInbox() {
 
 function LineHeader({ line, amount }: { line: Line; amount: string }) {
   const t = useTranslations("bank");
+  const locale = useLocale();
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
         <p className="break-words text-sm font-medium">{line.description || t("noDescription")}</p>
         <p className="text-xs text-muted">
-          {line.date} · {line.accountLabel}
+          {formatDay(line.date, locale)} · {line.accountLabel}
           {line.reference ? ` · ${line.reference}` : ""}
         </p>
       </div>
