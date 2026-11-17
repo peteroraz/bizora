@@ -51,6 +51,7 @@ const readFigures: PermissionCode[] = [
 const runTheShop: PermissionCode[] = [
   P.CUSTOMERS_READ,
   P.CUSTOMERS_MANAGE,
+  P.CUSTOMERS_ADD,
   P.FOLLOWUPS_MANAGE,
   P.FOLLOWUPS_READ_ALL,
   P.SALES_CREATE,
@@ -112,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
     ...base,
     P.CUSTOMERS_READ,
     P.CUSTOMERS_MANAGE,
+    P.CUSTOMERS_ADD,
     P.FOLLOWUPS_MANAGE,
     P.SALES_CREATE,
     P.SALES_READ_OWN,
@@ -120,6 +122,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
   CASHIER: [
     ...base,
     P.CUSTOMERS_LOOKUP,
+    P.CUSTOMERS_ADD,
     P.SALES_CREATE,
     P.SALES_READ_OWN,
     P.SALES_COLLECT,

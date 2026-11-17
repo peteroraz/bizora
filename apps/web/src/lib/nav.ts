@@ -3,7 +3,7 @@ export const primaryNav = [
   { id: "sales", href: "/app/sales", icon: "sales", enabled: true },
   { id: "stock", href: "/app/stock", icon: "stock", enabled: true },
   { id: "customers", href: "/app/customers", icon: "customers", enabled: true },
-  { id: "debtors", href: "/app/debtors", icon: "debtors", enabled: false },
+  { id: "debtors", href: "/app/debtors", icon: "debtors", enabled: true },
   { id: "money", href: "/app/money", icon: "money", enabled: false },
   { id: "staff", href: "/app/staff", icon: "staff", enabled: true },
   { id: "reports", href: "/app/reports", icon: "reports", enabled: false },
@@ -13,7 +13,6 @@ export const primaryNav = [
 export const bottomNav = ["home", "sales", "customers", "debtors"] as const;
 
 export const comingSoonModules = {
-  debtors: "debtors",
   money: "money",
   reports: "reports",
 } as const;

@@ -2,6 +2,7 @@
 
 import { Permission, parseMoneyInput } from "@bizora/contracts";
 import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { formatCurrency } from "../i18n/format";
@@ -62,7 +63,17 @@ export function CustomerCredit({ customerId, credit, owingMinor, currency = "NGN
       <p className="mt-1 text-sm">
         {credit.allowed ? (credit.limitMinor ? t("creditAllowedWithLimit", { limit: money(credit.limitMinor) }) : t("creditAllowedNoLimit")) : t("creditNotAllowed")}
       </p>
-      <p className="text-sm text-muted">{t("creditOwing", { amount: money(owingMinor) })}</p>
+      <p className="text-sm text-muted">
+        {t("creditOwing", { amount: money(owingMinor) })}
+        {BigInt(owingMinor) > 0n && can(access, Permission.DEBTORS_READ) ? (
+          <>
+            {" "}
+            <Link href={`/app/debtors/${customerId}`} className="text-primary">
+              {t("seeAccount")}
+            </Link>
+          </>
+        ) : null}
+      </p>
       {canApprove ? (
         <SafeForm className="mt-3 space-y-3" pending={pending} onSubmit={() => void save()}>
           <label className="flex items-center gap-2 text-sm">
