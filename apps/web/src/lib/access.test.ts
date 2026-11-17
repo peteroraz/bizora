@@ -13,6 +13,7 @@ const owner: Access = {
     "staff.manage",
     "devices.manage",
     "org.settings.manage",
+    "branding.manage",
     "business.settings.manage",
     "branch.settings.manage",
     "branches.manage",
@@ -32,6 +33,7 @@ describe("settings tabs", () => {
   it("gives the owner every tab", () => {
     expect(visibleSettingsTabs(owner, true)).toEqual([
       "organization",
+      "brand",
       "business",
       "shop",
       "branches",

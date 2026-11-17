@@ -1,3 +1,4 @@
+import { BrandingModule } from "../branding/branding.module.js";
 import { Module } from "@nestjs/common";
 import { DocumentsModule } from "../documents/documents.module.js";
 import { IdempotencyModule } from "../idempotency/idempotency.module.js";
@@ -14,7 +15,7 @@ import { SaleSyncHandler } from "./sale-sync.handler.js";
 import { SaleService } from "./sale.service.js";
 
 @Module({
-  imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, InventoryModule, NotificationsModule],
+  imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, InventoryModule, NotificationsModule, BrandingModule],
   controllers: [SaleController, PublicReceiptController, ImportController],
   providers: [SaleService, SaleSyncHandler, ImportService, PermissionGuard],
   exports: [SaleService],

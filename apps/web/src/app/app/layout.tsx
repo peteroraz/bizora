@@ -16,11 +16,13 @@ export default async function AppShellLayout({ children }: { children: React.Rea
   if (meResponse.status === 401) redirect(jar.has("bizora_device") ? "/shop" : "/login?reason=session");
   if (!meResponse.ok) redirect("/login");
   const me = (await meResponse.json()) as { data: Omit<ShellProfile, "businesses" | "branches"> };
-  const [businessResponse, branchResponse] = await Promise.all([
+  const [businessResponse, branchResponse, brandResponse] = await Promise.all([
     load("/api/v1/businesses", cookie),
     load("/api/v1/branches", cookie),
+    load("/api/v1/organizations/current/branding", cookie),
   ]);
   const businesses = businessResponse.ok ? ((await businessResponse.json()).data?.items ?? []) : [];
   const branches = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
-  return <AppShell profile={{ ...me.data, businesses, branches }}>{children}</AppShell>;
+  const logoVersion: string | null = brandResponse.ok ? ((await brandResponse.json()).data?.branding?.logo?.version ?? null) : null;
+  return <AppShell profile={{ ...me.data, businesses, branches, logoVersion }}>{children}</AppShell>;
 }

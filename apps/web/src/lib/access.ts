@@ -96,6 +96,7 @@ export function homeCards(access: Access): HomeCard[] {
 
 export const settingsTabs = [
   "organization",
+  "brand",
   "business",
   "shop",
   "branches",
@@ -114,6 +115,8 @@ export function visibleSettingsTabs(
     switch (tab) {
       case "organization":
         return can(access, Permission.ORG_SETTINGS_MANAGE);
+      case "brand":
+        return can(access, Permission.BRANDING_MANAGE);
       case "business":
       case "shop":
         return can(access, Permission.BUSINESS_SETTINGS_MANAGE);

@@ -67,14 +67,6 @@ export class TenantController {
     return success({ organization }, tenant.correlationId);
   }
 
-  @Patch("organizations/current/branding")
-  @UseGuards(TenantGuard, PermissionGuard)
-  @RequirePermissions(Permission.BRANDING_MANAGE)
-  async updateBranding(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
-    const organization = await this.onboarding.updateBranding(tenant, body);
-    return success({ organization }, tenant.correlationId);
-  }
-
   @Get("businesses")
   @UseGuards(TenantGuard)
   async listBusinesses(@CurrentTenant() tenant: TenantContext) {

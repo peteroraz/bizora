@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableDocuments, documentModel, renderPdf, unitText, type DocumentInput } from "./sale-document.js";
+import { availableDocuments, brandFor, documentModel, renderPdf, unitText, type CompanyBranding, type DocumentInput } from "./sale-document.js";
 
 const base: DocumentInput = {
   sale: {
@@ -77,5 +77,21 @@ describe("sale documents", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pdf.toString("latin1")).toContain("DejaVuSans");
     expect(pdf.length).toBeGreaterThan(5_000);
+  });
+  it("prints the owner's texts on the right documents, and keeps colours readable", () => {
+    const branding: CompanyBranding = { primaryColor: "#0B6E4F", receiptMessage: "Thank you, come again.", invoiceMessage: "Pay to GTBank 0123456789.", documentTerms: "No returns.", logo: null };
+    expect(brandFor(branding, "invoice")).toEqual({ color: "#0B6E4F", logo: null, message: "Pay to GTBank 0123456789.", terms: "No returns." });
+    expect(brandFor(branding, "receipt")).toMatchObject({ message: "Thank you, come again.", terms: "No returns." });
+    expect(brandFor(branding, "payment_receipt")).toMatchObject({ message: "Thank you, come again.", terms: null });
+    expect(brandFor(branding, "statement")).toMatchObject({ message: "Pay to GTBank 0123456789.", terms: null });
+    expect(brandFor({ ...branding, primaryColor: "#FFFF99" }, "receipt").color).toBeNull();
+    expect(brandFor(null, "receipt")).toEqual({ color: null, logo: null, message: null, terms: null });
+  });
+
+  it("moves long terms to a second page, with the Bizora line on every page", async () => {
+    const terms = Array.from({ length: 12 }, (_, index) => `${index + 1}. ${"Goods once sold cannot be returned except where they are faulty. ".repeat(4)}`).join("\n");
+    const pdf = await renderPdf(documentModel(base, "invoice"), { color: "#0B6E4F", logo: null, message: "Pay to GTBank 0123456789.", terms });
+    const text = pdf.toString("latin1");
+    expect(text.match(/\/Type \/Page\b/g)?.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
+import { BrandSettings } from "../../../components/brand-settings";
 import { can, settingsTabs as tabs, visibleSettingsTabs } from "../../../lib/access";
 import { useAccess } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
@@ -403,6 +404,9 @@ function SettingsScreen() {
               </SubmitButton>
             </SafeForm>
           </Card>
+        </TabPanel>
+        <TabPanel value="brand">
+          <BrandSettings />
         </TabPanel>
         <TabPanel value="business">
           <Card>
