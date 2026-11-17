@@ -154,6 +154,12 @@ function SaleScreen() {
                 <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
               </Fragment>
             ))}
+            {full.laterPayments.map((payment) => (
+              <Fragment key={payment.id}>
+                <dt className="text-muted">{t("paidLater", { number: payment.number })}</dt>
+                <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
+              </Fragment>
+            ))}
             {sale.status !== "awaiting_payment" && BigInt(full.balanceMinor) > 0n ? (
               <>
                 <dt className="text-warning">{t("owing")}</dt>

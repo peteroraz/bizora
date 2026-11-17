@@ -93,7 +93,8 @@ describe("offline sync foundation", () => {
     a = await registerOwner(http, "a");
     b = await registerOwner(http, "b");
     salesToken = await invite(http, a.token, "sales@offline.test", "SALES", a.branchId, a.businessId);
-    cashierToken = await invite(http, a.token, "cashier@offline.test", "CASHIER", a.branchId, a.businessId);
+    // A store keeper may not add customers (cashiers may, at the counter: ADR-019).
+    cashierToken = await invite(http, a.token, "store@offline.test", "INVENTORY", a.branchId, a.businessId);
   });
 
   afterAll(async () => {

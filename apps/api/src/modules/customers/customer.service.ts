@@ -260,7 +260,10 @@ export class CustomerService {
   }
 
   async create(tenant: TenantContext, raw: unknown) {
-    const payload = customerWriteSchema.parse(raw);
+    // Staff who may only add customers at the counter (customers.add) give a name and phone; nothing else is taken.
+    const quick = !tenant.permissions.includes(Permission.CUSTOMERS_MANAGE);
+    const source = (raw ?? {}) as Record<string, unknown>;
+    const payload = customerWriteSchema.parse(quick ? { name: source.name, phone: source.phone, isWalkIn: source.isWalkIn } : raw);
     const { id: clientId } = customerClientIdSchema.parse(raw ?? {});
     const business = await this.requireBusiness(tenant);
     const branch = await this.resolveBranch(tenant, business.id, payload.branchId);
@@ -268,7 +271,7 @@ export class CustomerService {
     if (clientId) {
       const [taken] = await this.db.select().from(customers).where(eq(customers.id, clientId)).limit(1);
       // The same device sending the same new customer again (for example after a lost response): return it.
-      if (taken && taken.tenantId === tenant.tenantId) return this.present(tenant.tenantId, taken);
+      if (taken && taken.tenantId === tenant.tenantId) return this.get(tenant, taken.id);
       // IDs are global; never say whose record holds it.
       if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
     }

@@ -23,7 +23,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { addresses, branches, businesses, customers, memberships, products, saleComments, saleLines, salePayments, sales, users } from "../../db/schema.js";
+import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, sales, users } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
@@ -352,6 +352,14 @@ export class SaleService {
       if (!tenant.permissions.includes(Permission.SALES_VOID) && !ownUnpaid) {
         throw new ApiError("FORBIDDEN", "Ask a manager to cancel this sale.", 403);
       }
+      // Payments made later against this sale must be cancelled first, so the money is not counted twice (ADR-019).
+      const [paidLater] = await tx
+        .select({ number: customerPayments.paymentNumber })
+        .from(paymentAllocations)
+        .innerJoin(customerPayments, and(eq(customerPayments.tenantId, paymentAllocations.tenantId), eq(customerPayments.id, paymentAllocations.paymentId)))
+        .where(and(eq(paymentAllocations.tenantId, tenant.tenantId), eq(paymentAllocations.saleId, sale.id), eq(customerPayments.status, "recorded")))
+        .limit(1);
+      if (paidLater) throw new ApiError("HAS_PAYMENTS", `Payment ${paidLater.number} was made against this sale. Cancel that payment first.`, 409);
       const business = await requireBusiness(tx, tenant);
       const today = localDate(new Date(), business.timezone);
       if (!sale.historyOnly && sale.journalEntryId) {
@@ -489,7 +497,7 @@ export class SaleService {
     const sale = await this.requireSale(this.db, tenant, id);
     const collector = sql<string | null>`(SELECT display_name FROM users WHERE users.id = ${sales.collectedBy})`;
     const releaser = sql<string | null>`(SELECT display_name FROM users WHERE users.id = ${sales.releasedBy})`;
-    const [lines, payments, extras, comments] = await Promise.all([
+    const [lines, payments, extras, comments, laterPayments] = await Promise.all([
       this.db.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id))).orderBy(asc(saleLines.lineNo)),
       this.db.select().from(salePayments).where(and(eq(salePayments.tenantId, tenant.tenantId), eq(salePayments.saleId, sale.id))).orderBy(asc(salePayments.createdAt)),
       this.db
@@ -514,6 +522,7 @@ export class SaleService {
         .leftJoin(users, eq(users.id, saleComments.userId))
         .where(and(eq(saleComments.tenantId, tenant.tenantId), eq(saleComments.saleId, sale.id)))
         .orderBy(asc(saleComments.createdAt), asc(saleComments.id)),
+      this.laterPayments(sale),
     ]);
     const extra = extras[0];
     const stages = {
@@ -576,7 +585,18 @@ export class SaleService {
         ...(seeCost && line.costMinor !== null ? { costMinor: line.costMinor.toString() } : {}),
       })),
       payments: payments.map((payment) => ({ method: payment.method, amountMinor: payment.amountMinor.toString(), reference: payment.reference })),
+      // Debtor payments made after the sale (ADR-019).
+      laterPayments: laterPayments.map((payment) => ({ id: payment.id, number: payment.number, method: payment.method, amountMinor: payment.amount.toString(), receivedAt: payment.receivedAt })),
     };
+  }
+
+  private laterPayments(sale: SaleRow) {
+    return this.db
+      .select({ id: customerPayments.id, number: customerPayments.paymentNumber, method: customerPayments.method, amount: paymentAllocations.amountMinor, receivedAt: customerPayments.receivedAt })
+      .from(paymentAllocations)
+      .innerJoin(customerPayments, and(eq(customerPayments.tenantId, paymentAllocations.tenantId), eq(customerPayments.id, paymentAllocations.paymentId)))
+      .where(and(eq(paymentAllocations.tenantId, sale.tenantId), eq(paymentAllocations.saleId, sale.id), eq(customerPayments.status, "recorded")))
+      .orderBy(asc(customerPayments.receivedAt));
   }
 
   /** What anyone with the receipt link may see: the receipt, nothing else about the shop or customer. */
@@ -710,7 +730,10 @@ export class SaleService {
         unitPriceMinor: line.unitPriceMinor,
         lineTotalMinor: line.lineTotalMinor,
       })),
-      payments: payments.map((payment) => ({ method: payment.method, amountMinor: payment.amountMinor })),
+      payments: [
+        ...payments.map((payment) => ({ method: payment.method, amountMinor: payment.amountMinor })),
+        ...(await this.laterPayments(sale)).map((payment) => ({ method: payment.method, amountMinor: payment.amount, label: `Paid later (${payment.number})` })),
+      ],
     };
   }
 

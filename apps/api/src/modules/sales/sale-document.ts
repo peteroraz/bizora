@@ -36,7 +36,7 @@ export type DocumentInput = {
   servedBy: string | null;
   cashier: string | null;
   lines: { description: string; enteredQuantity: bigint; enteredUnit: string; unitPriceMinor: bigint; lineTotalMinor: bigint }[];
-  payments: { method: string; amountMinor: bigint }[];
+  payments: { method: string; amountMinor: bigint; label?: string }[];
 };
 
 export type DocumentModel = {
@@ -94,7 +94,7 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
   }
   totals.push(["Total", money(sale.totalMinor), true]);
   if (!unpaid) {
-    for (const payment of input.payments) totals.push([`Paid (${METHOD[payment.method] ?? payment.method})`, money(payment.amountMinor)]);
+    for (const payment of input.payments) totals.push([payment.label ?? `Paid (${METHOD[payment.method] ?? payment.method})`, money(payment.amountMinor)]);
     if (sale.balanceMinor > 0n) totals.push(["Balance owing", money(sale.balanceMinor), true]);
     if (sale.balanceMinor > 0n && sale.dueDate) totals.push(["Payment due", formatDate(sale.dueDate)]);
   }

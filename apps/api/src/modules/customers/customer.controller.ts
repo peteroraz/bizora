@@ -39,7 +39,7 @@ export class CustomersController {
 
   // Offline-capable: the web app sends an Idempotency-Key, so a retried request never creates a second customer.
   @Post("customers")
-  @RequirePermissions(Permission.CUSTOMERS_MANAGE)
+  @RequireAnyPermission(Permission.CUSTOMERS_MANAGE, Permission.CUSTOMERS_ADD)
   @Idempotent()
   async create(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     const customer = await this.customers.create(tenant, body);

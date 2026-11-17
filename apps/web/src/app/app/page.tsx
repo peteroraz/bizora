@@ -39,6 +39,15 @@ export default function AppHomePage() {
   const [sales, setSales] = useState<SaleSummary | null>(null);
   const [queues, setQueues] = useState<{ awaitingPayment: number | null; awaitingRelease: number | null } | null>(null);
   const seesQueues = shown.includes("toCollect") || shown.includes("toRelease");
+  const seesDebtors = shown.includes("debtors");
+  const [debtors, setDebtors] = useState<{ currency: string; owingMinor: string; overdueMinor: string; debtors: number } | null>(null);
+
+  useEffect(() => {
+    if (!seesDebtors) return;
+    void api("/api/v1/debtors/totals")
+      .then(async (response) => (response.ok ? setDebtors((await response.json()).data) : undefined))
+      .catch(() => undefined);
+  }, [seesDebtors]);
 
   useEffect(() => {
     if (!seesQueues) return;
@@ -129,6 +138,14 @@ export default function AppHomePage() {
               ) : (
                 <p className="mt-2 text-sm">{t("noLowStock")}</p>
               )
+            ) : id === "debtors" && debtors && debtors.debtors > 0 ? (
+              <Link href="/app/debtors" className="mt-1 block" data-testid="home-debtors">
+                <span className="block text-xl font-semibold tabular-nums">{formatCurrency(BigInt(debtors.owingMinor), debtors.currency, locale)}</span>
+                <span className="block text-sm text-muted">{t("debtorsCount", { count: debtors.debtors })}</span>
+                {BigInt(debtors.overdueMinor) > 0n ? (
+                  <span className="block text-sm text-danger">{t("debtorsOverdue", { amount: formatCurrency(BigInt(debtors.overdueMinor), debtors.currency, locale) })}</span>
+                ) : null}
+              </Link>
             ) : id === "toCollect" || id === "toRelease" ? (
               (() => {
                 const count = (id === "toCollect" ? queues?.awaitingPayment : queues?.awaitingRelease) ?? 0;

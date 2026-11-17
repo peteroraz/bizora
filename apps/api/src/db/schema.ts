@@ -494,6 +494,7 @@ export const customers = pgTable(
     creditLimitMinor: bigint("credit_limit_minor", { mode: "bigint" }),
     creditApprovedBy: uuid("credit_approved_by"),
     creditApprovedAt: timestamp("credit_approved_at", { withTimezone: true }),
+    statementToken: varchar("statement_token", { length: 64 }),
     ...timestamps,
   },
   (table) => [
@@ -1009,6 +1010,61 @@ export const salePayments = pgTable(
   ],
 );
 
+export const customerPayments = pgTable(
+  "customer_payments",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    paymentNumber: varchar("payment_number", { length: 20 }).notNull(),
+    method: varchar("method", { length: 10 }).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    reference: varchar("reference", { length: 80 }),
+    note: varchar("note", { length: 240 }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    status: varchar("status", { length: 10 }).notNull().default("recorded"),
+    journalEntryId: uuid("journal_entry_id"),
+    receiptToken: varchar("receipt_token", { length: 64 }).notNull(),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    voidReason: varchar("void_reason", { length: 240 }),
+    createdBy: uuid("created_by").notNull(),
+    membershipId: uuid("membership_id"),
+    deviceId: uuid("device_id"),
+    actorType: varchar("actor_type", { length: 20 }).notNull().default("HUMAN"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("customer_payments_tenant_id_id_key").on(table.tenantId, table.id),
+    uniqueIndex("customer_payments_number_key").on(table.tenantId, table.businessId, table.paymentNumber),
+    uniqueIndex("customer_payments_receipt_token_key").on(table.receiptToken),
+    index("customer_payments_customer_idx").on(table.tenantId, table.customerId, table.receivedAt),
+    foreignKey({ name: "customer_payments_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    foreignKey({ name: "customer_payments_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+  ],
+);
+
+export const paymentAllocations = pgTable(
+  "payment_allocations",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    paymentId: uuid("payment_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("payment_allocations_sale_idx").on(table.tenantId, table.saleId),
+    index("payment_allocations_payment_idx").on(table.tenantId, table.paymentId),
+    foreignKey({ name: "payment_allocations_payment_fk", columns: [table.tenantId, table.paymentId], foreignColumns: [customerPayments.tenantId, customerPayments.id] }),
+    foreignKey({ name: "payment_allocations_sale_fk", columns: [table.tenantId, table.saleId], foreignColumns: [sales.tenantId, sales.id] }),
+  ],
+);
+
 export const saleComments = pgTable(
   "sale_comments",
   {
@@ -1104,6 +1160,8 @@ export const schema = {
   saleComments,
   notifications,
   aiUsage,
+  customerPayments,
+  paymentAllocations,
 };
 
 export type DatabaseSchema = typeof schema;

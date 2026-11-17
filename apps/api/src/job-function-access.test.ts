@@ -185,7 +185,8 @@ describe("job-function access", () => {
     await request(http).get(`/api/v1/customers/${chikaId}/followups`).set(auth(cashierToken)).expect(403);
     await request(http).get("/api/v1/followups").set(auth(cashierToken)).expect(403);
     await request(http).get("/api/v1/customers/assignees").set(auth(cashierToken)).expect(403);
-    await request(http).post("/api/v1/customers").set(auth(cashierToken)).send({ name: "New", isWalkIn: true }).expect(403);
+    // A cashier may add a walk-in customer at the counter (ADR-019), but not change existing customers.
+    await request(http).post("/api/v1/customers").set(auth(cashierToken)).send({ name: "New", isWalkIn: true }).expect(201);
     await request(http).patch(`/api/v1/customers/${chikaId}`).set(auth(cashierToken)).send({ name: "Changed" }).expect(403);
   });
 
@@ -231,7 +232,7 @@ describe("job-function access", () => {
     // Sales staff still work the full customer list.
     const list = await request(http).get("/api/v1/customers").set(auth(salesToken)).expect(200);
     expect(list.body.data.mode).toBe("list");
-    expect(list.body.data.total).toBe(13);
+    expect(list.body.data.total).toBe(14);
     expect(list.body.data.items[0]).toHaveProperty("email");
   });
 

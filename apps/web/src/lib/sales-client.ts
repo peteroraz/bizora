@@ -83,6 +83,7 @@ export type SaleDetail = Omit<SaleView, "itemCount"> &
   whatsApp: { text: string; phone: string | null; hrefPrefix: string };
   lines: SaleLineView[];
   payments: { method: "cash" | "transfer" | "pos"; amountMinor: string; reference: string | null }[];
+  laterPayments: { id: string; number: string; method: "cash" | "transfer" | "pos"; amountMinor: string; receivedAt: string }[];
 };
 
 export type SaleSummary = {

@@ -19,6 +19,8 @@ export const Permission = {
   CUSTOMERS_READ: "customers.read",
   CUSTOMERS_LOOKUP: "customers.lookup",
   CUSTOMERS_MANAGE: "customers.manage",
+  /** Add a new or walk-in customer while recording a sale (ADR-019). Does not allow seeing or editing others. */
+  CUSTOMERS_ADD: "customers.add",
   CUSTOMERS_EXPORT: "customers.export",
   FOLLOWUPS_MANAGE: "followups.manage",
   FOLLOWUPS_READ_ALL: "followups.read.all",

@@ -14,7 +14,7 @@ export class CustomerSyncHandler implements OnModuleInit {
   onModuleInit() {
     this.registry.register({
       type: "customer.create",
-      anyOf: [Permission.CUSTOMERS_MANAGE],
+      anyOf: [Permission.CUSTOMERS_MANAGE, Permission.CUSTOMERS_ADD],
       handle: async (tenant, operation) => ({ customer: await this.customers.create(tenant, operation.payload) }),
     });
   }

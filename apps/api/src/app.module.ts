@@ -18,6 +18,7 @@ import { InventoryModule } from "./modules/inventory/inventory.module.js";
 import { SalesModule } from "./modules/sales/sales.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { CaptureModule } from "./modules/capture/capture.module.js";
+import { DebtorsModule } from "./modules/debtors/debtors.module.js";
 import { LedgerModule } from "./modules/ledger/ledger.module.js";
 import { StaffModule } from "./modules/staff/staff.module.js";
 import { SyncModule } from "./modules/sync/sync.module.js";
@@ -62,6 +63,7 @@ export class AppModule {
         SalesModule,
         NotificationsModule,
         CaptureModule,
+        DebtorsModule,
       ],
     };
   }
