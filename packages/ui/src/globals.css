@@ -63,6 +63,20 @@
   --info-bg: #102a56;
 }
 
+/*
+ * Public homepage (ADR-025). Fixed in both themes: the hero is always the brand's deep teal, and the receipt is paper.
+ */
+:root {
+  --landing-ink: #042f2e;
+  --landing-ink-soft: #0f4a46;
+  --landing-on-ink: #ecfdf8;
+  --landing-on-ink-muted: #a7d7cf;
+  --landing-paper: #ffffff;
+  --landing-paper-ink: #1c1917;
+  --landing-paper-faint: #78716c;
+  --landing-stamp: #be123c;
+}
+
 @theme inline {
   --color-canvas: var(--canvas);
   --color-card: var(--card);

@@ -1,3 +1,4 @@
+import { customerPath, handleOf } from "../../common/handles.js";
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { customerPaymentSchema, Permission, paymentVoidSchema, whatsAppHref, type DebtorFilter } from "@bizora/contracts";
@@ -303,7 +304,7 @@ export class PaymentService {
         balanceMinor: sale.balanceMinor.toString(),
       })),
       payments: payments.map(({ payment, byName }) => ({ ...this.summary(payment), byName })),
-      statementPath: `/s/${token}`,
+      statementPath: customerPath(await handleOf(this.db, customer.tenantId), "s", token),
       reminder: {
         text,
         phone: seeContact && customer.phoneE164 ? customer.phoneE164 : null,
@@ -394,6 +395,8 @@ export class PaymentService {
       // The owner's invoice message: usually how to pay them (bank details), shown on the statement page (6d).
       message: brand.message,
       hasLogo: brand.hasLogo,
+      handle: brand.handle,
+      color: brand.color,
       customerName: customer.name,
       currency,
       asOf: today,

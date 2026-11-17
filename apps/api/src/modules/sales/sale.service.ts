@@ -1,3 +1,4 @@
+import { customerPath, handleOf } from "../../common/handles.js";
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import {
@@ -555,10 +556,12 @@ export class SaleService {
     const customer = extra?.customer ?? null;
     const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     const seeContact = tenant.permissions.includes(Permission.CUSTOMERS_READ);
-    const receiptPath = `/r/${sale.receiptToken}`;
+    const receiptPath = customerPath(await handleOf(this.db, sale.tenantId), "r", sale.receiptToken);
     const documents = availableDocuments(sale);
-    const label = documents.includes("receipt") ? `Receipt ${sale.saleNumber}` : sale.balanceMinor > 0n || !sale.collectedAt ? `Invoice ${sale.invoiceNumber ?? ""}` : `Receipt ${sale.saleNumber ?? ""}`;
-    const message = `${label} from ${extra?.businessName ?? ""}. View or download it here: `;
+    const label = documents.includes("receipt") ? `receipt ${sale.saleNumber}` : sale.balanceMinor > 0n || !sale.collectedAt ? `invoice ${sale.invoiceNumber ?? ""}` : `receipt ${sale.saleNumber ?? ""}`;
+    // Written as the business speaking to its customer (6e).
+    const greeting = customer?.name && !customer.isWalkIn ? `Hello ${customer.name}, ` : "Hello, ";
+    const message = `${greeting}here is your ${label.trim()} from ${extra?.businessName ?? "us"}: `;
     return {
       ...this.summaryOf(sale),
       ...stages,
@@ -652,6 +655,9 @@ export class SaleService {
       },
       message: brand.message,
       hasLogo: brand.hasLogo,
+      // The page lives at /<handle>/r/<token>; an old or wrong name in the address is redirected to this one.
+      handle: brand.handle,
+      color: brand.color,
       customerName: row.customerName,
       number: row.sale.saleNumber,
       invoiceNumber: row.sale.invoiceNumber,

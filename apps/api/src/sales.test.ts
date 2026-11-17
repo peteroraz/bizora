@@ -212,7 +212,7 @@ describe("quick sales and imports", () => {
   it("opens a receipt from its WhatsApp link without signing in, and nothing more", async () => {
     const http = app.getHttpServer();
     const sale = await request(http).get(`/api/v1/sales/${firstSaleId}`).set(auth(a.token)).expect(200);
-    const token = (sale.body.data.sale.receiptPath as string).replace("/r/", "");
+    const token = (sale.body.data.sale.receiptPath as string).split("/").pop() ?? "";
     const receipt = await request(http).get(`/api/v1/public/receipts/${token}`).expect(200);
     expect(receipt.body.data.receipt).toMatchObject({ businessName: "Shop a", number: "R-000001", status: "voided", totalMinor: "2090000" });
     // The shop's own contact is shown on purpose (6d); costs, the customer's phone and the account never are.

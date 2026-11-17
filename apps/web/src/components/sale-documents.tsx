@@ -67,7 +67,7 @@ export function SaleDocuments({
   }
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
-  const token = receiptPath.replace("/r/", "");
+  const token = receiptPath.split("/").pop() ?? "";
   const primary = documents.includes("receipt") ? "receipt" : documents[0];
 
   return (

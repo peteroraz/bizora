@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Inject, Patch, Put, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, Inject, Param, Patch, Put, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
 import { Permission, success } from "@bizora/contracts";
 import type { Response } from "express";
 import { ApiError } from "../../common/errors.js";
@@ -23,6 +23,19 @@ export class BrandingController {
   @RequirePermissions(Permission.BRANDING_MANAGE)
   async update(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     return success({ branding: await this.branding.update(tenant, body) }, tenant.correlationId);
+  }
+
+  /** The business's link name and one line about it (6e). */
+  @Patch("profile")
+  @RequirePermissions(Permission.BRANDING_MANAGE)
+  async profile(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success({ branding: await this.branding.updateProfile(tenant, body) }, tenant.correlationId);
+  }
+
+  @Get("handle-check")
+  @RequirePermissions(Permission.BRANDING_MANAGE)
+  async handleCheck(@CurrentTenant() tenant: TenantContext, @Query("handle") handle?: string) {
+    return success(await this.branding.handleAvailable(tenant, handle ?? ""), tenant.correlationId);
   }
 
   @Put("logo")
@@ -54,5 +67,26 @@ export class BrandingController {
     if (type !== undefined && type !== "receipt" && type !== "invoice") throw new ApiError("NOT_FOUND", "Sample not found.", 404);
     const { fileName, pdf } = await this.branding.sample(tenant, type ?? "receipt");
     return new StreamableFile(pdf, { type: "application/pdf", disposition: `inline; filename="${fileName}"`, length: pdf.length });
+  }
+}
+
+/** A business's public page, by its link name. No sign-in; nothing about sales, customers or money. */
+@Controller("api/v1/public/profiles")
+export class PublicProfileController {
+  constructor(@Inject(BrandingService) private readonly branding: BrandingService) {}
+
+  @Get(":handle")
+  @Header("Cache-Control", "public, max-age=300")
+  async profile(@Param("handle") handle: string) {
+    return success({ profile: await this.branding.publicProfile(handle) }, "public");
+  }
+
+  @Get(":handle/logo")
+  @Header("X-Content-Type-Options", "nosniff")
+  @Header("Content-Security-Policy", "default-src 'none'")
+  @Header("Cache-Control", "public, max-age=3600")
+  async logo(@Param("handle") handle: string) {
+    const logo = await this.branding.publicLogo(handle);
+    return new StreamableFile(logo.data, { type: logo.contentType, disposition: "inline", length: logo.data.length });
   }
 }

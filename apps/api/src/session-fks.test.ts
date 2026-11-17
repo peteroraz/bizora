@@ -29,8 +29,8 @@ describe("session tenant foreign keys", () => {
       passwordHash: "x",
       displayName: "FK",
     });
-    await db.insert(organizations).values({ id: tenantA, name: "A", slug: `a-${tenantA.slice(0, 8)}` });
-    await db.insert(organizations).values({ id: tenantB, name: "B", slug: `b-${tenantB.slice(0, 8)}` });
+    await db.insert(organizations).values({ id: tenantA, name: "A", slug: `a-${tenantA.slice(0, 8)}`, handle: `a-${tenantA.slice(0, 8)}` });
+    await db.insert(organizations).values({ id: tenantB, name: "B", slug: `b-${tenantB.slice(0, 8)}`, handle: `b-${tenantB.slice(0, 8)}` });
     await db.insert(businesses).values({
       id: businessB,
       tenantId: tenantB,

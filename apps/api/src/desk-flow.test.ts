@@ -258,10 +258,10 @@ describe("sales desk, cashier and store keeper (desk flow)", () => {
     // The credit sale has both. The store keeper, who sees no amounts, gets neither.
     const credit = await request(http).get(`/api/v1/sales/${creditSaleId}`).set(auth(managerToken)).expect(200);
     expect(credit.body.data.sale.documents).toEqual(["invoice", "receipt"]);
-    expect(credit.body.data.sale.whatsApp.text).toMatch(/^Receipt R-\d{6} from /);
+    expect(credit.body.data.sale.whatsApp.text).toMatch(/^Hello Alhaji Musa Bello, here is your receipt R-\d{6} from /);
     await request(http).get(`/api/v1/sales/${creditSaleId}/documents/invoice`).set(auth(storeToken)).expect(403);
     await request(http).get(`/api/v1/sales/${creditSaleId}/documents/receipt`).set(auth(b.token)).expect(404);
-    const token = (credit.body.data.sale.receiptPath as string).replace("/r/", "");
+    const token = (credit.body.data.sale.receiptPath as string).split("/").pop() ?? "";
     const publicReceipt = await request(http).get(`/api/v1/public/receipts/${token}`).expect(200);
     expect(publicReceipt.body.data.receipt).toMatchObject({ documents: ["invoice", "receipt"], dueDate: "2099-01-31" });
     const publicPdf = await request(http).get(`/api/v1/public/receipts/${token}/documents/invoice.pdf`).buffer(true).parse(binary).expect(200);

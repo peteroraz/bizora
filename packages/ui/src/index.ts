@@ -25,5 +25,5 @@ export { ThemeProvider, themeBootScript, useTheme } from "./theme";
 export type { ThemeChoice } from "./theme";
 export { ToastProvider, useToast } from "./toast";
 export { Tooltip, TooltipProvider } from "./tooltip";
-export { themeColor, themeColorDark } from "./tokens";
+export { shareCardColors, themeColor, themeColorDark } from "./tokens";
 export { cn } from "./lib/cn";
