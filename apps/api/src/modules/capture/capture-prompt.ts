@@ -28,6 +28,13 @@ const FIELD_GUIDE: Record<CaptureTarget, Record<string, string>> = {
     phone: "Customer phone number, if any.",
     ref: "Receipt or invoice number. Lines of the same sale share the same value; if none is written, give each separate sale a short label like S1, S2.",
   },
+  statement: {
+    date: "Transaction date as DD/MM/YYYY.",
+    description: "The narration or description exactly as printed (it often holds the payer's name).",
+    reference: "Transaction reference, session ID or cheque number, if printed.",
+    moneyIn: "Amount credited (money in), digits only, else empty.",
+    moneyOut: "Amount debited (money out), digits only, else empty.",
+  },
   stock_in: {
     product: "Product received (use the exact name from the product list when it is clearly the same product).",
     quantity: "How many were received.",
@@ -43,6 +50,7 @@ const PURPOSE: Record<CaptureTarget, string> = {
   products: "a list of products with prices and stock (a price list, stock book or shelf count)",
   sales: "sales records (a sales book page, receipts or a spoken list of sales)",
   stock_in: "goods received from a supplier (a supplier invoice, delivery note, waybill or a spoken list)",
+  statement: "a bank or mobile money account statement (one row per transaction; skip opening and closing balance rows)",
 };
 
 /**

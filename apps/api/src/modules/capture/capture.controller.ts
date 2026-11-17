@@ -6,7 +6,7 @@ import { RequireAnyPermission } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
 import { CaptureService } from "./capture.service.js";
 
-const CAN_CAPTURE = [Permission.PRODUCTS_MANAGE, Permission.SALES_CREATE, Permission.STOCK_RECEIVE];
+const CAN_CAPTURE = [Permission.PRODUCTS_MANAGE, Permission.SALES_CREATE, Permission.STOCK_RECEIVE, Permission.BANK_RECONCILE];
 
 /** Photo, scan and voice capture into draft rows (ADR-018). Never saves records itself. */
 @Controller("api/v1/captures")

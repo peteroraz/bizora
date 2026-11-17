@@ -50,6 +50,25 @@ export class PaymentService {
     const receivedAt = this.receivedAt(payload.receivedAt);
     const id = payload.id ?? newId();
     await this.db.transaction(async (tx) => {
+      await this.recordIn(tx, tenant, customerId, { id, amount: BigInt(payload.amountMinor), method: payload.method, reference: payload.reference, note: payload.note, saleId: payload.saleId, receivedAt, source: options.source ?? "online" });
+    });
+    return this.get(tenant, id);
+  }
+
+  /**
+   * Records a payment inside the caller's transaction. Used by the API above and by bank reconciliation (ADR-020),
+   * which records transfers seen on a statement, possibly older than 7 days.
+   */
+  async recordIn(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    customerId: string,
+    input: { id: string; amount: bigint; method: "cash" | "transfer" | "pos"; reference?: string | undefined; note?: string | undefined; saleId?: string | undefined; receivedAt: Date; source: string },
+  ) {
+    const payload = { saleId: input.saleId, method: input.method, reference: input.reference, note: input.note };
+    const id = input.id;
+    const receivedAt = input.receivedAt;
+    {
       const business = await requireBusiness(tx, tenant);
       const branch = await resolveBranch(tx, tenant, business.id);
       const customer = await this.requireCustomer(tx, tenant, business.id, customerId);
@@ -57,7 +76,7 @@ export class PaymentService {
       const targets = payload.saleId ? open.filter((sale) => sale.id === payload.saleId) : open;
       if (payload.saleId && targets.length === 0) throw new ApiError("NOT_OWING", "That sale has nothing left to pay.", 400, [{ field: "saleId", message: "Nothing owed." }]);
       const owing = targets.reduce((sum, sale) => sum + sale.balanceMinor, 0n);
-      const amount = BigInt(payload.amountMinor);
+      const amount = input.amount;
       if (owing === 0n) throw new ApiError("NOT_OWING", `${customer.name} does not owe anything.`, 400);
       if (amount > owing) {
         throw new ApiError("OVERPAID", `${customer.name} owes only ${formatMoney(owing, business.baseCurrencyCode.trim(), "en-NG")}${payload.saleId ? " on that sale" : ""}. Record that, and give change from the drawer.`, 400, [
@@ -125,16 +144,22 @@ export class PaymentService {
         method: payload.method,
         customerId: customer.id,
         sales: allocations.map((allocation) => allocation.sale.saleNumber ?? allocation.sale.invoiceNumber),
-        source: options.source ?? "online",
+        source: input.source,
       });
-    });
-    return this.get(tenant, id);
+    }
+    return id;
   }
 
   /** A manager or owner cancels a payment recorded by mistake; the sales owe again what it paid. */
   async void(tenant: TenantContext, id: string, raw: unknown) {
     const { reason } = paymentVoidSchema.parse(raw);
-    await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => this.voidIn(tx, tenant, id, reason));
+    return this.get(tenant, id);
+  }
+
+  /** Cancels a payment inside the caller's transaction (also used when a bank match is undone). */
+  async voidIn(tx: DbExecutor, tenant: TenantContext, id: string, reason: string) {
+    {
       const payment = await this.requirePayment(tx, tenant, id, true);
       if (payment.status === "voided") throw new ApiError("ALREADY_VOIDED", "This payment has already been cancelled.", 409);
       const business = await requireBusiness(tx, tenant);
@@ -156,8 +181,7 @@ export class PaymentService {
         .set({ status: "voided", voidedAt: new Date(), voidedBy: tenant.userId, voidReason: reason })
         .where(and(eq(customerPayments.tenantId, tenant.tenantId), eq(customerPayments.id, payment.id)));
       await this.record_(tx, tenant, payment.businessId, payment.branchId, "payment.voided", payment.id, { number: payment.paymentNumber, reason });
-    });
-    return this.get(tenant, id);
+    }
   }
 
   /** Customers who owe, most overdue first. Shop staff see debts from their own shop. */

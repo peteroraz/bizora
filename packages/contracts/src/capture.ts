@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { PRODUCT_IMPORT_COLUMNS, SALES_IMPORT_COLUMNS } from "./csv.js";
+import { STATEMENT_IMPORT_COLUMNS } from "./reconciliation.js";
 
 /**
  * AI capture (ADR-018): photos, scans and voice notes become draft rows in the same review table as CSV imports.
  * Nothing is saved by capture itself; a person checks the rows and saves them through the import endpoints.
  */
-export const CAPTURE_TARGETS = ["products", "sales", "stock_in"] as const;
+export const CAPTURE_TARGETS = ["products", "sales", "stock_in", "statement"] as const;
 export type CaptureTarget = (typeof CAPTURE_TARGETS)[number];
 
 export const CAPTURE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -37,6 +38,7 @@ export const CAPTURE_FIELDS: Record<CaptureTarget, readonly string[]> = {
   products: Object.keys(PRODUCT_IMPORT_COLUMNS),
   sales: Object.keys(SALES_IMPORT_COLUMNS),
   stock_in: Object.keys(STOCK_IN_IMPORT_COLUMNS),
+  statement: Object.keys(STATEMENT_IMPORT_COLUMNS),
 };
 
 // Base64 grows data by a third.

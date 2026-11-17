@@ -57,6 +57,8 @@ export const Permission = {
 
   // Money
   MONEY_READ: "money.read",
+  /** Upload bank statements and match or classify their lines (ADR-020). */
+  BANK_RECONCILE: "bank.reconcile",
   EXPENSES_RECORD: "expenses.record",
   EXPENSES_APPROVE: "expenses.approve",
 

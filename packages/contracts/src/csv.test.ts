@@ -25,3 +25,14 @@ describe("CSV", () => {
     expect(parseTraderDate("yesterday")).toBeNull();
   });
 });
+
+describe("bank statement dates", () => {
+  it("reads the formats Nigerian banks export", () => {
+    expect(parseTraderDate("16/11/2026 10:22:01")).toBe("2026-11-16");
+    expect(parseTraderDate("2026-11-16T10:22")).toBe("2026-11-16");
+    expect(parseTraderDate("16-Nov-2026")).toBe("2026-11-16");
+    expect(parseTraderDate("16-Nov-26")).toBe("2026-11-16");
+    expect(parseTraderDate("16 November, 2026")).toBe("2026-11-16");
+    expect(parseTraderDate("16 Nov 2026 3:04 PM")).toBe("2026-11-16");
+  });
+});

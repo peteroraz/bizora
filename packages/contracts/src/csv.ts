@@ -104,7 +104,11 @@ export function rowsFromCsv<F extends string>(text: string, synonyms: Record<F, 
 
 /** Reads dates traders write: 2026-11-16, 16/11/2026, 16-11-26, 16 Nov 2026. Day comes before month. */
 export function parseTraderDate(text: string): string | null {
-  const value = text.trim();
+  // Bank statements add a time ("16/11/2026 10:22:01", "2026-11-16T10:22"); only the day matters here.
+  const value = text
+    .trim()
+    .replace(/[T\s]+\d{1,2}:\d{2}(:\d{2})?(\s*[AaPp][Mm])?$/, "")
+    .trim();
   let match = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(value);
   if (match) return isoDate(Number(match[1]), Number(match[2]), Number(match[3]));
   match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(value);
@@ -112,10 +116,12 @@ export function parseTraderDate(text: string): string | null {
     const year = Number(match[3]);
     return isoDate(year < 100 ? 2000 + year : year, Number(match[2]), Number(match[1]));
   }
-  match = /^(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})$/.exec(value);
+  // "16 Nov 2026", "16-Nov-2026", "16-Nov-26", "16 November, 2026".
+  match = /^(\d{1,2})[\s-]+([A-Za-z]{3,9})\.?,?[\s-]+(\d{2}|\d{4})$/.exec(value);
   if (match) {
     const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf((match[2] ?? "").slice(0, 3).toLowerCase());
-    if (month >= 0) return isoDate(Number(match[3]), month + 1, Number(match[1]));
+    const year = Number(match[3]);
+    if (month >= 0) return isoDate(year < 100 ? 2000 + year : year, month + 1, Number(match[1]));
   }
   return null;
 }

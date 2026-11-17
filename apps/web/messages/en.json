@@ -239,8 +239,6 @@
   },
   "comingSoon": {
     "badge": "Soon",
-    "moneyTitle": "Money is coming soon",
-    "moneyBody": "You will watch money coming in, money going out, and what is left at hand.",
     "reportsTitle": "Reports is coming soon",
     "reportsBody": "You will get simple numbers for the day, the week, and the month."
   },
@@ -300,7 +298,8 @@
     "toReleaseEmpty": "Nothing to give out.",
     "toReleaseAction": "Give out goods",
     "debtorsCount": "{count, plural, one {# customer owes} other {# customers owe}}",
-    "debtorsOverdue": "{amount} overdue"
+    "debtorsOverdue": "{amount} overdue",
+    "bankToCheck": "{count, plural, one {# bank line to check} other {# bank lines to check}}"
   },
   "onboarding": {
     "progress": "Question {current} of {total}",
@@ -1166,5 +1165,106 @@
     "paymentsTitle": "Recent payments",
     "download": "Download statement (PDF)",
     "footer": "Statement sent with Bizora."
+  },
+  "money": {
+    "title": "Money",
+    "lead": "Check the money that came into your bank against what you recorded.",
+    "bankTitle": "Bank statements",
+    "bankLead": "Upload a statement and Bizora matches each transfer to a sale or a customer who owes you.",
+    "toCheck": "{count, plural, one {# line} other {# lines}} to check, {amount} in all.",
+    "openInbox": "Check bank lines",
+    "upload": "Upload a statement",
+    "soonTitle": "More coming soon",
+    "soonBody": "Money going out, expenses and what is left at hand come in the next update."
+  },
+  "bank": {
+    "title": "Bank lines to check",
+    "lead": "Money that came into your bank. Tap the right match, or say what it is.",
+    "upload": "Upload a statement",
+    "backToInbox": "Back to bank lines",
+    "tabsLabel": "Bank lines",
+    "tabOpen": "To check ({count})",
+    "tabDone": "Done ({count})",
+    "loading": "Loading…",
+    "failed": "That did not work. Please try again.",
+    "emptyTitle": "Nothing to check",
+    "emptyBody": "Upload a bank statement to see the money that came in.",
+    "doneEmptyTitle": "Nothing done yet",
+    "doneEmptyBody": "Lines you match or set aside show here, and you can undo them.",
+    "openTotal": "{count, plural, one {# line} other {# lines}}, {amount} in all.",
+    "noDescription": "No description",
+    "other": "Other…",
+    "matched": "Done: {amount} is now in your books.",
+    "undone": "Undone. The line is back in To check.",
+    "undo": "Undo",
+    "auto": "Matched for you",
+    "confidence": {
+      "exact": "sure",
+      "likely": "likely",
+      "possible": "maybe"
+    },
+    "target": {
+      "recorded": "Already recorded ({number})",
+      "debtor": "Payment from a customer who owes",
+      "debtorNamed": "Payment from {name} (owes {owing})",
+      "advance": "Customer paid ahead",
+      "ignored": "Not business money"
+    },
+    "category": {
+      "unrecorded_sales": "Sales not recorded yet",
+      "owner_capital": "Owner put money in",
+      "other_income": "Other money in"
+    },
+    "transfer": {
+      "pos_settlement": "POS money settled to bank",
+      "cash_deposit": "Cash paid into the bank",
+      "other_account": "From my other account"
+    },
+    "done": {
+      "recorded": "Matched to a payment you already recorded",
+      "debt": "Payment {number} from {name}",
+      "debt_and_advance": "Payment {number} from {name}, the rest kept as their advance",
+      "advance": "Kept as {name}'s advance",
+      "ignored": "Set aside: {reason}"
+    },
+    "whatIsIt": "What is this money?",
+    "choice": {
+      "debtor": "A customer paying what they owe",
+      "advance": "A customer paying ahead",
+      "money_in_unrecorded_sales": "Sales not recorded yet",
+      "money_in_owner_capital": "Owner put money in",
+      "money_in_other_income": "Other money in",
+      "own_transfer_pos_settlement": "POS money settled to bank",
+      "own_transfer_cash_deposit": "Cash paid into the bank",
+      "own_transfer_other_account": "From my other account",
+      "ignored": "Not business money (set aside)"
+    },
+    "transferHint": "Money moving between your own accounts is not counted as sales.",
+    "customer": "Customer",
+    "customerOwes": "{name} (owes {owing})",
+    "reason": "Why set it aside?",
+    "always": "Always do this for lines like this",
+    "pattern": "When the description has",
+    "patternHint": "Next time a line has these words, Bizora does this for you.",
+    "save": "Save",
+    "rulesTitle": "Things Bizora does for you",
+    "rulesLead": "Saved from \"Always do this\". Delete one to stop it.",
+    "ruleText": "\"{pattern}\" → {action}",
+    "ruleUsed": "{count, plural, one {used once} other {used # times}}",
+    "ruleDelete": "Delete",
+    "uploadTitle": "Upload a bank statement",
+    "uploadLead": "Use the CSV from your bank app, or a PDF or photo of the statement. Only money in is checked for now; money out comes with the next update.",
+    "accountLabel": "Which account is this?",
+    "accountHint": "For example GTBank 0123. It shows next to each line.",
+    "openInbox": "Check bank lines",
+    "added": "{count, plural, one {# line was} other {# lines were}} added.",
+    "exampleDescription": "NIP CR/MAMA CHIKA/payment",
+    "columns": {
+      "date": "Date",
+      "description": "Description",
+      "reference": "Reference",
+      "moneyIn": "Money in",
+      "moneyOut": "Money out"
+    }
   }
 }
