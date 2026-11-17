@@ -95,15 +95,15 @@ test("password login lists both workspaces and the menu switches between them", 
   await harborCard.click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("heading", { name: /Welcome, Nia Okonkwo/ })).toBeVisible();
-  await expect(page.locator("header p", { hasText: "Your business" })).toContainText(harbor);
+  await expect(page.locator("header").first()).toContainText(harbor);
 
   await page.getByRole("button", { name: "Account menu" }).click();
   await expect(page.getByText("Switch business")).toBeVisible();
   await page.getByRole("menuitem", { name: new RegExp(atelier) }).click();
 
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.locator("header p", { hasText: "Your business" })).toContainText(atelier);
-  await expect(page.locator("header p", { hasText: "Your business" })).not.toContainText(harbor);
+  await expect(page.locator("header").first()).toContainText(atelier);
+  await expect(page.locator("header").first()).not.toContainText(harbor);
 });
 
 test("select-workspace renders workspaces without sessionStorage", async ({ page, request }) => {

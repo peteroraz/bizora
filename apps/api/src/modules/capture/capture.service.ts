@@ -8,6 +8,7 @@ import { localDate } from "../../common/zoned-day.js";
 import type { AppDatabase } from "../../db/database.js";
 import { aiUsage, products } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
+import { EntitlementService } from "../entitlements/entitlement.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { requireBusiness } from "../inventory/inventory-scope.js";
 import { CAPTURE_MODEL, type CaptureModel } from "./capture-model.js";
@@ -38,29 +39,35 @@ export class CaptureService {
     @Inject(APP_ENV) private readonly env: AppEnv,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CAPTURE_MODEL) private readonly model: CaptureModel | null,
+    @Inject(EntitlementService) private readonly entitlements: EntitlementService,
   ) {}
 
-  private get limit() {
-    return this.env.AI_DAILY_CAPTURE_LIMIT ?? 50;
+  /** Reads a day: the plan's allowance (Starter 10), never above the server's own limit (6d). */
+  private async limitFor(tenantId: string) {
+    const server = this.env.AI_DAILY_CAPTURE_LIMIT ?? 50;
+    const plan = (await this.entitlements.plan(tenantId)).limits.ai_daily_reads;
+    return plan === undefined ? server : Math.min(plan, server);
   }
 
   async status(tenant: TenantContext) {
     const business = await requireBusiness(this.db, tenant);
     const used = await this.used(tenant.tenantId, localDate(new Date(), business.timezone));
+    const limit = await this.limitFor(tenant.tenantId);
     return {
-      enabled: this.model !== null && this.limit > 0,
-      limit: this.limit,
-      remainingToday: Math.max(0, this.limit - used),
+      enabled: this.model !== null && limit > 0,
+      limit,
+      remainingToday: Math.max(0, limit - used),
       targets: (Object.keys(TARGET_PERMISSION) as CaptureTarget[]).filter((target) => tenant.permissions.includes(TARGET_PERMISSION[target] as never)),
     };
   }
 
   async capture(tenant: TenantContext, raw: unknown): Promise<CaptureResult> {
+    const limit = await this.limitFor(tenant.tenantId);
     const payload = captureRequestSchema.parse(raw);
     if (!tenant.permissions.includes(TARGET_PERMISSION[payload.target] as never)) {
       throw new ApiError("FORBIDDEN", "You cannot add these records.", 403);
     }
-    if (!this.model || this.limit === 0) throw new ApiError("AI_OFF", "Reading photos and voice notes is not switched on for this organization.", 503);
+    if (!this.model || limit === 0) throw new ApiError("AI_OFF", "Reading photos and voice notes is not switched on for this organization.", 503);
     const business = await requireBusiness(this.db, tenant);
     const today = localDate(new Date(), business.timezone);
     const bytes = payload.files.reduce((sum, file) => sum + Math.floor((file.data.length * 3) / 4), 0);
@@ -72,10 +79,10 @@ export class CaptureService {
       .onConflictDoUpdate({
         target: [aiUsage.tenantId, aiUsage.day],
         set: { captures: sql`${aiUsage.captures} + 1`, inputBytes: sql`${aiUsage.inputBytes} + ${bytes}`, updatedAt: new Date() },
-        where: sql`${aiUsage.captures} < ${this.limit}`,
+        where: sql`${aiUsage.captures} < ${limit}`,
       })
       .returning({ captures: aiUsage.captures });
-    if (!usage) throw new ApiError("AI_LIMIT", `Your organization has used all ${this.limit} photo and voice reads for today. Try again tomorrow, or type the rows.`, 429);
+    if (!usage) throw new ApiError("AI_LIMIT", `Your organization has used all ${limit} photo and voice reads for today. Try again tomorrow, or type the rows.`, 429);
 
     const productNames = (
       await this.db
@@ -121,7 +128,7 @@ export class CaptureService {
         warnings: result.warnings.length,
       },
     });
-    return { target: payload.target, ...result, remainingToday: Math.max(0, this.limit - usage.captures) };
+    return { target: payload.target, ...result, remainingToday: Math.max(0, limit - usage.captures) };
   }
 
   private async used(tenantId: string, day: string) {

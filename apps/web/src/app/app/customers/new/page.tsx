@@ -18,6 +18,8 @@ import { emptyAddress, loadCountries, loadSubdivisions, type CountryOption, type
 function NewCustomerPageScreen() {
   const t = useTranslations("customers");
   const common = useTranslations("common");
+  // Name and phone first; email, tags, notes and address only when wanted (6d).
+  const [details, setDetails] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [walkIn, setWalkIn] = useState(false);
@@ -118,7 +120,7 @@ function NewCustomerPageScreen() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <PageHeader title={t("newTitle")} description={t("newLead")} />
+      <PageHeader title={t("newTitle")} intro={t("newLead")} />
       {savedOffline ? (
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
           {t("savedOffline")}
@@ -144,16 +146,24 @@ function NewCustomerPageScreen() {
             <Input id="customer-phone" value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" required />
           </FormField>
         )}
-        <FormField id="customer-email" label={common("email")} hint={common("optional")}>
-          <Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        </FormField>
-        <FormField id="customer-tags" label={t("tags")} hint={t("tagsHint")}>
-          <Input id="customer-tags" value={tags} onChange={(event) => setTags(event.target.value)} />
-        </FormField>
-        <FormField id="customer-notes" label={t("notes")} hint={common("optional")}>
-          <Textarea id="customer-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
-        </FormField>
-        <AddressFields idPrefix="customer" countries={countries} subdivisions={subdivisions} value={address} onChange={setAddress} />
+        {details ? (
+          <>
+            <FormField id="customer-email" label={common("email")} hint={common("optional")}>
+              <Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+            </FormField>
+            <FormField id="customer-tags" label={t("tags")} hint={t("tagsHint")}>
+              <Input id="customer-tags" value={tags} onChange={(event) => setTags(event.target.value)} />
+            </FormField>
+            <FormField id="customer-notes" label={t("notes")} hint={common("optional")}>
+              <Textarea id="customer-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+            </FormField>
+            <AddressFields idPrefix="customer" countries={countries} subdivisions={subdivisions} value={address} onChange={setAddress} />
+          </>
+        ) : (
+          <button type="button" className="min-h-11 text-sm font-medium text-primary" onClick={() => setDetails(true)}>
+            {t("moreDetails")}
+          </button>
+        )}
         {canApprove ? (
           <div className="space-y-3 rounded-card border border-border p-4">
             <label className="flex items-center gap-2 text-sm">
@@ -177,11 +187,11 @@ function NewCustomerPageScreen() {
             ) : null}
           </p>
         ) : null}
-        <div className="flex gap-3">
-          <Link href="/app/customers" className="text-sm font-medium text-muted">
+        <div className="flex items-center gap-3">
+          <Link href="/app/customers" className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-muted">
             {t("back")}
           </Link>
-          <SubmitButton pending={pending} pendingLabel={t("saving")}>
+          <SubmitButton pending={pending} pendingLabel={t("saving")} className="flex-1 sm:flex-none" size="lg">
             {t("save")}
           </SubmitButton>
         </div>

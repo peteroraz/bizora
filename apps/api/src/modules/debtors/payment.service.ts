@@ -283,6 +283,8 @@ export class PaymentService {
         id: customer.id,
         name: customer.name,
         phoneLast4: customer.phoneE164 ? customer.phoneE164.slice(-4) : null,
+        // The full number only for people who may see customers in full (not the cashier's counter view).
+        ...(seeContact ? { phone: customer.phoneE164 } : {}),
         credit: { allowed: customer.creditAllowed, limitMinor: customer.creditLimitMinor?.toString() ?? null },
       },
       currency,
@@ -350,6 +352,13 @@ export class PaymentService {
     return statement.view;
   }
 
+  async publicLogo(token: string) {
+    if (!TOKEN.test(token)) throw new ApiError("NOT_FOUND", "Statement not found.", 404);
+    const [customer] = await this.db.select({ tenantId: customers.tenantId }).from(customers).where(eq(customers.statementToken, token)).limit(1);
+    if (!customer) throw new ApiError("NOT_FOUND", "Statement not found.", 404);
+    return this.branding.logoForTenant(customer.tenantId);
+  }
+
   async publicStatementPdf(token: string) {
     const statement = await this.statementByToken(token);
     return statement.pdf();
@@ -378,8 +387,13 @@ export class PaymentService {
     const currency = business.baseCurrencyCode.trim();
     const owing = open.reduce((sum, sale) => sum + sale.balanceMinor, 0n);
     const overdue = open.filter((sale) => sale.dueDate && sale.dueDate < today).reduce((sum, sale) => sum + sale.balanceMinor, 0n);
+    const brand = await this.branding.publicBrand(customer.tenantId, "invoice");
     const view = {
       businessName: business.name,
+      shop: { phone: business.phoneE164 ?? null },
+      // The owner's invoice message: usually how to pay them (bank details), shown on the statement page (6d).
+      message: brand.message,
+      hasLogo: brand.hasLogo,
       customerName: customer.name,
       currency,
       asOf: today,

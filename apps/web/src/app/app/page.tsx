@@ -8,6 +8,7 @@ import { Permission } from "@bizora/contracts";
 import { can, homeCards } from "../../lib/access";
 import { useAccess } from "../../lib/access-context";
 import { api } from "../../lib/api";
+import { ActionLink } from "../../components/action-link";
 import { useStockText } from "../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../i18n/format";
 import type { SaleSummary } from "../../lib/sales-client";
@@ -28,7 +29,6 @@ export default function AppHomePage() {
   const [overdue, setOverdue] = useState(0);
   const [customerCount, setCustomerCount] = useState(0);
   const [timezone, setTimezone] = useState("Africa/Lagos");
-  const [currency, setCurrency] = useState("NGN");
   const [lowStock, setLowStock] = useState<{ id: string; name: string; baseUnit: string; quantity: string }[]>([]);
   const [countsToApprove, setCountsToApprove] = useState(0);
   const stockText = useStockText();
@@ -50,11 +50,18 @@ export default function AppHomePage() {
       .catch(() => undefined);
   }, [reconciles]);
   const [debtors, setDebtors] = useState<{ currency: string; owingMinor: string; overdueMinor: string; debtors: number } | null>(null);
+  const [topDebtors, setTopDebtors] = useState<{ customerId: string; name: string; owingMinor: string; overdueMinor: string }[]>([]);
 
   useEffect(() => {
     if (!seesDebtors) return;
-    void api("/api/v1/debtors/totals")
-      .then(async (response) => (response.ok ? setDebtors((await response.json()).data) : undefined))
+    // The list (most overdue first) carries the totals too: one call for the figure and the names.
+    void api("/api/v1/debtors")
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()).data;
+        setDebtors({ currency: data.currency, ...data.totals });
+        setTopDebtors(data.items.slice(0, 3));
+      })
       .catch(() => undefined);
   }, [seesDebtors]);
 
@@ -103,7 +110,6 @@ export default function AppHomePage() {
       setOverdue(payload.data?.overdueCount ?? 0);
       setCustomerCount(payload.data?.customerCount ?? 0);
       setTimezone(payload.data?.timezone ?? "Africa/Lagos");
-      setCurrency(payload.data?.currency ?? "NGN");
     })();
   }, []);
 
@@ -113,14 +119,18 @@ export default function AppHomePage() {
       ["toRelease", t("toRelease"), t("toReleaseEmpty")],
       ["sales", t("sales"), t("emptySales")],
       ["mySales", t("mySales"), t("emptySales")],
-      ["money", t("money"), t("emptyMoney")],
+      ["money", t("bankTitle"), t("emptyMoney")],
       ["cash", t("cash"), t("emptyCash")],
       ["debtors", t("debtors"), t("emptyDebtors")],
       ["stock", t("stock"), t("emptyStock")],
       ["staff", t("staff"), t("emptyStaff")],
       ["approval", t("approval"), t("emptyApproval")],
     ] as const
-  ).filter(([id]) => shown.includes(id));
+  )
+    // Cash at hand and staff activity arrive with Sprint 7; until then they would only say "nothing yet".
+    // Money shows only when there are bank lines to check.
+    .filter(([id]) => shown.includes(id) && id !== "cash" && id !== "staff" && (id !== "money" || (bank?.open ?? 0) > 0));
+  const unfinished = checks.filter((check) => !check.done);
   const today = t("today", { date: formatWhen(new Date(), locale, timezone) });
 
   return (
@@ -129,6 +139,27 @@ export default function AppHomePage() {
         title={t("welcome", { name: name || t("fallbackName") })}
         description={seesCustomers ? `${t("customerCount", { count: customerCount })} · ${today}` : today}
       />
+      {sells ? (
+        <ActionLink href="/app/sales/new" variant="primary" className="h-14 w-full text-base sm:w-auto sm:px-10" data-testid="home-new-sale">
+          {t("newSale")}
+        </ActionLink>
+      ) : null}
+      {unfinished.length > 0 ? (
+        <Card data-testid="home-checklist">
+          <p className="text-sm font-medium">{t("setup")}</p>
+          <p className="text-xs text-muted">{t("setupProgress", { done: checks.length - unfinished.length, total: checks.length })}</p>
+          <ul className="mt-2 divide-y divide-border text-sm">
+            {checks.map((check) => (
+              <li key={check.id}>
+                <Link href={check.href} className="flex min-h-11 items-center justify-between gap-3">
+                  <span className={check.done ? "text-muted line-through" : "font-medium"}>{t(`checklist.${check.id}`)}</span>
+                  <span className={check.done ? "text-success" : "text-primary"}>{check.done ? t("done") : t("start")}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {figureCards.map(([id, title, empty]) => (
           <Card key={id}>
@@ -148,13 +179,25 @@ export default function AppHomePage() {
                 <p className="mt-2 text-sm">{t("noLowStock")}</p>
               )
             ) : id === "debtors" && debtors && debtors.debtors > 0 ? (
-              <Link href="/app/debtors" className="mt-1 block" data-testid="home-debtors">
-                <span className="block text-xl font-semibold tabular-nums">{formatCurrency(BigInt(debtors.owingMinor), debtors.currency, locale)}</span>
-                <span className="block text-sm text-muted">{t("debtorsCount", { count: debtors.debtors })}</span>
-                {BigInt(debtors.overdueMinor) > 0n ? (
-                  <span className="block text-sm text-danger">{t("debtorsOverdue", { amount: formatCurrency(BigInt(debtors.overdueMinor), debtors.currency, locale) })}</span>
-                ) : null}
-              </Link>
+              <div className="mt-1">
+                <Link href="/app/debtors" className="block" data-testid="home-debtors">
+                  <span className="block text-xl font-semibold tabular-nums">{formatCurrency(BigInt(debtors.owingMinor), debtors.currency, locale)}</span>
+                  <span className="block text-sm text-muted">{t("debtorsCount", { count: debtors.debtors })}</span>
+                  {BigInt(debtors.overdueMinor) > 0n ? (
+                    <span className="block text-sm text-danger">{t("debtorsOverdue", { amount: formatCurrency(BigInt(debtors.overdueMinor), debtors.currency, locale) })}</span>
+                  ) : null}
+                </Link>
+                <ul className="mt-2 space-y-1 text-sm">
+                  {topDebtors.map((debtor) => (
+                    <li key={debtor.customerId}>
+                      <Link href={`/app/debtors/${debtor.customerId}`} className="flex min-h-9 items-center justify-between gap-2 text-primary">
+                        <span className="truncate">{debtor.name}</span>
+                        <span className={`tabular-nums ${BigInt(debtor.overdueMinor) > 0n ? "text-danger" : "text-fg"}`}>{formatCurrency(BigInt(debtor.owingMinor), debtors.currency, locale)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : id === "toCollect" || id === "toRelease" ? (
               (() => {
                 const count = (id === "toCollect" ? queues?.awaitingPayment : queues?.awaitingRelease) ?? 0;
@@ -191,7 +234,6 @@ export default function AppHomePage() {
             ) : (
               <p className="mt-2 text-sm">{empty}</p>
             )}
-            {id === "money" ? <p className="mt-2 text-xs text-muted">{t("moneyHint", { amount: formatCurrency(0n, currency, locale) })}</p> : null}
             {id === "money" && bank && bank.open > 0 ? (
               <Link href="/app/money/bank" className="mt-2 block text-sm font-medium text-primary" data-testid="home-bank">
                 {t("bankToCheck", { count: bank.open })}
@@ -237,21 +279,6 @@ export default function AppHomePage() {
           </Card>
         ) : null}
       </div>
-      {checks.length > 0 ? (
-        <Card>
-          <p className="text-sm font-medium">{t("setup")}</p>
-          <ul className="mt-3 space-y-2 text-sm">
-            {checks.map((check) => (
-              <li key={check.id}>
-                <Link href={check.href} className="flex items-center justify-between gap-3">
-                  <span>{t(`checklist.${check.id}`)}</span>
-                  <span className={check.done ? "text-success" : "text-muted"}>{check.done ? t("done") : t("todo")}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
     </div>
   );
 }

@@ -1,16 +1,18 @@
 "use client";
 
 import { Permission, SALE_PAGE_SIZE } from "@bizora/contracts";
-import { Badge, Card, EmptyState, FormField, Input, PageHeader } from "@bizora/ui";
+import { Badge, Card, EmptyState, PageHeader } from "@bizora/ui";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { DaySwitcher } from "../../../components/day-switcher";
 import { RequireAccess } from "../../../components/require-access";
 import { formatCurrency, formatWhen } from "../../../i18n/format";
 import { can } from "../../../lib/access";
 import { useAccess } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 import type { SaleReleaseRow, SaleSummary, SaleView } from "../../../lib/sales-client";
+import { ActionLink } from "../../../components/action-link";
 
 type Tab = "day" | "awaiting_payment" | "awaiting_release";
 
@@ -31,6 +33,8 @@ function SalesScreen() {
   const defaultTab: Tab = all || !desk ? "day" : (tabs[0] ?? "day");
   const [tab, setTab] = useState<Tab>(defaultTab);
   const [date, setDate] = useState("");
+  // The business's own today, from the first load (not the phone's clock).
+  const [today, setToday] = useState("");
   const [items, setItems] = useState<(SaleView | SaleReleaseRow)[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -56,7 +60,10 @@ function SalesScreen() {
       if (totals?.ok) {
         const data = (await totals.json()).data as SaleSummary;
         setSummary(data);
-        if (!day) setDate(data.date);
+        if (!day) {
+          setDate(data.date);
+          setToday(data.date);
+        }
       } else if (view !== "day") {
         setSummary(null);
       }
@@ -80,17 +87,15 @@ function SalesScreen() {
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={tab !== "day" ? t(`tabLead.${tab}`) : summary?.mine ? t("mineLead") : t("lead")}
+        intro={tab !== "day" ? t(`tabLead.${tab}`) : summary?.mine ? t("mineLead") : t("lead")}
         actions={
           canSell ? (
-            <div className="flex gap-4">
-              <Link href="/app/sales/import" className="text-sm font-medium text-primary">
-                {t("import")}
-              </Link>
-              <Link href="/app/sales/new" className="text-sm font-medium text-primary">
+            <>
+              <ActionLink href="/app/sales/import">{t("import")}</ActionLink>
+              <ActionLink href="/app/sales/new" variant="primary">
                 {t("new")}
-              </Link>
-            </div>
+              </ActionLink>
+            </>
           ) : undefined
         }
       />
@@ -118,20 +123,15 @@ function SalesScreen() {
           ))}
         </div>
       ) : null}
-      {tab === "day" ? (
-      <div className="flex flex-wrap items-end gap-4">
-        <FormField id="sales-date" label={t("day")}>
-          <Input
-            id="sales-date"
-            type="date"
-            value={date}
-            onChange={(event) => {
-              setDate(event.target.value);
-              void load(event.target.value, 1, "day");
-            }}
-          />
-        </FormField>
-      </div>
+      {tab === "day" && today ? (
+        <DaySwitcher
+          day={date || today}
+          today={today}
+          onChange={(next) => {
+            setDate(next);
+            void load(next, 1, "day");
+          }}
+        />
       ) : null}
       {summary && tab === "day" ? (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -170,12 +170,19 @@ function SalesScreen() {
             <li key={sale.id}>
               <Link href={`/app/sales/${sale.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{sale.number ?? sale.invoiceNumber ?? (sale.view === "full" ? sale.externalRef : null) ?? t("historyRecord")}</span>
+                  <span className="block truncate text-sm font-medium">
+                    {sale.view === "full" && sale.customerName ? sale.customerName : (sale.number ?? sale.invoiceNumber ?? (sale.view === "full" ? sale.externalRef : null) ?? t("historyRecord"))}
+                  </span>
                   <span className="block truncate text-sm text-muted">
-                    {formatWhen(sale.soldAt, locale, "Africa/Lagos")}
-                    {sale.view === "full" && sale.customerName ? ` · ${sale.customerName}` : ""}
-                    {sale.byName ? ` · ${sale.byName}` : ""}
-                    {sale.view === "release" && sale.itemCount ? ` · ${t("itemCount", { count: sale.itemCount })}` : ""}
+                    {[
+                      sale.view === "full" && sale.customerName ? (sale.number ?? sale.invoiceNumber) : null,
+                      formatWhen(sale.soldAt, locale, "Africa/Lagos"),
+                      sale.view === "full" && sale.methods?.length ? sale.methods.map((method) => t(`mode.${method}`)).join(" + ") : null,
+                      sale.byName,
+                      sale.view === "release" && sale.itemCount ? t("itemCount", { count: sale.itemCount }) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">

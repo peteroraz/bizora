@@ -101,6 +101,19 @@ function SettingsScreen() {
   const [whatYouSell, setWhatYouSell] = useState("");
   const [staffFeatures, setStaffFeatures] = useState(true);
   const [salesFlow, setSalesFlow] = useState<"simple" | "desk">("simple");
+  // The desk flow needs three staff (sales person, cashier, store keeper); say so when the plan allows fewer (6d).
+  const [staffLimit, setStaffLimit] = useState<number | null>(null);
+  const [planName, setPlanName] = useState("");
+  useEffect(() => {
+    void api("/api/v1/plan")
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()).data;
+        setStaffLimit(typeof data?.limits?.max_staff === "number" ? data.limits.max_staff : null);
+        setPlanName(data?.plan?.name ?? "");
+      })
+      .catch(() => undefined);
+  }, []);
   const [savedFlow, setSavedFlow] = useState<"simple" | "desk">("simple");
   const [modules, setModules] = useState<string[]>([...TRADER_MODULES]);
 
@@ -355,6 +368,10 @@ function SettingsScreen() {
     shop: "typeShop",
     "market-stall": "typeMarket",
     wholesale: "typeWholesale",
+    pharmacy: "typePharmacy",
+    fashion: "typeFashion",
+    electronics: "typeElectronics",
+    building: "typeBuilding",
     food: "typeFood",
     services: "typeServices",
     other: "typeOther",
@@ -363,7 +380,7 @@ function SettingsScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("title")} description={t("description")} />
+      <PageHeader title={t("title")} intro={t("description")} />
       {error ? (
         <p className="text-sm text-danger" role="alert">
           {error}
@@ -513,6 +530,11 @@ function SettingsScreen() {
                     </span>
                   </label>
                 ))}
+                {staffLimit !== null && staffLimit < 3 ? (
+                  <p className="rounded-card border border-warning bg-warning-bg px-3 py-2 text-sm text-warning" data-testid="desk-plan-note">
+                    {t("deskNeedsStaff", { plan: planName, limit: staffLimit })}
+                  </p>
+                ) : null}
               </fieldset>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{t("modules")}</legend>

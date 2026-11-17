@@ -8,15 +8,16 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
 import { SendPdf } from "../../../../components/send-pdf";
-import { formatCurrency, formatWhen } from "../../../../i18n/format";
+import { formatCurrency, formatDay, formatPhone, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
+import { BackLink } from "../../../../components/action-link";
 
 type Account = {
-  customer: { id: string; name: string; phoneLast4: string | null; credit: { allowed: boolean; limitMinor: string | null } };
+  customer: { id: string; name: string; phoneLast4: string | null; phone?: string | null; credit: { allowed: boolean; limitMinor: string | null } };
   currency: string;
   today: string;
   owingMinor: string;
@@ -130,11 +131,16 @@ function AccountScreen() {
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
         title={account.customer.name}
-        description={account.customer.phoneLast4 ? t("phoneEnding", { last4: account.customer.phoneLast4 }) : t("noPhone")}
+        description={account.customer.phone ? formatPhone(account.customer.phone) : account.customer.phoneLast4 ? t("phoneEnding", { last4: account.customer.phoneLast4 }) : t("noPhone")}
         actions={
-          <Link href="/app/debtors" className="text-sm font-medium text-primary">
-            {t("allDebtors")}
-          </Link>
+          <div className="flex items-center gap-2">
+            {account.customer.phone ? (
+              <a href={`tel:${account.customer.phone}`} className="inline-flex min-h-11 items-center rounded-control border border-border px-4 text-sm font-medium">
+                {t("call")}
+              </a>
+            ) : null}
+            <BackLink href="/app/debtors">{t("allDebtors")}</BackLink>
+          </div>
         }
       />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -235,7 +241,7 @@ function AccountScreen() {
                 </Link>
                 <span className="block text-muted">
                   {formatWhen(sale.soldAt, locale, "Africa/Lagos")}
-                  {sale.dueDate ? ` · ${t("due", { date: sale.dueDate })}` : ""}
+                  {sale.dueDate ? ` · ${t("due", { date: formatDay(sale.dueDate, locale) })}` : ""}
                 </span>
               </span>
               <span className="flex flex-col items-end gap-1">

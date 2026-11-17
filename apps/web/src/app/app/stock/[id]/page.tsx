@@ -12,7 +12,6 @@ import {
   uuidv7,
 } from "@bizora/contracts";
 import { Badge, Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +24,7 @@ import { api } from "../../../../lib/api";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
 import type { ProductView } from "../../../../lib/stock-client";
+import { BackLink } from "../../../../components/action-link";
 
 type Detail = ProductView & {
   currency: string;
@@ -146,9 +146,7 @@ function ProductScreen() {
           .filter(Boolean)
           .join(" · ")}
         actions={
-          <Link href="/app/stock" className="text-sm font-medium text-primary">
-            {t("back")}
-          </Link>
+          <BackLink href="/app/stock">{t("back")}</BackLink>
         }
       />
       {message ? (

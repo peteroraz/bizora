@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { businessTypeFromIndustry, IMPORT_MAX_ROWS, reconcileSchema, statementImportSchema, type ImportRowResult, type ReconcileTarget } from "@bizora/contracts";
-import { and, asc, desc, eq, gt, ilike, inArray, sql, type SQL } from "drizzle-orm";
+import { and, isNull, asc, desc, eq, gt, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -190,7 +190,7 @@ export class ReconciliationService {
   async customers(tenant: TenantContext, q: string | undefined) {
     const business = await requireBusiness(this.db, tenant);
     const owing = sql<string>`coalesce((SELECT sum(${sales.balanceMinor}) FROM ${sales} WHERE ${sales.tenantId} = ${customers.tenantId} AND ${sales.customerId} = ${customers.id} AND ${sales.balanceMinor} > 0 AND NOT ${sales.historyOnly} AND ${sales.status} IN ('awaiting_release', 'completed')), 0)`;
-    const filters: SQL[] = [eq(customers.tenantId, tenant.tenantId), eq(customers.businessId, business.id)];
+    const filters: SQL[] = [eq(customers.tenantId, tenant.tenantId), eq(customers.businessId, business.id), isNull(customers.archivedAt)];
     if (q?.trim()) filters.push(ilike(customers.name, `%${q.trim().replace(/[%_\\]/g, (char) => `\\${char}`)}%`));
     const rows = await this.db
       .select({ id: customers.id, name: customers.name, owing })

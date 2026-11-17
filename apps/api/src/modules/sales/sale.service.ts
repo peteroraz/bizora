@@ -401,12 +401,15 @@ export class SaleService {
    * Sales for one day, or every sale at one stage (the cashier's and store keeper's lists, oldest first).
    * Store keepers see what to give out, without amounts or customers.
    */
-  async list(tenant: TenantContext, query: { date?: string; page?: number; status?: string }) {
+  async list(tenant: TenantContext, query: { date?: string; page?: number; status?: string; customerId?: string }) {
     const business = await requireBusiness(this.db, tenant);
     const filters = this.scope(tenant, business.id);
     const status = SALE_STATUSES.find((item) => item === query.status);
     const day = this.day(business, query.date);
-    if (status) filters.push(eq(sales.status, status));
+    // One customer's purchases (6d): every day, newest first, within what this person may see.
+    const customerId = query.customerId && /^[0-9a-f-]{36}$/i.test(query.customerId) ? query.customerId : null;
+    if (customerId) filters.push(eq(sales.customerId, customerId));
+    else if (status) filters.push(eq(sales.status, status));
     else filters.push(gte(sales.soldAt, day.start), lt(sales.soldAt, day.end));
     const page = Math.max(1, query.page ?? 1);
     const [count] = await this.db.select({ total: sql<number>`count(*)::int` }).from(sales).where(and(...filters));
@@ -416,23 +419,25 @@ export class SaleService {
         customerName: customers.name,
         byName: users.displayName,
         itemCount: sql<number>`(SELECT count(*)::int FROM sale_lines WHERE sale_lines.tenant_id = ${sales.tenantId} AND sale_lines.sale_id = ${sales.id})`,
+        // How it was paid, for the list rows (6d): "Cash", "Transfer + POS".
+        methods: sql<string>`(SELECT coalesce(string_agg(DISTINCT sp.method, ',' ORDER BY sp.method), '') FROM sale_payments sp WHERE sp.tenant_id = ${sales.tenantId} AND sp.sale_id = ${sales.id})`,
       })
       .from(sales)
       .leftJoin(customers, and(eq(customers.tenantId, sales.tenantId), eq(customers.id, sales.customerId)))
       .leftJoin(users, eq(users.id, sales.createdBy))
       .where(and(...filters))
-      .orderBy(...(status ? [asc(sales.createdAt), asc(sales.id)] : [desc(sales.soldAt), desc(sales.id)]))
+      .orderBy(...(status && !customerId ? [asc(sales.createdAt), asc(sales.id)] : [desc(sales.soldAt), desc(sales.id)]))
       .limit(SALE_PAGE_SIZE)
       .offset((page - 1) * SALE_PAGE_SIZE);
     return {
-      date: status ? null : day.date,
+      date: status || customerId ? null : day.date,
       status: status ?? null,
       page,
       pageSize: SALE_PAGE_SIZE,
       total: Number(count?.total ?? 0),
-      items: rows.map(({ sale, customerName, byName, itemCount }) =>
+      items: rows.map(({ sale, customerName, byName, itemCount, methods }) =>
         this.viewOf(tenant, sale) === "full"
-          ? { ...this.summaryOf(sale), customerName, byName, itemCount: Number(itemCount), view: "full" as const }
+          ? { ...this.summaryOf(sale), customerName, byName, itemCount: Number(itemCount), methods: methods ? methods.split(",") : [], view: "full" as const }
           : { ...this.releaseSummary(sale), byName, itemCount: Number(itemCount), view: "release" as const },
       ),
     };
@@ -605,10 +610,19 @@ export class SaleService {
   async publicReceipt(token: string) {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
     const [row] = await this.db
-      .select({ sale: sales, businessName: businesses.name, branchName: branches.name, customerName: customers.name })
+      .select({
+        sale: sales,
+        businessName: businesses.name,
+        businessPhone: businesses.phoneE164,
+        branchName: branches.name,
+        branchPhone: branches.phoneE164,
+        address: addresses,
+        customerName: customers.name,
+      })
       .from(sales)
       .innerJoin(businesses, and(eq(businesses.tenantId, sales.tenantId), eq(businesses.id, sales.businessId)))
       .innerJoin(branches, and(eq(branches.tenantId, sales.tenantId), eq(branches.id, sales.branchId)))
+      .leftJoin(addresses, and(eq(addresses.tenantId, branches.tenantId), eq(addresses.id, branches.addressId)))
       .leftJoin(customers, and(eq(customers.tenantId, sales.tenantId), eq(customers.id, sales.customerId)))
       .where(eq(sales.receiptToken, token))
       .limit(1);
@@ -617,9 +631,27 @@ export class SaleService {
       this.db.select().from(saleLines).where(and(eq(saleLines.tenantId, row.sale.tenantId), eq(saleLines.saleId, row.sale.id))).orderBy(asc(saleLines.lineNo)),
       this.db.select().from(salePayments).where(and(eq(salePayments.tenantId, row.sale.tenantId), eq(salePayments.saleId, row.sale.id))),
     ]);
+    // The shop's contact and the owner's message, so the customer knows who to call and how to pay (6d).
+    const paidOrCredit = row.sale.collectedAt !== null;
+    const brand = await this.branding.publicBrand(row.sale.tenantId, paidOrCredit && row.sale.balanceMinor === 0n ? "receipt" : "invoice");
     return {
       businessName: row.businessName,
       branchName: row.branchName,
+      shop: {
+        phone: row.branchPhone ?? row.businessPhone ?? null,
+        address: row.address
+          ? formatAddressDisplay({
+              shopNumber: row.address.shopNumber,
+              lineOrBlock: row.address.lineOrBlock,
+              marketOrPlaza: row.address.marketOrPlaza,
+              line1: row.address.line1,
+              city: row.address.city,
+              subdivisionName: null,
+            })
+          : null,
+      },
+      message: brand.message,
+      hasLogo: brand.hasLogo,
       customerName: row.customerName,
       number: row.sale.saleNumber,
       invoiceNumber: row.sale.invoiceNumber,
@@ -658,6 +690,14 @@ export class SaleService {
     const [sale] = await this.db.select().from(sales).where(eq(sales.receiptToken, token)).limit(1);
     if (!sale) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
     return this.renderDocument(sale, type);
+  }
+
+  /** The company logo for a customer's receipt page, found from the receipt's own token. */
+  async publicLogo(token: string) {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
+    const [sale] = await this.db.select({ tenantId: sales.tenantId }).from(sales).where(eq(sales.receiptToken, token)).limit(1);
+    if (!sale) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
+    return this.branding.logoForTenant(sale.tenantId);
   }
 
   private async renderDocument(sale: SaleRow, type: SaleDocumentType) {

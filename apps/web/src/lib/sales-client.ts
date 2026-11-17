@@ -34,6 +34,8 @@ export type SaleView = {
   customerName: string | null;
   byName: string | null;
   itemCount?: number;
+  /** How it was paid, on list rows: "cash", "transfer", "pos". */
+  methods?: string[];
   view: "full";
 };
 

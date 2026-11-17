@@ -13,6 +13,7 @@ import {
   Banknote,
   BarChart3,
   Building2,
+  ChevronDown,
   ChevronLeft,
   HandCoins,
   Home,
@@ -40,7 +41,7 @@ import { dismissRejected, subscribe, summary } from "../../lib/offline/outbox";
 import { signOutEverywhere } from "../../lib/offline/sw-client";
 import { startBackgroundSync } from "../../lib/offline/sync";
 import { refreshOfflineCatalog } from "../../lib/stock-client";
-import { bottomNav, primaryNav, type NavId } from "../../lib/nav";
+import { bottomItemsFor, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
   home: Home,
@@ -100,6 +101,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [placeOpen, setPlaceOpen] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const businessId = profile.tenant?.businessId ?? profile.businesses[0]?.id ?? "";
   const branchId = profile.tenant?.branchId ?? "";
@@ -157,9 +159,9 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     window.addEventListener("online", refresh);
     return () => window.removeEventListener("online", refresh);
   }, [readsStock, tenantId, currentBranchId]);
-  const items = primaryNav.filter((item) => allowed.has(item.id) && navAllowed(access, item.id));
-  const bottom = items.filter((item) => (bottomNav as readonly string[]).includes(item.id));
-  const moreItems = items.filter((item) => !(bottomNav as readonly string[]).includes(item.id));
+  // Modules that are not built yet stay out of the menu until they are.
+  const items = primaryNav.filter((item) => item.enabled && allowed.has(item.id) && navAllowed(access, item.id));
+  const { bottom, more: moreItems } = bottomItemsFor(profile.tenant?.role, items);
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem("bizora-sidebar") === "collapsed");
@@ -168,6 +170,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   useEffect(() => {
     setMenuOpen(false);
     setMoreOpen(false);
+    setPlaceOpen(false);
   }, [pathname]);
 
   function toggleCollapsed() {
@@ -225,6 +228,9 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   }
 
   const staffMode = Boolean(profile.tenant?.deviceId);
+  const placeName = visibleBranches.find((branch) => branch.id === branchId)?.name ?? (branchId ? "" : visibleBranches.length > 1 ? t("allShops") : (visibleBranches[0]?.name ?? ""));
+  // Staff tied to one shop, and owners with one shop, have nothing to switch.
+  const canSwitchPlace = !staffMode && (profile.businesses.length > 1 || (visibleBranches.length > 1 && !profile.membership?.branchId));
 
   async function logout() {
     await signOutEverywhere();
@@ -300,7 +306,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
         <div className="px-2">{navigation(collapsed)}</div>
       </aside>
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
+        <header className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 md:px-6">
           <div className="md:hidden">
             <LazySheet
               open={menuOpen}
@@ -315,7 +321,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
               {navigation(false)}
             </LazySheet>
           </div>
-          <div className="flex min-w-0 max-w-56 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {profile.logoVersion && !logoFailed ? (
               // a private, signed-in picture; next/image cannot fetch it
               <img
@@ -326,54 +332,55 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                 onError={() => setLogoFailed(true)}
               />
             ) : (
-              <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <Building2 className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
             )}
-            <p className="min-w-0">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-primary">{t("currentBusiness")}</span>
-              <span className="block truncate text-sm font-semibold">{organizationName}</span>
-            </p>
+            {canSwitchPlace ? (
+              <LazySheet
+                open={placeOpen}
+                onOpenChange={setPlaceOpen}
+                title={t("switchPlace")}
+                trigger={
+                  <button type="button" className="flex min-h-11 min-w-0 items-center gap-1 rounded-control px-1 text-left" aria-label={t("switchPlaceLabel", { place: placeName })} data-testid="place-chip">
+                    <PlaceText organization={organizationName} place={placeName} />
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                  </button>
+                }
+              >
+                <div className="space-y-4">
+                  {profile.businesses.length > 1 ? (
+                    <label className="block space-y-1 text-sm font-medium">
+                      <span>{t("business")}</span>
+                      <Select value={businessId} onChange={(event) => void selectContext(event.target.value)}>
+                        {profile.businesses.map((business) => (
+                          <option key={business.id} value={business.id}>
+                            {business.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  ) : null}
+                  {visibleBranches.length > 0 ? (
+                    <label className="block space-y-1 text-sm font-medium">
+                      <span>{t("shop")}</span>
+                      <Select value={branchId} onChange={(event) => void selectContext(businessId, event.target.value || undefined)}>
+                        {profile.membership?.branchId ? null : <option value="">{t("allShops")}</option>}
+                        {visibleBranches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  ) : null}
+                </div>
+              </LazySheet>
+            ) : (
+              <div className="min-w-0 px-1">
+                <PlaceText organization={organizationName} place={staffMode ? `${t("shopMode")}${placeName ? ` · ${placeName}` : ""}` : placeName} />
+              </div>
+            )}
           </div>
-          {profile.tenant?.role ? (
-            <Badge className="border-primary bg-sidebar-active text-sidebar-active-fg">{roleLabel(profile.tenant.role)}</Badge>
-          ) : null}
-          {!staffMode && profile.businesses.length > 0 ? (
-            <Select
-              aria-label={t("business")}
-              className="max-w-48"
-              value={businessId}
-              onChange={(event) => void selectContext(event.target.value)}
-            >
-              {profile.businesses.map((business) => (
-                <option key={business.id} value={business.id}>
-                  {business.name}
-                </option>
-              ))}
-            </Select>
-          ) : null}
-          {staffMode ? (
-            <Badge tone="info">
-              {t("shopMode")}
-              {visibleBranches.find((branch) => branch.id === branchId)?.name
-                ? ` · ${visibleBranches.find((branch) => branch.id === branchId)?.name}`
-                : ""}
-            </Badge>
-          ) : null}
-          {!staffMode && visibleBranches.length > 0 ? (
-            <Select
-              aria-label={t("shop")}
-              className="max-w-48"
-              value={branchId}
-              onChange={(event) => void selectContext(businessId, event.target.value || undefined)}
-            >
-              {profile.membership?.branchId ? null : <option value="">{t("allShops")}</option>}
-              {visibleBranches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </Select>
-          ) : null}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             <NotificationBell />
             {staffMode ? (
               <button
@@ -437,7 +444,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             </Button>
           </div>
         ) : null}
-        {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email ? <EmailVerificationBanner /> : null}
+        {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email && pathname === "/app" ? <EmailVerificationBanner /> : null}
         <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">
           <AccessProvider value={access}>{children}</AccessProvider>
         </main>
@@ -454,7 +461,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-1 px-1 py-2 text-[11px] font-medium ${active ? "text-primary" : "text-muted"}`}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-medium ${active ? "text-primary" : "text-muted"}`}
               >
                 <Icon className="h-5 w-5" aria-hidden="true" />
                 {label(item.id)}
@@ -466,7 +473,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
             onOpenChange={setMoreOpen}
             title={t("more")}
             trigger={
-              <button type="button" className="flex flex-col items-center gap-1 px-1 py-2 text-[11px] font-medium text-muted">
+              <button type="button" className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-medium text-muted">
                 <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
                 {t("more")}
               </button>
@@ -474,7 +481,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           >
             <div className="flex flex-col gap-1">
               {moreItems.map((item) => (
-                <Link key={item.href} href={item.href} className="rounded-control px-3 py-2 text-sm font-medium">
+                <Link key={item.href} href={item.href} className="flex min-h-11 items-center rounded-control px-3 text-base font-medium hover:bg-sidebar-active">
                   {label(item.id)}
                 </Link>
               ))}
@@ -486,9 +493,21 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   );
 }
 
+const BANNER_KEY = "bizora.verifyBannerHiddenUntil";
+
+/** Shown on Home only. The owner can hide it for a week. */
 function EmailVerificationBanner() {
   const t = useTranslations("shell");
   const [notice, setNotice] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(true);
+
+  useEffect(() => {
+    try {
+      setHidden(Number(window.localStorage.getItem(BANNER_KEY) ?? 0) > Date.now());
+    } catch {
+      setHidden(false);
+    }
+  }, []);
 
   async function resend() {
     const response = await api("/api/v1/auth/email/verification", { method: "POST" });
@@ -496,13 +515,35 @@ function EmailVerificationBanner() {
     setNotice(response.ok ? t("resendOk") : (payload.error?.message ?? t("resendFailed")));
   }
 
+  function hide() {
+    setHidden(true);
+    try {
+      window.localStorage.setItem(BANNER_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    } catch {
+      // Hiding is a convenience; it simply shows again next time.
+    }
+  }
+
+  if (hidden) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-warning-bg px-4 py-3 text-sm text-fg">
-      <p>{t("verify")}</p>
-      <button type="button" className="font-medium text-primary" onClick={() => void resend()}>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-warning-bg px-4 py-2 text-sm text-fg" data-testid="verify-banner">
+      <p className="flex-1">{t("verify")}</p>
+      <button type="button" className="min-h-11 font-medium text-primary" onClick={() => void resend()}>
         {t("resend")}
       </button>
-      {notice ? <span>{notice}</span> : null}
+      <button type="button" className="min-h-11 text-muted" onClick={hide}>
+        {t("hideForNow")}
+      </button>
+      {notice ? <span className="basis-full">{notice}</span> : null}
     </div>
+  );
+}
+
+function PlaceText({ organization, place }: { organization: string; place: string }) {
+  return (
+    <span className="block min-w-0">
+      <span className="block truncate text-sm font-semibold leading-tight">{organization}</span>
+      {place ? <span className="block truncate text-xs text-muted">{place}</span> : null}
+    </span>
   );
 }

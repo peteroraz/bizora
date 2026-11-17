@@ -251,7 +251,7 @@ describe("job-function access", () => {
     expect(ownerHome.body.data.checklist.map((item: { id: string }) => item.id)).toEqual([
       "shop-place",
       "first-customer",
-      "what-you-sell",
+      "first-products",
       "invite-staff",
       "record-sale",
     ]);

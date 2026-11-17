@@ -28,7 +28,7 @@ function MoneyScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("title")} description={t("lead")} />
+      <PageHeader title={t("title")} intro={t("lead")} />
       <div className="grid gap-4 sm:grid-cols-2">
         {reconciles ? (
           <Card>

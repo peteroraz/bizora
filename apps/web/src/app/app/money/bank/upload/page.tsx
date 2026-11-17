@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { type ImportColumn, ImportReview } from "../../../../../components/import-review";
 import { RequireAccess } from "../../../../../components/require-access";
+import { BackLink } from "../../../../../components/action-link";
 
 const FIELDS: StatementImportField[] = ["date", "description", "reference", "moneyIn", "moneyOut"];
 const LABEL_KEY = "bizora.statementAccount";
@@ -34,9 +35,7 @@ function UploadScreen() {
         title={t("uploadTitle")}
         description={t("uploadLead")}
         actions={
-          <Link href="/app/money/bank" className="text-sm font-medium text-primary">
-            {t("backToInbox")}
-          </Link>
+          <BackLink href="/app/money/bank">{t("backToInbox")}</BackLink>
         }
       />
       <FormField id="statement-account" label={t("accountLabel")} hint={t("accountHint")}>

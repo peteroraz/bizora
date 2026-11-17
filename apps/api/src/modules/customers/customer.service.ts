@@ -33,6 +33,8 @@ import {
   subdivisions,
   users,
   sales,
+  products,
+  customerPayments,
 } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AddressService } from "../addresses/address.service.js";
@@ -100,7 +102,13 @@ export class CustomerService {
         href: "/app/settings?tab=shop",
       });
       if (has(Permission.CUSTOMERS_MANAGE)) checklist.push({ id: "first-customer", done: customerCount > 0, href: "/app/customers" });
-      checklist.push({ id: "what-you-sell", done: Boolean(business.whatYouSell?.trim()), href: "/app/settings?tab=shop" });
+      // Products on the shelf, not a sentence about them, are what lets the shop sell (6d).
+      const [firstProduct] = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id)))
+        .limit(1);
+      checklist.push({ id: "first-products", done: Boolean(firstProduct), href: "/app/stock/import" });
       if (business.staffFeaturesEnabled && has(Permission.STAFF_MANAGE)) {
         checklist.push({
           id: "invite-staff",
@@ -141,7 +149,7 @@ export class CustomerService {
   async list(tenant: TenantContext, query: string, page: number) {
     const business = await this.requireBusiness(tenant);
     if (!tenant.permissions.includes(Permission.CUSTOMERS_READ)) return this.lookup(tenant, business, query);
-    const filters = [this.customerScope(tenant, business.id)];
+    const filters = [this.customerScope(tenant, business.id), isNull(customers.archivedAt)];
     const needle = query.trim();
     if (needle) {
       const normalized = normalizePhoneToE164(needle, business.countryCode.trim());
@@ -234,7 +242,7 @@ export class CustomerService {
     const rows = await this.db
       .select()
       .from(customers)
-      .where(and(this.customerScope(tenant, business.id), match))
+      .where(and(this.customerScope(tenant, business.id), isNull(customers.archivedAt), match))
       .orderBy(asc(customers.name), asc(customers.id))
       .limit(LOOKUP_RESULT_LIMIT);
     return {
@@ -395,15 +403,41 @@ export class CustomerService {
     return this.get(tenant, id);
   }
 
+  /**
+   * Removes a customer. One with no history is deleted; one with sales or payments is archived instead, so old
+   * receipts and statements still name them (6d). Nobody who still owes money can be removed.
+   */
   async remove(tenant: TenantContext, id: string) {
     const existing = await this.requireCustomer(tenant, id);
-    await this.db.transaction(async (tx) => {
-      await tx.delete(customers).where(and(eq(customers.id, existing.id), eq(customers.tenantId, tenant.tenantId)));
+    return this.db.transaction(async (tx) => {
+      const [owing] = await tx
+        .select({ total: sql<string>`coalesce(sum(${sales.balanceMinor}), 0)` })
+        .from(sales)
+        .where(and(eq(sales.tenantId, tenant.tenantId), eq(sales.customerId, existing.id), eq(sales.historyOnly, false), inArray(sales.status, ["awaiting_release", "completed"])));
+      if (BigInt(owing?.total ?? 0) > 0n) {
+        throw new ApiError("CUSTOMER_OWES", "This customer still owes money. Collect it first, then remove them.", 409);
+      }
+      const [history] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(and(eq(sales.tenantId, tenant.tenantId), eq(sales.customerId, existing.id)))
+        .limit(1);
+      const [paid] = await tx
+        .select({ id: customerPayments.id })
+        .from(customerPayments)
+        .where(and(eq(customerPayments.tenantId, tenant.tenantId), eq(customerPayments.customerId, existing.id)))
+        .limit(1);
+      const archived = Boolean(history || paid);
+      if (archived) {
+        await tx.update(customers).set({ archivedAt: new Date(), updatedBy: tenant.userId }).where(and(eq(customers.id, existing.id), eq(customers.tenantId, tenant.tenantId)));
+      } else {
+        await tx.delete(customers).where(and(eq(customers.id, existing.id), eq(customers.tenantId, tenant.tenantId)));
+      }
       await this.audit.record(
         {
           tenantId: tenant.tenantId,
           actorUserId: tenant.userId,
-          action: "customer.deleted",
+          action: archived ? "customer.archived" : "customer.deleted",
           entityType: "customer",
           entityId: existing.id,
           correlationId: tenant.correlationId,
@@ -412,8 +446,8 @@ export class CustomerService {
         },
         tx,
       );
+      return { ok: true, archived };
     });
-    return { ok: true };
   }
 
   async listNotes(tenant: TenantContext, customerId: string) {

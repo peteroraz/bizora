@@ -2,10 +2,10 @@
 
 import { Permission, STOCK_IN_IMPORT_COLUMNS, type StockInImportField } from "@bizora/contracts";
 import { PageHeader } from "@bizora/ui";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { type ImportColumn, ImportReview } from "../../../../components/import-review";
 import { RequireAccess } from "../../../../components/require-access";
+import { BackLink } from "../../../../components/action-link";
 
 const FIELDS: StockInImportField[] = ["product", "quantity", "unit", "cost", "supplier", "paid", "ref"];
 
@@ -32,9 +32,7 @@ function DeliveryScreen() {
         title={t("stockInTitle")}
         description={t("stockInLead")}
         actions={
-          <Link href="/app/stock" className="text-sm font-medium text-primary">
-            {t("backToStock")}
-          </Link>
+          <BackLink href="/app/stock">{t("backToStock")}</BackLink>
         }
       />
       <ImportReview

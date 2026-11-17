@@ -2,11 +2,11 @@
 
 import { Permission, SALE_IMPORT_MODES, SALES_IMPORT_COLUMNS, type SalesImportField } from "@bizora/contracts";
 import { Card, PageHeader } from "@bizora/ui";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { type ImportColumn, ImportReview } from "../../../../components/import-review";
 import { RequireAccess } from "../../../../components/require-access";
+import { BackLink } from "../../../../components/action-link";
 
 const EXAMPLE: Record<SalesImportField, string> = {
   date: "16/11/2026",
@@ -33,9 +33,7 @@ function SalesImportScreen() {
         title={t("salesTitle")}
         description={t("salesLead")}
         actions={
-          <Link href="/app/sales" className="text-sm font-medium text-primary">
-            {t("backToSales")}
-          </Link>
+          <BackLink href="/app/sales">{t("backToSales")}</BackLink>
         }
       />
       <Card>

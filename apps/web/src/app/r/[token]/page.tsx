@@ -3,12 +3,16 @@ import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
-import { formatCurrency, formatWhen } from "../../../i18n/format";
+import { ShopHeading, ShopMessage } from "../../../components/shop-heading";
+import { formatCurrency, formatDay, formatWhen } from "../../../i18n/format";
 
 /** A receipt anyone with the WhatsApp link can open, without signing in. It shows only what is on the receipt. */
 type Receipt = {
   businessName: string;
   branchName: string;
+  shop?: { phone: string | null; address: string | null };
+  message?: string | null;
+  hasLogo?: boolean;
   customerName: string | null;
   number: string | null;
   invoiceNumber: string | null;
@@ -44,10 +48,13 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
 
   return (
     <main className="mx-auto max-w-md space-y-4 p-6">
-      <header>
-        <h1 className="text-xl font-semibold">{receipt.businessName}</h1>
-        <p className="text-sm text-muted">{receipt.branchName}</p>
-      </header>
+      <ShopHeading
+        name={receipt.businessName}
+        place={receipt.branchName}
+        address={receipt.shop?.address}
+        phone={receipt.shop?.phone}
+        logoSrc={receipt.hasLogo ? `/api/v1/public/receipts/${token}/logo` : null}
+      />
       <p className="text-sm">
         {receipt.number ? t("number", { number: receipt.number }) : t("invoiceNumber", { number: receipt.invoiceNumber ?? "" })}
         {receipt.number && receipt.invoiceNumber ? ` · ${t("invoiceNumber", { number: receipt.invoiceNumber })}` : ""}
@@ -105,10 +112,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
         {receipt.dueDate && receipt.status !== "awaiting_payment" ? (
           <>
             <dt className="text-muted">{t("due")}</dt>
-            <dd className="text-right">{receipt.dueDate}</dd>
+            <dd className="text-right">{formatDay(receipt.dueDate, locale)}</dd>
           </>
         ) : null}
       </dl>
+      <ShopMessage title={BigInt(receipt.balanceMinor) > 0n || receipt.status === "awaiting_payment" ? t("howToPay") : t("fromShop")} text={receipt.message ?? null} />
       {receipt.documents.length > 0 ? (
         <div className="flex flex-wrap gap-3">
           {receipt.documents.map((type) => (
@@ -122,7 +130,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
           ))}
         </div>
       ) : null}
-      <p className="text-xs text-muted">{t("footer")}</p>
+      <p className="text-xs text-muted">
+        {t("footer")}{" "}
+        <a href="/" className="text-primary">
+          {t("footerLink")}
+        </a>
+      </p>
     </main>
   );
 }

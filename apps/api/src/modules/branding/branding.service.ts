@@ -124,6 +124,24 @@ export class BrandingService {
     return { contentType: row.contentType, data: row.data, etag: `"${row.sha256.slice(0, 16)}"` };
   }
 
+  /** What customer pages show (6d): the owner's message for this page and whether there is a logo. No picture bytes. */
+  async publicBrand(tenantId: string, kind: "receipt" | "invoice"): Promise<{ message: string | null; hasLogo: boolean }> {
+    const [row] = await this.db
+      .select({ receiptMessage: organizations.receiptMessage, invoiceMessage: organizations.invoiceMessage, logo: organizationLogos.tenantId })
+      .from(organizations)
+      .leftJoin(organizationLogos, eq(organizationLogos.tenantId, organizations.id))
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+    return { message: (kind === "receipt" ? row?.receiptMessage : row?.invoiceMessage) ?? null, hasLogo: Boolean(row?.logo) };
+  }
+
+  /** The logo for a customer page, found from that page's own token by the caller. */
+  async logoForTenant(tenantId: string) {
+    const [row] = await this.db.select().from(organizationLogos).where(eq(organizationLogos.tenantId, tenantId)).limit(1);
+    if (!row) throw new ApiError("NOT_FOUND", "There is no logo.", 404);
+    return { contentType: row.contentType, data: row.data, etag: `"${row.sha256.slice(0, 16)}"` };
+  }
+
   /** Branding for one kind of document, read in the same transaction or connection as the document. */
   async documentBrand(executor: DbExecutor, tenantId: string, kind: BrandedDocument): Promise<DocumentBrand> {
     return brandFor(await this.companyBranding(executor, tenantId), kind);

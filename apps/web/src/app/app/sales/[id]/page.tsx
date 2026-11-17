@@ -11,11 +11,12 @@ import { SaleCollect } from "../../../../components/sale-collect";
 import { SaleComments } from "../../../../components/sale-comments";
 import { SaleDocuments } from "../../../../components/sale-documents";
 import { useUnitName } from "../../../../components/stock-quantity";
-import { formatCurrency, formatWhen } from "../../../../i18n/format";
+import { formatCurrency, formatDay, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { type SaleDetail, type SaleReleaseDetail, whatsAppLink } from "../../../../lib/sales-client";
+import { ActionLink, BackLink } from "../../../../components/action-link";
 
 type Loaded = (SaleDetail & { view: "full" }) | (SaleReleaseDetail & { view: "release" });
 
@@ -86,9 +87,14 @@ function SaleScreen() {
         title={sale.number ?? sale.invoiceNumber ?? full?.externalRef ?? t("historyRecord")}
         description={[when(sale.soldAt), sale.byName, sale.branchName].filter(Boolean).join(" · ")}
         actions={
-          <Link href="/app/sales" className="text-sm font-medium text-primary">
-            {t("allSales")}
-          </Link>
+          <>
+            <BackLink href="/app/sales">{t("allSales")}</BackLink>
+            {can(access, Permission.SALES_CREATE) ? (
+              <ActionLink href="/app/sales/new" variant="primary" className="h-12 px-6 text-base" data-testid="next-sale">
+                {t("nextSale")}
+              </ActionLink>
+            ) : null}
+          </>
         }
       />
       <div className="flex flex-wrap gap-2">
@@ -104,7 +110,7 @@ function SaleScreen() {
       {sale.historyOnly ? <p className="text-sm text-muted">{t("historyExplain")}</p> : null}
       {full?.voidReason ? <p className="text-sm text-danger">{t("voidedBecause", { reason: full.voidReason })}</p> : null}
 
-      {!sale.historyOnly ? (
+      {!sale.historyOnly && access.salesFlow === "desk" ? (
         <ol className="space-y-1 text-sm" aria-label={t("timeline")}>
           <li>{t("stepRecorded", { name: sale.byName ?? t("someone"), when: when(sale.soldAt) })}</li>
           {sale.collectedAt ? (
@@ -169,7 +175,7 @@ function SaleScreen() {
             {full.dueDate ? (
               <>
                 <dt className="text-muted">{t("dueDate")}</dt>
-                <dd className="text-right">{full.dueDate}</dd>
+                <dd className="text-right">{formatDay(full.dueDate, locale)}</dd>
               </>
             ) : null}
           </dl>
@@ -211,23 +217,32 @@ function SaleScreen() {
             whatsAppPrefix={full.whatsApp.hrefPrefix}
             whatsAppText={full.whatsApp.text}
           />
-          <div className="mt-3 flex flex-wrap gap-4 text-sm">
-            <a href={whatsAppLink(full, typeof window === "undefined" ? "" : window.location.origin)} target="_blank" rel="noreferrer" className="text-primary">
-              {full.whatsApp.phone ? t("sendWhatsAppCustomer") : t("sendWhatsApp")}
-            </a>
-            <button
-              type="button"
-              className="text-primary"
-              onClick={() => {
-                void navigator.clipboard?.writeText(`${window.location.origin}${full.receiptPath}`).then(() => setCopied(true));
-              }}
-            >
-              {copied ? t("copied") : t("copyLink")}
-            </button>
-            <Link href={full.receiptPath} className="text-primary" target="_blank">
-              {t("viewReceipt")}
-            </Link>
-          </div>
+          <details className="mt-3 text-sm">
+            <summary className="flex min-h-11 cursor-pointer items-center font-medium text-primary">{t("moreWaysToShare")}</summary>
+            <div className="flex flex-wrap gap-4 pt-1">
+              <a href={whatsAppLink(full, typeof window === "undefined" ? "" : window.location.origin)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-primary">
+                {full.documents.includes("receipt")
+                  ? full.whatsApp.phone
+                    ? t("sendWhatsAppCustomer")
+                    : t("sendWhatsApp")
+                  : full.whatsApp.phone
+                    ? t("sendInvoiceLinkCustomer")
+                    : t("sendInvoiceLink")}
+              </a>
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center text-primary"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(`${window.location.origin}${full.receiptPath}`).then(() => setCopied(true));
+                }}
+              >
+                {copied ? t("copied") : t("copyLinkPlain")}
+              </button>
+              <Link href={full.receiptPath} className="inline-flex min-h-11 items-center text-primary" target="_blank">
+                {t("viewAsCustomer")}
+              </Link>
+            </div>
+          </details>
         </Card>
       ) : null}
 

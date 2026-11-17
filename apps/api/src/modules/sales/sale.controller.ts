@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
 import { Permission, success } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
@@ -26,9 +26,15 @@ export class SaleController {
 
   @Get()
   @RequireAnyPermission(...SEE_SALES)
-  async list(@CurrentTenant() tenant: TenantContext, @Query("date") date?: string, @Query("page") page?: string, @Query("status") status?: string) {
+  async list(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("date") date?: string,
+    @Query("page") page?: string,
+    @Query("status") status?: string,
+    @Query("customerId") customerId?: string,
+  ) {
     return success(
-      await this.sales.list(tenant, { ...(date ? { date } : {}), ...(status ? { status } : {}), page: Number.parseInt(page ?? "1", 10) || 1 }),
+      await this.sales.list(tenant, { ...(date ? { date } : {}), ...(status ? { status } : {}), ...(customerId ? { customerId } : {}), page: Number.parseInt(page ?? "1", 10) || 1 }),
       tenant.correlationId,
     );
   }
@@ -108,6 +114,15 @@ export class PublicReceiptController {
   async document(@Param("token") token: string, @Param("type") type: string) {
     const { fileName, pdf } = await this.sales.publicDocument(token, documentType(type));
     return pdfFile(pdf, fileName);
+  }
+
+  @Get(":token/logo")
+  @Header("X-Content-Type-Options", "nosniff")
+  @Header("Content-Security-Policy", "default-src 'none'")
+  @Header("Cache-Control", "public, max-age=3600")
+  async logo(@Param("token") token: string) {
+    const logo = await this.sales.publicLogo(token);
+    return new StreamableFile(logo.data, { type: logo.contentType, disposition: "inline", length: logo.data.length });
   }
 }
 

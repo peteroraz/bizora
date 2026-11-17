@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
 import { DEBTOR_FILTERS, Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
@@ -86,5 +86,14 @@ export class PublicStatementController {
   async pdf(@Param("token") token: string) {
     const { fileName, pdf } = await this.payments.publicStatementPdf(token);
     return pdfFile(pdf, fileName);
+  }
+
+  @Get(":token/logo")
+  @Header("X-Content-Type-Options", "nosniff")
+  @Header("Content-Security-Policy", "default-src 'none'")
+  @Header("Cache-Control", "public, max-age=3600")
+  async logo(@Param("token") token: string) {
+    const logo = await this.payments.publicLogo(token);
+    return new StreamableFile(logo.data, { type: logo.contentType, disposition: "inline", length: logo.data.length });
   }
 }
