@@ -7,9 +7,11 @@ import { useEffect, useState } from "react";
 import { formatWhen } from "../../../i18n/format";
 import { api } from "../../../lib/api";
 
-type Notification = { id: string; kind: string; saleId: string | null; saleNumber: string | null; actorName: string | null; read: boolean; createdAt: string };
+type Notification = { id: string; kind: string; saleId: string | null; saleNumber: string | null; actorName: string | null; data?: { number?: string }; read: boolean; createdAt: string };
 
-const KINDS = ["sale.paid", "sale.credit", "sale.released", "sale.comment", "sale.voided"];
+const KINDS = ["sale.paid", "sale.credit", "sale.released", "sale.comment", "sale.voided", "transfer.waiting", "transfer.not_received"];
+/** Where each notification opens: transfers to check go to the list of transfers (ADR-031). */
+const hrefOf = (item: Notification) => (item.kind === "transfer.waiting" ? "/app/money/transfers" : item.saleId ? `/app/sales/${item.saleId}` : "/app");
 
 export default function NotificationsPage() {
   const t = useTranslations("notifications");
@@ -40,11 +42,11 @@ export default function NotificationsPage() {
         <ul className="divide-y divide-border rounded-card border border-border bg-card">
           {items.map((item) => {
             const text = KINDS.includes(item.kind)
-              ? t(`kind.${item.kind.replace("sale.", "")}`, { number: item.saleNumber ?? "", name: item.actorName ?? t("someone") })
+              ? t(`kind.${item.kind.replace("sale.", "").replace("transfer.", "transfer_")}`, { number: item.saleNumber ?? item.data?.number ?? "", name: item.actorName ?? t("someone") })
               : item.kind;
             return (
               <li key={item.id}>
-                <Link href={item.saleId ? `/app/sales/${item.saleId}` : "/app"} className="flex items-start justify-between gap-3 px-4 py-3">
+                <Link href={hrefOf(item)} className="flex items-start justify-between gap-3 px-4 py-3">
                   <span className={item.read ? "text-sm" : "text-sm font-semibold"}>{text}</span>
                   <span className="shrink-0 text-xs text-muted">{formatWhen(item.createdAt, locale, "Africa/Lagos")}</span>
                 </Link>

@@ -88,8 +88,16 @@ export type SaleDetail = Omit<SaleView, "itemCount"> &
   documents: ("invoice" | "receipt")[];
   whatsApp: { text: string; phone: string | null; hrefPrefix: string };
   lines: SaleLineView[];
-  payments: { method: "cash" | "transfer" | "pos"; amountMinor: string; reference: string | null }[];
-  laterPayments: { id: string; number: string; method: "cash" | "transfer" | "pos"; amountMinor: string; receivedAt: string }[];
+  payments: {
+    id: string;
+    method: "cash" | "transfer" | "pos";
+    amountMinor: string;
+    reference: string | null;
+    /** Transfers wait for someone who can see the bank (ADR-031). */
+    confirmation: "confirmed" | "waiting" | "not_received";
+    notReceivedAs: "owed" | "lost" | null;
+  }[];
+  laterPayments: { id: string; number: string; method: "cash" | "transfer" | "pos"; amountMinor: string; receivedAt: string; confirmation: "confirmed" | "waiting" | "not_received" }[];
   returnedMinor: string;
   returns: SaleReturn[];
   canReturn: boolean;

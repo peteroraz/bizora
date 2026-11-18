@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { IMPORT_MAX_ROWS, businessTypeFromIndustry, currencyDigits, reconcileSchema, statementImportSchema, type ImportRowResult, type ReconcileTarget } from "@bizora/contracts";
-import { and, isNull, asc, desc, eq, gt, ilike, inArray, sql, type SQL } from "drizzle-orm";
+import { and, isNull, asc, desc, eq, gt, ilike, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -10,6 +10,7 @@ import { customerPayments, customers, salePayments, sales, statementImports, sta
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { PaymentService } from "../debtors/payment.service.js";
+import { TransferService } from "../debtors/transfer.service.js";
 import { findBranch, requireBusiness, resolveBranch, type BusinessRow } from "../inventory/inventory-scope.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import { fingerprint, nameScore, parseStatementRow, referenceMatches } from "./statement-parse.js";
@@ -32,6 +33,7 @@ export class ReconciliationService {
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(LedgerPostingService) private readonly ledger: LedgerPostingService,
     @Inject(PaymentService) private readonly payments: PaymentService,
+    @Inject(TransferService) private readonly transfers: TransferService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
@@ -224,6 +226,8 @@ export class ReconciliationService {
       if (line.createdPayment && line.customerPaymentId) await this.payments.voidIn(tx, tenant, line.customerPaymentId, `Bank line on ${line.txnDate} unmatched`);
       if (line.journalEntryId) {
         await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, line.journalEntryId, { entryDate: line.txnDate, reason: `Bank line on ${line.txnDate} unmatched` });
+        // The transfer this line confirmed waits again (ADR-031).
+        if (line.matchKind === "recorded_payment") await this.transfers.resetIn(tx, tenant, line.journalEntryId);
       }
       await tx
         .update(statementLines)
@@ -300,6 +304,7 @@ export class ReconciliationService {
           eq(salePayments.tenantId, tenant.tenantId),
           eq(sales.businessId, business.id),
           eq(salePayments.method, "transfer"),
+          ne(salePayments.confirmation, "not_received"),
           eq(salePayments.amountMinor, line.amountMinor),
           inArray(sales.status, OPEN_SALES),
           sql`(timezone(${tz}, coalesce(${sales.collectedAt}, ${sales.soldAt})))::date ${window}`,
@@ -411,6 +416,11 @@ export class ReconciliationService {
           update.customerId = payment.customerId;
         }
         update.matchDetail = target.paymentType;
+        // A transfer still waiting for confirmation is confirmed by the statement (ADR-031).
+        {
+          const confirmed = await this.transfers.confirmIn(tx, tenant, target.paymentType, target.paymentId, { entryDate: line.txnDate, via: "bank_statement" });
+          if (confirmed) update.journalEntryId = confirmed;
+        }
         break;
       }
       case "debtor": {

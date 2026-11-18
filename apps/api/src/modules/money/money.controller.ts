@@ -5,6 +5,7 @@ import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
+import { DiscountsReportService } from "./discounts-report.service.js";
 import { MoneyService } from "./money.service.js";
 
 /**
@@ -15,7 +16,10 @@ import { MoneyService } from "./money.service.js";
 @Controller("api/v1/money")
 @UseGuards(TenantGuard, PermissionGuard)
 export class MoneyController {
-  constructor(@Inject(MoneyService) private readonly money: MoneyService) {}
+  constructor(
+    @Inject(MoneyService) private readonly money: MoneyService,
+    @Inject(DiscountsReportService) private readonly report: DiscountsReportService,
+  ) {}
 
   @Get("categories")
   @RequirePermissions(Permission.EXPENSES_RECORD)
@@ -81,6 +85,16 @@ export class MoneyController {
   @Idempotent()
   async count(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     return success({ count: await this.money.countCash(tenant, body) }, tenant.correlationId);
+  }
+
+  /** Discounts and cancellations (ADR-031): who gave money away at the counter, for a day or a month. */
+  @Get("discounts-cancellations")
+  @RequirePermissions(Permission.REPORTS_PROFIT_READ)
+  async discountsCancellations(@CurrentTenant() tenant: TenantContext, @Query("from") from?: string, @Query("to") to?: string, @Query("branchId") branchId?: string) {
+    return success(
+      await this.report.report(tenant, { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(branchId ? { branchId } : {}) }),
+      tenant.correlationId,
+    );
   }
 
   @Get("profit")

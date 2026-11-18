@@ -42,6 +42,7 @@ export default function AppHomePage() {
   const seesDebtors = shown.includes("debtors");
   const reconciles = can(access, Permission.BANK_RECONCILE) && shown.includes("money");
   const [bank, setBank] = useState<{ open: number } | null>(null);
+  const [transfersWaiting, setTransfersWaiting] = useState(0);
   const seesCash = shown.includes("cash");
   const seesProfit = can(access, Permission.REPORTS_PROFIT_READ) && shown.includes("money");
   const approvesExpenses = can(access, Permission.EXPENSES_APPROVE);
@@ -79,6 +80,10 @@ export default function AppHomePage() {
     if (!reconciles) return;
     void api("/api/v1/reconciliation/counts")
       .then(async (response) => (response.ok ? setBank((await response.json()).data) : undefined))
+      .catch(() => undefined);
+    // Transfers recorded by staff, waiting to be checked against the bank (ADR-031).
+    void api("/api/v1/transfers")
+      .then(async (response) => (response.ok ? setTransfersWaiting((await response.json()).data.waitingCount) : undefined))
       .catch(() => undefined);
   }, [reconciles]);
   const [debtors, setDebtors] = useState<{ currency: string; owingMinor: string; overdueMinor: string; debtors: number } | null>(null);
@@ -287,6 +292,11 @@ export default function AppHomePage() {
             ) : (
               <p className="mt-2 text-sm">{empty}</p>
             )}
+            {id === "money" && transfersWaiting > 0 ? (
+              <Link href="/app/money/transfers" className="mt-2 block text-sm font-medium text-warning" data-testid="home-transfers">
+                {t("transfersToCheck", { count: transfersWaiting })}
+              </Link>
+            ) : null}
             {id === "money" && bank && bank.open > 0 ? (
               <Link href="/app/money/bank" className="mt-2 block text-sm font-medium text-primary" data-testid="home-bank">
                 {t("bankToCheck", { count: bank.open })}

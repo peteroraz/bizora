@@ -160,14 +160,20 @@ function SaleScreen() {
             <dt className="font-medium">{t("total")}</dt>
             <dd className="text-right font-medium tabular-nums">{money(full.totalMinor)}</dd>
             {full.payments.map((payment, index) => (
-              <Fragment key={index}>
-                <dt className="text-muted">{t(`mode.${payment.method}`)}</dt>
-                <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
+              <Fragment key={payment.id ?? index}>
+                <dt className="text-muted">
+                  {t(`mode.${payment.method}`)}
+                  <TransferState confirmation={payment.confirmation} notReceivedAs={payment.notReceivedAs} />
+                </dt>
+                <dd className={`text-right tabular-nums ${payment.confirmation === "not_received" ? "text-muted line-through" : ""}`}>{money(payment.amountMinor)}</dd>
               </Fragment>
             ))}
             {full.laterPayments.map((payment) => (
               <Fragment key={payment.id}>
-                <dt className="text-muted">{t("paidLater", { number: payment.number })}</dt>
+                <dt className="text-muted">
+                  {t("paidLater", { number: payment.number })}
+                  <TransferState confirmation={payment.confirmation} notReceivedAs={null} />
+                </dt>
                 <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
               </Fragment>
             ))}
@@ -301,4 +307,20 @@ export default function SalePage() {
       <SaleScreen />
     </RequireAccess>
   );
+}
+
+/** Shows when a transfer is still waiting to be checked against the bank, or never came (ADR-031). */
+function TransferState({ confirmation, notReceivedAs }: { confirmation: string | undefined; notReceivedAs: "owed" | "lost" | null }) {
+  const t = useTranslations("sales.transferState");
+  if (confirmation === "waiting") {
+    return (
+      <span className="block text-xs text-warning" data-testid="transfer-waiting-label">
+        {t("waiting")}
+      </span>
+    );
+  }
+  if (confirmation === "not_received") {
+    return <span className="block text-xs text-danger">{notReceivedAs === "lost" ? t("lost") : t("owed")}</span>;
+  }
+  return null;
 }

@@ -31,6 +31,8 @@ export type LedgerRole =
   | "expense"
   | "bank_charges"
   | "cash_over_short"
+  | "transfers_waiting"
+  | "transfers_lost"
   | "fx";
 
 export type AccountTemplate = { code: string; name: string; type: LedgerAccountType; role: LedgerRole };
@@ -47,6 +49,7 @@ export function cashAccountName(branchName: string): string {
 const base: AccountTemplate[] = [
   { code: "1100", name: "Bank accounts", type: "asset", role: "bank" },
   { code: "1150", name: "POS and transfer payments to receive", type: "asset", role: "pos_clearing" },
+  { code: "1160", name: "Transfers waiting for confirmation", type: "asset", role: "transfers_waiting" },
   { code: "1190", name: "Money moving between own accounts", type: "asset", role: "transfer_clearing" },
   { code: "1200", name: "Customers who owe", type: "asset", role: "debtors" },
   { code: "2000", name: "Suppliers we owe", type: "liability", role: "payable" },
@@ -69,6 +72,7 @@ const base: AccountTemplate[] = [
   { code: "6900", name: "Other expenses", type: "expense", role: "expense" },
   // A drawer that counts more or less than expected (ADR-028). Short is a cost; over lowers it.
   { code: "6950", name: "Cash short or over", type: "expense", role: "cash_over_short" },
+  { code: "6960", name: "Transfers that never arrived", type: "expense", role: "transfers_lost" },
   { code: "7000", name: "Exchange rate gains and losses", type: "expense", role: "fx" },
 ];
 

@@ -18,13 +18,14 @@ import {
   type SaleCreateInput,
   type SaleStatus,
 } from "@bizora/contracts";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, users } from "../../db/schema.js";
+import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -162,7 +163,8 @@ export class SaleService {
       });
       await this.insertLines(tx, tenant, business.id, id, lines, []);
       if (settled) {
-        await this.insertPayments(tx, tenant, business.id, id, payload.payments);
+        await this.insertPayments(tx, tenant, business.id, id, payload.payments, settled.transfersWait);
+        if (settled.transfersWait) await this.askToCheckTransfer(tx, tenant, business.id, id);
         await this.takeStock(tx, tenant, business, branch, id, receiptNumber ?? "", soldAt);
       }
       if (payload.comment) await this.addComment(tx, tenant, business.id, id, payload.comment, settled && settled.balance > 0n ? "credit" : "comment");
@@ -226,7 +228,8 @@ export class SaleService {
           collectedMembershipId: tenant.membershipId,
         })
         .where(and(eq(sales.tenantId, tenant.tenantId), eq(sales.id, sale.id)));
-      await this.insertPayments(tx, tenant, business.id, sale.id, payload.payments);
+      await this.insertPayments(tx, tenant, business.id, sale.id, payload.payments, settled.transfersWait);
+      if (settled.transfersWait) await this.askToCheckTransfer(tx, tenant, business.id, sale.id);
       if (payload.comment) await this.addComment(tx, tenant, business.id, sale.id, payload.comment, settled.balance > 0n ? "credit" : "comment");
       const storeKeepers = await this.storeKeepers(tx, tenant.tenantId, business.id, sale.branchId);
       await this.notifications.notify(tx, tenant.tenantId, [sale.membershipId, ...storeKeepers], {
@@ -371,8 +374,20 @@ export class SaleService {
       }
       const business = await requireBusiness(tx, tenant);
       const today = localDate(new Date(), business.timezone);
+      // Transfers already checked (ADR-031): undo the check too, so the money comes back out of the bank (or out of
+      // what the customer owes, or out of the loss). One matched to a bank statement is unmatched there first.
+      const checked = await tx
+        .select({ entryId: salePayments.confirmationEntryId, via: salePayments.confirmedVia })
+        .from(salePayments)
+        .where(and(eq(salePayments.tenantId, tenant.tenantId), eq(salePayments.saleId, sale.id), isNotNull(salePayments.confirmationEntryId)));
+      if (checked.some((payment) => payment.via === "bank_statement")) {
+        throw new ApiError("MATCHED_TO_BANK", "A transfer on this sale is matched to a bank statement line. Unmatch it in Bank first.", 409);
+      }
       if (!sale.historyOnly && sale.journalEntryId) {
         await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, sale.journalEntryId, { entryDate: today, reason: `Sale ${sale.saleNumber ?? sale.invoiceNumber} cancelled: ${reason}` });
+      }
+      for (const payment of checked) {
+        if (payment.entryId) await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, payment.entryId, { entryDate: today, reason: `Sale ${sale.saleNumber ?? sale.invoiceNumber} cancelled: ${reason}` });
       }
       if (!sale.historyOnly) {
         const lines = await tx.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id)));
@@ -609,15 +624,23 @@ export class SaleService {
         lineTotalMinor: line.lineTotalMinor.toString(),
         ...(seeCost && line.costMinor !== null ? { costMinor: line.costMinor.toString() } : {}),
       })),
-      payments: payments.map((payment) => ({ method: payment.method, amountMinor: payment.amountMinor.toString(), reference: payment.reference })),
+      payments: payments.map((payment) => ({
+        id: payment.id,
+        method: payment.method,
+        amountMinor: payment.amountMinor.toString(),
+        reference: payment.reference,
+        // Transfers waiting for confirmation, or that never came (ADR-031).
+        confirmation: payment.confirmation,
+        notReceivedAs: payment.notReceivedAs,
+      })),
       // Debtor payments made after the sale (ADR-019).
-      laterPayments: laterPayments.map((payment) => ({ id: payment.id, number: payment.number, method: payment.method, amountMinor: payment.amount.toString(), receivedAt: payment.receivedAt })),
+      laterPayments: laterPayments.map((payment) => ({ id: payment.id, number: payment.number, method: payment.method, amountMinor: payment.amount.toString(), receivedAt: payment.receivedAt, confirmation: payment.confirmation })),
     };
   }
 
   private laterPayments(sale: SaleRow) {
     return this.db
-      .select({ id: customerPayments.id, number: customerPayments.paymentNumber, method: customerPayments.method, amount: paymentAllocations.amountMinor, receivedAt: customerPayments.receivedAt })
+      .select({ id: customerPayments.id, number: customerPayments.paymentNumber, method: customerPayments.method, amount: paymentAllocations.amountMinor, receivedAt: customerPayments.receivedAt, confirmation: customerPayments.confirmation })
       .from(paymentAllocations)
       .innerJoin(customerPayments, and(eq(customerPayments.tenantId, paymentAllocations.tenantId), eq(customerPayments.id, paymentAllocations.paymentId)))
       .where(and(eq(paymentAllocations.tenantId, sale.tenantId), eq(paymentAllocations.saleId, sale.id), eq(customerPayments.status, "recorded")))
@@ -876,7 +899,13 @@ export class SaleService {
 
     const income = businessTypeFromIndustry(business.industryCode) === "services" ? "service_income" : "sales";
     const posting: PostingLine[] = [];
-    const methodAccount = { cash: { role: "cash" as const, branchId: branch.id }, transfer: { role: "bank" as const }, pos: { role: "pos_clearing" as const } };
+    // Staff who cannot see the bank put transfers in "waiting for confirmation" until someone checks (ADR-031).
+    const transfersWait = transferWaits(tenant, input.source) && (paidByMethod.get("transfer") ?? 0n) > 0n;
+    const methodAccount = {
+      cash: { role: "cash" as const, branchId: branch.id },
+      transfer: { role: transfersWait ? ("transfers_waiting" as const) : ("bank" as const) },
+      pos: { role: "pos_clearing" as const },
+    };
     for (const [method, amount] of paidByMethod) {
       if (amount > 0n) posting.push({ account: methodAccount[method as keyof typeof methodAccount], debitMinor: amount, memo: method });
     }
@@ -900,7 +929,7 @@ export class SaleService {
       );
       journalEntryId = posted.entryId;
     }
-    return { paid, balance, journalEntryId, overLimit };
+    return { paid, balance, journalEntryId, overLimit, transfersWait };
   }
 
   /** Takes the sale's goods out of stock (counted products only) and remembers each line's cost. */
@@ -928,7 +957,7 @@ export class SaleService {
     }
   }
 
-  private async insertPayments(tx: DbExecutor, tenant: TenantContext, businessId: string, saleId: string, payments: Payment[]) {
+  private async insertPayments(tx: DbExecutor, tenant: TenantContext, businessId: string, saleId: string, payments: Payment[], transfersWait = false) {
     const rows = payments.filter((payment) => BigInt(payment.amountMinor) > 0n);
     if (rows.length === 0) return;
     await tx.insert(salePayments).values(
@@ -940,8 +969,19 @@ export class SaleService {
         method: payment.method,
         amountMinor: BigInt(payment.amountMinor),
         reference: payment.reference ?? null,
+        confirmation: transfersWait && payment.method === "transfer" ? "waiting" : "confirmed",
       })),
     );
+  }
+
+  /** Tells the people who can see the bank that a transfer needs checking (ADR-031). */
+  private async askToCheckTransfer(tx: DbExecutor, tenant: TenantContext, businessId: string, saleId: string) {
+    await this.notifications.notify(tx, tenant.tenantId, await bankCheckers(tx, tenant.tenantId, businessId), {
+      kind: "transfer.waiting",
+      saleId,
+      actorName: await this.actorName(tx, tenant),
+      except: tenant.membershipId,
+    });
   }
 
   private async addComment(tx: DbExecutor, tenant: TenantContext, businessId: string, saleId: string, body: string, kind: "comment" | "credit") {
