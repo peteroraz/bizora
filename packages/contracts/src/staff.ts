@@ -1,25 +1,12 @@
 import { z } from "zod";
 import { optionalPhoneSchema } from "./address.js";
+import { STAFF_ROLES, isWeakPin } from "./staff-roles.js";
 
-/**
- * Roles that can be given to shop staff created without email (PIN on an enrolled shop device).
- * UI labels (Addendum v1.2 §5): SALES = "Sales staff", INVENTORY = "Storekeeper",
- * CASHIER = "Cashier", EMPLOYEE = "Shop helper". Managers, accountants and owners sign in with
- * email or Google and are invited the normal way.
- */
-export const STAFF_ROLES = ["SALES", "CASHIER", "INVENTORY", "EMPLOYEE"] as const;
+export { STAFF_ROLES, isWeakPin };
+
 export const staffRoleSchema = z.enum(STAFF_ROLES);
 export type StaffRole = z.infer<typeof staffRoleSchema>;
 
-
-/** Rejects PINs that are trivially guessed: all the same digit, or straight runs like 1234 / 9876. */
-export function isWeakPin(pin: string): boolean {
-  if (/^(\d)\1+$/.test(pin)) return true;
-  const digits = pin.split("").map(Number);
-  const ascending = digits.every((digit, index) => index === 0 || digit === ((digits[index - 1] ?? 0) + 1) % 10);
-  const descending = digits.every((digit, index) => index === 0 || digit === ((digits[index - 1] ?? 0) + 9) % 10);
-  return ascending || descending;
-}
 
 export const pinSchema = z
   .string()

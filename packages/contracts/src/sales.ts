@@ -8,7 +8,7 @@ export { SALE_PAGE_SIZE, IMPORT_MAX_ROWS } from "./constants.js";
 export const PAYMENT_METHODS = ["cash", "transfer", "pos"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-const minorAmount = z.string().trim().regex(/^\d{1,15}$/, "Enter an amount in kobo.");
+const minorAmount = z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas).");
 const quantity = z.string().trim().refine((value) => parseQuantity(value) !== null, "Enter a quantity above zero, with up to 3 decimals.");
 
 export const saleLineInputSchema = z.object({

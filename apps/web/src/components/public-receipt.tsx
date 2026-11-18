@@ -64,7 +64,7 @@ export async function ReceiptView({ token, receipt }: { token: string; receipt: 
         {receipt.number && receipt.invoiceNumber ? ` · ${t("invoiceNumber", { number: receipt.invoiceNumber })}` : ""}
         {receipt.provisionalNumber ? ` · ${t("offlineNumber", { number: receipt.provisionalNumber })}` : ""}
         <br />
-        {formatWhen(receipt.soldAt, locale, "Africa/Lagos")}
+        {formatWhen(receipt.soldAt, locale, Intl.DateTimeFormat().resolvedOptions().timeZone)}
       </p>
       {receipt.status === "voided" ? (
         <p className="rounded-card border border-danger bg-danger-bg px-3 py-2 text-sm text-danger" role="status">

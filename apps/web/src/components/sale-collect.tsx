@@ -1,11 +1,12 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, parseMoneyInput, uuidv7 } from "@bizora/contracts";
-import { Button, Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import { IDEMPOTENCY_HEADER, Permission, parseAmount, uuidv7 } from "@bizora/contracts";
+import { Button, Card, FormField, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { dayKey, formatCurrency } from "../i18n/format";
 import { DueDatePicker } from "./due-date-picker";
+import { AmountInput, SentenceInput } from "./typing";
 import { can } from "../lib/access";
 import { useAccess } from "../lib/access-context";
 import { api } from "../lib/api";
@@ -37,13 +38,13 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [given, setGiven] = useState("");
-  const givenMinor = given.trim() ? parseMoneyInput(given) : null;
+  const givenMinor = given.trim() ? parseAmount(given, sale.currency) : null;
   const change = givenMinor !== null ? givenMinor - total : null;
   const money = (minor: bigint) => formatCurrency(minor, sale.currency, locale);
 
   const parts =
     mode === "split" || mode === "credit"
-      ? (["cash", "transfer", "pos"] as const).map((method) => ({ method, amountMinor: amounts[method].trim() ? parseMoneyInput(amounts[method]) : 0n })).filter((part) => part.amountMinor !== 0n)
+      ? (["cash", "transfer", "pos"] as const).map((method) => ({ method, amountMinor: amounts[method].trim() ? parseAmount(amounts[method], sale.currency) : 0n })).filter((part) => part.amountMinor !== 0n)
       : [{ method: mode, amountMinor: total }];
   const paid = parts.reduce((sum, part) => sum + (part.amountMinor ?? 0n), 0n);
   const balance = total - paid;
@@ -119,7 +120,7 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
         {mode === "cash" ? (
           <div className="flex flex-wrap items-end gap-3">
             <FormField id="collect-given" label={t("cashGiven")} hint={t("optional")}>
-              <Input id="collect-given" inputMode="decimal" className="max-w-40" value={given} onChange={(event) => setGiven(event.target.value)} />
+              <AmountInput currency={sale.currency} id="collect-given" className="max-w-40" value={given} onChange={(event) => setGiven(event.target.value)} />
             </FormField>
             {change !== null ? (
               <p className={`pb-6 text-base font-semibold tabular-nums ${change < 0n ? "text-danger" : "text-success"}`} role="status">
@@ -132,7 +133,7 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
           <div className="grid gap-2 sm:grid-cols-3">
             {(["cash", "transfer", "pos"] as const).map((method) => (
               <FormField key={method} id={`collect-${method}`} label={mode === "credit" ? t("paidNow", { method: t(`mode.${method}`) }) : t(`mode.${method}`)}>
-                <Input id={`collect-${method}`} inputMode="decimal" value={amounts[method]} onChange={(event) => setAmounts({ ...amounts, [method]: event.target.value })} />
+                <AmountInput currency={sale.currency} id={`collect-${method}`} value={amounts[method]} onChange={(event) => setAmounts({ ...amounts, [method]: event.target.value })} />
               </FormField>
             ))}
           </div>
@@ -155,12 +156,12 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
               <DueDatePicker id="collect-due" value={dueDate} today={dayKey(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} onChange={setDueDate} />
             </FormField>
             <FormField id="collect-comment" label={t("creditComment")}>
-              <Input id="collect-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
+              <SentenceInput id="collect-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
             </FormField>
           </div>
         ) : (
           <FormField id="collect-comment" label={t("cashierComment")} hint={t("optional")}>
-            <Input id="collect-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
+            <SentenceInput id="collect-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
           </FormField>
         )}
         {error ? (

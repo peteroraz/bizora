@@ -1,13 +1,14 @@
 "use client";
 
 import { businessTypeSchema, staffCountBandSchema, type BusinessType, type StaffCountBand } from "@bizora/contracts";
-import { Button, Card, FormField, Input, SafeForm, Select, SubmitButton } from "@bizora/ui";
+import { Button, Card, FormField, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { AddressFields } from "../../../components/address-fields";
 import { api } from "../../../lib/api";
 import { addressPayload } from "../../../lib/address-client";
 import { emptyAddress, loadCountries, loadSubdivisions, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
+import { SentenceInput, WholeNumberInput } from "../../../components/typing";
 
 const types = businessTypeSchema.options;
 const bands = staffCountBandSchema.options;
@@ -233,7 +234,7 @@ export default function OnboardingPage() {
         {step === 4 ? (
           <div className="mt-6 space-y-4">
             <FormField id="shops" label={t("shopsTitle")}>
-              <Input id="shops" inputMode="numeric" min={1} value={branchCount} onChange={(event) => setBranchCount(event.target.value)} />
+              <WholeNumberInput id="shops" value={branchCount} onChange={(event) => setBranchCount(event.target.value)} />
             </FormField>
             {buttons(3, () => setStep(5))}
           </div>
@@ -261,7 +262,7 @@ export default function OnboardingPage() {
               </div>
             ) : null}
             <FormField id="sell" label={t("sellLabel")} hint={common("optional")}>
-              <Input id="sell" value={whatYouSell} onChange={(event) => setWhatYouSell(event.target.value)} />
+              <SentenceInput id="sell" value={whatYouSell} onChange={(event) => setWhatYouSell(event.target.value)} />
             </FormField>
             <p className="text-sm text-muted">{t("sellNext")}</p>
             <div className="flex flex-wrap gap-3 pt-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, parseMoneyInput, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, parseAmount, uuidv7 } from "@bizora/contracts";
 import { FormField, Input, PageHeader, SafeForm, SubmitButton, Textarea } from "@bizora/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -8,7 +8,9 @@ import { useTranslations } from "next-intl";
 import { RequireAccess } from "../../../../components/require-access";
 import { AddressFields } from "../../../../components/address-fields";
 import { can } from "../../../../lib/access";
-import { useAccess } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
+import { AmountInput, EmailInput, NameInput } from "../../../../components/typing";
+import { checkTypedPhone, PhoneInput } from "../../../../components/phone-input";
 import { api } from "../../../../lib/api";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
@@ -26,7 +28,8 @@ function NewCustomerPageScreen() {
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [tags, setTags] = useState("");
-  const [address, setAddress] = useState(emptyAddress("NG"));
+  const place = usePlace();
+  const [address, setAddress] = useState(emptyAddress(place.country));
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [subdivisions, setSubdivisions] = useState<SubdivisionOption[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +37,7 @@ function NewCustomerPageScreen() {
   const [pending, setPending] = useState(false);
   const [savedOffline, setSavedOffline] = useState(false);
   const access = useAccess();
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const { owner } = access;
   // Managers and owners can approve a new customer for credit straight away (ADR-016).
   const canApprove = can(access, Permission.DEBTORS_MANAGE);
@@ -55,7 +59,7 @@ function NewCustomerPageScreen() {
     setEmail("");
     setNotes("");
     setTags("");
-    setAddress(emptyAddress("NG"));
+    setAddress(emptyAddress(place.country));
     setCreditAllowed(false);
     setCreditLimit("");
   }
@@ -65,9 +69,16 @@ function NewCustomerPageScreen() {
     setError(null);
     setDuplicateId(null);
     setSavedOffline(false);
-    const limitMinor = creditAllowed && creditLimit.trim() ? parseMoneyInput(creditLimit) : null;
+    const limitMinor = creditAllowed && creditLimit.trim() ? parseAmount(creditLimit, place.currency) : null;
     if (creditAllowed && creditLimit.trim() && limitMinor === null) {
       setError(t("creditLimitInvalid"));
+      setPending(false);
+      return;
+    }
+    // Checked here too, so a number saved with no network is already right when it syncs.
+    const checked = walkIn ? null : await checkTypedPhone(phone, place.country);
+    if (!walkIn && !checked?.ok) {
+      setPhoneError(t("phoneCheck"));
       setPending(false);
       return;
     }
@@ -76,7 +87,7 @@ function NewCustomerPageScreen() {
       id: uuidv7(),
       name,
       isWalkIn: walkIn,
-      phone: walkIn ? undefined : phone,
+      phone: checked?.ok ? checked.e164 : undefined,
       email: email.trim() || null,
       notesSummary: notes.trim() || null,
       tags: tags
@@ -128,7 +139,7 @@ function NewCustomerPageScreen() {
       ) : null}
       <SafeForm className="space-y-4" pending={pending} onSubmit={save}>
         <FormField id="customer-name" label={common("name")}>
-          <Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} required />
+          <NameInput id="customer-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
         </FormField>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -142,14 +153,23 @@ function NewCustomerPageScreen() {
           {t("walkInLabel")}
         </label>
         {walkIn ? null : (
-          <FormField id="customer-phone" label={common("phone")}>
-            <Input id="customer-phone" value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" required />
+          <FormField id="customer-phone" label={common("phone")} error={phoneError ?? undefined}>
+            <PhoneInput
+              id="customer-phone"
+              country={place.country}
+              value={phone}
+              onChange={(event) => {
+                setPhoneError(null);
+                setPhone(event.target.value);
+              }}
+              required
+            />
           </FormField>
         )}
         {details ? (
           <>
             <FormField id="customer-email" label={common("email")} hint={common("optional")}>
-              <Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+              <EmailInput id="customer-email" value={email} onChange={(event) => setEmail(event.target.value)} />
             </FormField>
             <FormField id="customer-tags" label={t("tags")} hint={t("tagsHint")}>
               <Input id="customer-tags" value={tags} onChange={(event) => setTags(event.target.value)} />
@@ -172,7 +192,7 @@ function NewCustomerPageScreen() {
             </label>
             {creditAllowed ? (
               <FormField id="customer-credit-limit" label={t("creditLimitLabel")} hint={t("creditLimitHint")}>
-                <Input id="customer-credit-limit" inputMode="decimal" value={creditLimit} onChange={(event) => setCreditLimit(event.target.value)} />
+                <AmountInput currency={place.currency} id="customer-credit-limit" value={creditLimit} onChange={(event) => setCreditLimit(event.target.value)} />
               </FormField>
             ) : null}
           </div>

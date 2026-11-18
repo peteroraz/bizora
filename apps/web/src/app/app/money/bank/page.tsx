@@ -8,6 +8,7 @@ import { RequireAccess } from "../../../../components/require-access";
 import { formatCurrency, formatDay } from "../../../../i18n/format";
 import { api } from "../../../../lib/api";
 import { ActionLink } from "../../../../components/action-link";
+import { SentenceInput } from "../../../../components/typing";
 
 type Suggestion = { target: ReconcileTarget; confidence: "exact" | "likely" | "possible"; label: string; detail: Record<string, string | null> };
 type Line = {
@@ -336,7 +337,7 @@ function Classify({ line, currency, busy, onSave }: { line: Line; currency: stri
       ) : null}
       {choice === "ignored" ? (
         <FormField id={`classify-reason-${line.id}`} label={t("reason")}>
-          <Input id={`classify-reason-${line.id}`} value={reason} maxLength={200} onChange={(event) => setReason(event.target.value)} />
+          <SentenceInput id={`classify-reason-${line.id}`} value={reason} maxLength={200} onChange={(event) => setReason(event.target.value)} />
         </FormField>
       ) : null}
       {choice !== "ignored" ? (

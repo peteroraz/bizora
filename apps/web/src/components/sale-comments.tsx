@@ -1,16 +1,19 @@
 "use client";
 
 import { IDEMPOTENCY_HEADER, uuidv7 } from "@bizora/contracts";
-import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import { Card, FormField, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { formatWhen } from "../i18n/format";
 import { api } from "../lib/api";
 import type { SaleComment } from "../lib/sales-client";
+import { SentenceInput } from "./typing";
+import { usePlace } from "../lib/access-context";
 
 /** Comments from the sales person, cashier and store keeper. They cannot be changed once written. */
 export function SaleComments({ saleId, comments, onAdded }: { saleId: string; comments: SaleComment[]; onAdded: () => void }) {
   const t = useTranslations("sales");
+  const place = usePlace();
   const roles = useTranslations("roles");
   const locale = useLocale();
   const [body, setBody] = useState("");
@@ -47,14 +50,14 @@ export function SaleComments({ saleId, comments, onAdded }: { saleId: string; co
               {comment.body}
             </p>
             <p className="text-xs text-muted">
-              {[comment.byName, comment.role && roles.has(comment.role) ? roles(comment.role) : comment.role, formatWhen(comment.createdAt, locale, "Africa/Lagos")].filter(Boolean).join(" · ")}
+              {[comment.byName, comment.role && roles.has(comment.role) ? roles(comment.role) : comment.role, formatWhen(comment.createdAt, locale, place.timezone)].filter(Boolean).join(" · ")}
             </p>
           </li>
         ))}
       </ul>
       <SafeForm className="mt-3 flex flex-wrap items-end gap-2" pending={pending} onSubmit={() => void add()}>
         <FormField id="sale-new-comment" label={t("addComment")}>
-          <Input id="sale-new-comment" value={body} maxLength={500} onChange={(event) => setBody(event.target.value)} />
+          <SentenceInput id="sale-new-comment" value={body} maxLength={500} onChange={(event) => setBody(event.target.value)} />
         </FormField>
         <SubmitButton pending={pending} pendingLabel={t("saving")}>
           {t("postComment")}

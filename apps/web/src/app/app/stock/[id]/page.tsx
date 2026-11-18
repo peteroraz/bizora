@@ -6,12 +6,13 @@ import {
   STOCK_ADD_REASONS,
   STOCK_REMOVE_REASONS,
   parseCountQuantity,
-  parseMoneyInput,
+  amountText,
+  parseAmount,
   parseQuantity,
   quantityToString,
   uuidv7,
 } from "@bizora/contracts";
-import { Badge, Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
+import { Badge, Button, Card, FormField, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +26,7 @@ import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
 import type { ProductView } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
+import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
   currency: string;
@@ -48,12 +50,27 @@ type Movement = {
 };
 type Message = { tone: "success" | "warning" | "danger"; text: string } | null;
 
-/** Kobo to an editable naira amount, exactly: "150050" → "1500.50". */
-function nairaInput(minor: string | null | undefined) {
-  if (!minor) return "";
-  const value = BigInt(minor);
-  const kobo = value % 100n;
-  return kobo === 0n ? (value / 100n).toString() : `${value / 100n}.${kobo.toString().padStart(2, "0")}`;
+/** A saved amount back into a box, exactly and in the currency's decimals: "150050" → "1,500.50". */
+function amountInput(minor: string | null | undefined, currency: string) {
+  return minor ? amountText(BigInt(minor), currency) : "";
+}
+
+/** Stock in: the cost of one unit and the total work each other out from the quantity, whichever is typed. */
+type ReceiveDraft = { quantity: string; each: string; total: string; typed: "each" | "total" | null };
+const emptyReceive: ReceiveDraft = { quantity: "", each: "", total: "", typed: null };
+
+function workOutReceive(draft: ReceiveDraft, currency: string): ReceiveDraft {
+  const quantity = parseQuantity(draft.quantity);
+  if (quantity === null) return draft;
+  if (draft.typed === "each") {
+    const each = parseAmount(draft.each, currency);
+    return { ...draft, total: each === null ? "" : amountText((quantity * each + 500n) / 1000n, currency) };
+  }
+  if (draft.typed === "total") {
+    const total = parseAmount(draft.total, currency);
+    return { ...draft, each: total === null ? "" : amountText((total * 1000n + quantity / 2n) / quantity, currency) };
+  }
+  return draft;
 }
 
 function ProductScreen() {
@@ -71,6 +88,7 @@ function ProductScreen() {
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [receive, setReceive] = useState<ReceiveDraft>(emptyReceive);
 
   const load = useCallback(async () => {
     try {
@@ -185,10 +203,10 @@ function ProductScreen() {
             pending={busy === "receive"}
             onSubmit={async (event) => {
               const form = new FormData(event.currentTarget);
-              const quantity = field(form, "quantity");
-              const cost = field(form, "totalCost");
+              const quantity = receive.quantity.replace(/,/g, "");
+              const cost = receive.total;
               if (!parseQuantity(quantity)) return setMessage({ tone: "danger", text: t("invalidQuantity") });
-              if (cost && parseMoneyInput(cost) === null) return setMessage({ tone: "danger", text: t("invalidAmount") });
+              if (cost && parseAmount(cost, product.currency) === null) return setMessage({ tone: "danger", text: t("invalidAmount") });
               const ok = await submit(
                 "receive",
                 "/api/v1/stock/receive",
@@ -198,21 +216,46 @@ function ProductScreen() {
                   quantity,
                   unit: field(form, "unit"),
                   paidFrom: field(form, "paidFrom") || "credit",
-                  ...(cost ? { totalCostMinor: (parseMoneyInput(cost) as bigint).toString() } : {}),
+                  ...(cost ? { totalCostMinor: (parseAmount(cost, product.currency) as bigint).toString() } : {}),
                   ...(field(form, "supplier") ? { supplier: field(form, "supplier") } : {}),
                 },
                 t("received"),
                 "stock.receive",
               );
-              if (ok) (event.target as HTMLFormElement).reset();
+              if (ok) {
+                (event.target as HTMLFormElement).reset();
+                setReceive(emptyReceive);
+              }
             }}
           >
             <FormField id="receive-quantity" label={t("quantity")}>
-              <Input id="receive-quantity" name="quantity" inputMode="decimal" required />
+              <QuantityInput
+                id="receive-quantity"
+                name="quantity"
+                required
+                value={receive.quantity}
+                onChange={(event) => setReceive(workOutReceive({ ...receive, quantity: event.target.value }, product.currency))}
+              />
             </FormField>
             {unitSelect("receive")}
+            {seeCost ? (
+              <FormField id="receive-each" label={t("costEach")} hint={t("costEachHint")}>
+                <AmountInput
+                  currency={product.currency}
+                  id="receive-each"
+                  value={receive.each}
+                  onChange={(event) => setReceive(workOutReceive({ ...receive, each: event.target.value, typed: "each" }, product.currency))}
+                />
+              </FormField>
+            ) : null}
             <FormField id="receive-cost" label={t("totalCost")} hint={t("totalCostHint")}>
-              <Input id="receive-cost" name="totalCost" inputMode="decimal" />
+              <AmountInput
+                currency={product.currency}
+                id="receive-cost"
+                name="totalCost"
+                value={receive.total}
+                onChange={(event) => setReceive(workOutReceive({ ...receive, total: event.target.value, typed: "total" }, product.currency))}
+              />
             </FormField>
             <FormField id="receive-paid" label={t("paidFrom")}>
               <Select id="receive-paid" name="paidFrom" defaultValue="credit">
@@ -226,7 +269,7 @@ function ProductScreen() {
               </Select>
             </FormField>
             <FormField id="receive-supplier" label={t("supplier")} hint={t("optional")}>
-              <Input id="receive-supplier" name="supplier" maxLength={160} />
+              <NameInput id="receive-supplier" name="supplier" maxLength={160} />
             </FormField>
             <div className="self-end">
               <SubmitButton pending={busy === "receive"} pendingLabel={t("saving")}>
@@ -277,11 +320,11 @@ function ProductScreen() {
               </Select>
             </FormField>
             <FormField id="adjust-quantity" label={t("quantity")}>
-              <Input id="adjust-quantity" name="quantity" inputMode="decimal" required />
+              <QuantityInput id="adjust-quantity" name="quantity" required />
             </FormField>
             {unitSelect("adjust")}
             <FormField id="adjust-note" label={t("note")} hint={t("optional")}>
-              <Input id="adjust-note" name="note" maxLength={240} />
+              <SentenceInput id="adjust-note" name="note" maxLength={240} />
             </FormField>
             <div>
               <SubmitButton pending={busy === "adjust"} pendingLabel={t("saving")}>
@@ -321,7 +364,7 @@ function ProductScreen() {
               </Select>
             </FormField>
             <FormField id="transfer-quantity" label={t("quantity")}>
-              <Input id="transfer-quantity" name="quantity" inputMode="decimal" required />
+              <QuantityInput id="transfer-quantity" name="quantity" required />
             </FormField>
             {unitSelect("transfer")}
             <div className="self-end">
@@ -354,7 +397,7 @@ function ProductScreen() {
             }}
           >
             <FormField id="count-quantity" label={t("counted")}>
-              <Input id="count-quantity" name="counted" inputMode="decimal" required />
+              <QuantityInput id="count-quantity" name="counted" required />
             </FormField>
             {unitSelect("count")}
             <div>
@@ -406,7 +449,7 @@ function ProductScreen() {
               const price = field(form, "price");
               const low = field(form, "low");
               const cost = field(form, "cost");
-              if ((price && parseMoneyInput(price) === null) || (cost && parseMoneyInput(cost) === null)) {
+              if ((price && parseAmount(price, product.currency) === null) || (cost && parseAmount(cost, product.currency) === null)) {
                 return setMessage({ tone: "danger", text: t("invalidAmount") });
               }
               if (low && low !== "0" && parseQuantity(low) === null) return setMessage({ tone: "danger", text: t("invalidQuantity") });
@@ -415,7 +458,7 @@ function ProductScreen() {
                 return {
                   unitCode: pack.unitCode,
                   baseQuantity: quantityToString(BigInt(pack.baseQuantity)),
-                  ...(packPrice && parseMoneyInput(packPrice) !== null ? { priceMinor: (parseMoneyInput(packPrice) as bigint).toString() } : {}),
+                  ...(packPrice && parseAmount(packPrice, product.currency) !== null ? { priceMinor: (parseAmount(packPrice, product.currency) as bigint).toString() } : {}),
                 };
               });
               setBusy("edit");
@@ -425,12 +468,12 @@ function ProductScreen() {
                   name: field(form, "name"),
                   category: field(form, "category") || null,
                   baseUnit: product.baseUnit,
-                  priceMinor: price ? (parseMoneyInput(price) as bigint).toString() : null,
+                  priceMinor: price ? (parseAmount(price, product.currency) as bigint).toString() : null,
                   lowStockLevel: low || null,
                   barcode: product.barcode,
                   trackStock: product.trackStock,
                   packs,
-                  ...(seeCost ? { defaultCostMinor: cost ? (parseMoneyInput(cost) as bigint).toString() : null } : {}),
+                  ...(seeCost ? { defaultCostMinor: cost ? (parseAmount(cost, product.currency) as bigint).toString() : null } : {}),
                 }),
               }).catch(() => null);
               setBusy(null);
@@ -444,32 +487,32 @@ function ProductScreen() {
             }}
           >
             <FormField id="edit-name" label={t("name")}>
-              <Input id="edit-name" name="name" defaultValue={product.name} required maxLength={160} />
+              <SentenceInput id="edit-name" name="name" defaultValue={product.name} required maxLength={160} />
             </FormField>
             <FormField id="edit-category" label={t("category")} hint={t("optional")}>
-              <Input id="edit-category" name="category" defaultValue={product.category ?? ""} maxLength={60} />
+              <SentenceInput id="edit-category" name="category" defaultValue={product.category ?? ""} maxLength={60} />
             </FormField>
             <FormField id="edit-price" label={t("priceLabel", { unit: unitName(product.baseUnit, 1) })} hint={t("optional")}>
-              <Input id="edit-price" name="price" inputMode="decimal" defaultValue={nairaInput(product.priceMinor)} />
+              <AmountInput currency={product.currency} id="edit-price" name="price" defaultValue={amountInput(product.priceMinor, product.currency)} />
             </FormField>
             {product.packs.map((pack) => (
               <FormField key={pack.unitCode} id={`edit-pack-${pack.unitCode}`} label={`${t("packPrice")} · ${unitName(pack.unitCode, 1)}`} hint={t("optional")}>
-                <Input
+                <AmountInput
+                  currency={product.currency}
                   id={`edit-pack-${pack.unitCode}`}
                   name={`pack-${pack.unitCode}`}
-                  inputMode="decimal"
-                  defaultValue={nairaInput(pack.priceMinor)}
+                  defaultValue={amountInput(pack.priceMinor, product.currency)}
                 />
               </FormField>
             ))}
             {product.trackStock ? (
               <FormField id="edit-low" label={t("lowStock", { unit: unitName(product.baseUnit, 2) })} hint={t("optional")}>
-                <Input id="edit-low" name="low" inputMode="decimal" defaultValue={product.lowStockLevel ? quantityToString(BigInt(product.lowStockLevel)) : ""} />
+                <QuantityInput id="edit-low" name="low" defaultValue={product.lowStockLevel ? quantityToString(BigInt(product.lowStockLevel)) : ""} />
               </FormField>
             ) : null}
             {seeCost ? (
               <FormField id="edit-cost" label={t("defaultCost", { unit: unitName(product.baseUnit, 1) })} hint={t("optional")}>
-                <Input id="edit-cost" name="cost" inputMode="decimal" defaultValue={nairaInput(product.defaultCostMinor)} />
+                <AmountInput currency={product.currency} id="edit-cost" name="cost" defaultValue={amountInput(product.defaultCostMinor, product.currency)} />
               </FormField>
             ) : null}
             <div className="self-end">

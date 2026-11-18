@@ -17,7 +17,7 @@ function FollowupsScreen() {
   const t = useTranslations("followups");
   const locale = useLocale();
   const [items, setItems] = useState<Record<string, Item[]>>({ today: [], overdue: [], upcoming: [] });
-  const [timezone, setTimezone] = useState("Africa/Lagos");
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   async function load() {
@@ -27,7 +27,7 @@ function FollowupsScreen() {
     ]);
     if (dashboard.ok) {
       const payload = await dashboard.json();
-      setTimezone(payload.data?.timezone ?? "Africa/Lagos");
+      setTimezone(payload.data?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
     const next: Record<string, Item[]> = {};
     for (let index = 0; index < buckets.length; index += 1) {

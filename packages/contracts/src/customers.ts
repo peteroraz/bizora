@@ -24,7 +24,7 @@ export const customerWriteSchema = z
     /** Approve the customer to buy on credit (needs debtors.manage). */
     creditAllowed: z.boolean().optional(),
     /** Most they may owe at once, in kobo. Empty: no limit. */
-    creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter an amount in kobo."), z.null()]).optional(),
+    creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas)."), z.null()]).optional(),
   })
   .superRefine((value, ctx) => {
     const walkIn = value.isWalkIn === true;
@@ -48,7 +48,7 @@ export const customerWriteSchema = z
 /** A manager or owner approves a customer for credit and sets the most they may owe (empty: no limit). */
 export const customerCreditSchema = z.object({
   creditAllowed: z.boolean(),
-  creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter an amount in kobo."), z.null()]).optional(),
+  creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas)."), z.null()]).optional(),
 });
 
 export const customerNoteSchema = z.object({

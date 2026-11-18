@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
 import { PublicFooter } from "../../components/public-footer";
 import { safeReturnTo } from "../../lib/shop-mode";
+import { EmailInput } from "../../components/typing";
 
 function LoginForm() {
   const t = useTranslations("login");
@@ -66,7 +67,7 @@ function LoginForm() {
         </div>
         <SafeForm className="mt-4 space-y-4" pending={pending} onSubmit={onSubmit}>
           <FormField id="email" label={t("email")}>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
+            <EmailInput id="email" name="email" autoComplete="email" required />
           </FormField>
           <FormField id="password" label={t("password")}>
             <Input id="password" name="password" type="password" autoComplete="current-password" required />

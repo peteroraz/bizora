@@ -12,7 +12,7 @@ export const customerPaymentSchema = z.object({
   amountMinor: z
     .string()
     .trim()
-    .regex(/^\d{1,15}$/, "Enter an amount in kobo.")
+    .regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas).")
     .refine((value) => BigInt(value) > 0n, "Enter an amount above zero."),
   method: z.enum(PAYMENT_METHODS),
   reference: z.string().trim().max(80).optional(),

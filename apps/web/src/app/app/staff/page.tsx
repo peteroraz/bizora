@@ -1,11 +1,14 @@
 "use client";
 
 import { Permission, STAFF_ROLES, isWeakPin } from "@bizora/contracts";
-import { Badge, Button, Card, EmptyState, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
+import { Badge, Button, Card, EmptyState, FormField, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useFormatter, useTranslations } from "next-intl";
 import { FormEvent, useEffect, useState } from "react";
 import { RequireAccess } from "../../../components/require-access";
 import { api } from "../../../lib/api";
+import { usePlace } from "../../../lib/access-context";
+import { checkTypedPhone, PhoneInput } from "../../../components/phone-input";
+import { DigitsInput, NameInput, SentenceInput } from "../../../components/typing";
 import { clearDevice, summary } from "../../../lib/offline/outbox";
 
 type Staff = {
@@ -40,6 +43,7 @@ function pinProblem(pin: string, confirm: string): "pinFormat" | "pinWeak" | "pi
 
 function StaffPageScreen() {
   const t = useTranslations("staff");
+  const place = usePlace();
   const roles = useTranslations("roles");
   const common = useTranslations("common");
   const format = useFormatter();
@@ -109,7 +113,13 @@ function StaffPageScreen() {
       setError(t(problem));
       return;
     }
-    const phone = String(data.get("phone") ?? "").trim();
+    const phoneText = String(data.get("phone") ?? "").trim();
+    const checked = phoneText ? await checkTypedPhone(phoneText, place.country) : null;
+    if (phoneText && !checked?.ok) {
+      setError(t("phoneCheck"));
+      return;
+    }
+    const phone = checked?.ok ? checked.e164 : "";
     const ok = await run(
       () =>
         api("/api/v1/staff", {
@@ -272,10 +282,10 @@ function StaffPageScreen() {
           <SafeForm className="grid gap-3 rounded-control border border-border p-4 sm:grid-cols-2" pending={pending} onSubmit={savePin}>
             <h3 className="font-medium sm:col-span-2">{t("resetPinTitle", { name: resetFor.displayName })}</h3>
             <FormField id="reset-pin" label={t("pin")} hint={t("pinHint")}>
-              <Input id="reset-pin" name="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} required />
+              <DigitsInput maxDigits={6} id="reset-pin" name="pin" type="password" required />
             </FormField>
             <FormField id="reset-confirm" label={t("confirmPin")}>
-              <Input id="reset-confirm" name="confirmPin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} required />
+              <DigitsInput maxDigits={6} id="reset-confirm" name="confirmPin" type="password" required />
             </FormField>
             <div className="flex gap-2 sm:col-span-2">
               <SubmitButton pending={pending} pendingLabel={common("saving")}>
@@ -293,7 +303,7 @@ function StaffPageScreen() {
         <h2 className="text-lg font-semibold">{t("addTitle")}</h2>
         <SafeForm className="grid gap-3 sm:grid-cols-2" pending={pending} onSubmit={addStaff}>
           <FormField id="staff-name" label={t("name")}>
-            <Input id="staff-name" name="displayName" maxLength={120} required />
+            <NameInput id="staff-name" name="displayName" maxLength={120} required />
           </FormField>
           <FormField id="staff-role" label={t("role")}>
             <Select id="staff-role" name="role" defaultValue="SALES">
@@ -314,13 +324,13 @@ function StaffPageScreen() {
             </Select>
           </FormField>
           <FormField id="staff-phone" label={t("phone")}>
-            <Input id="staff-phone" name="phone" type="tel" inputMode="tel" autoComplete="off" />
+            <PhoneInput id="staff-phone" name="phone" country={place.country} autoComplete="off" />
           </FormField>
           <FormField id="staff-pin" label={t("pin")} hint={t("pinHint")}>
-            <Input id="staff-pin" name="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} required />
+            <DigitsInput maxDigits={6} id="staff-pin" name="pin" type="password" required />
           </FormField>
           <FormField id="staff-confirm" label={t("confirmPin")}>
-            <Input id="staff-confirm" name="confirmPin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} required />
+            <DigitsInput maxDigits={6} id="staff-confirm" name="confirmPin" type="password" required />
           </FormField>
           <div className="sm:col-span-2">
             <SubmitButton pending={pending} pendingLabel={t("adding")}>
@@ -393,7 +403,7 @@ function StaffPageScreen() {
           </div>
           <SafeForm className="grid gap-3 sm:grid-cols-2" pending={pending} onSubmit={enableShopMode}>
             <FormField id="device-name" label={t("deviceName")}>
-              <Input id="device-name" name="deviceName" maxLength={80} placeholder={t("deviceNamePlaceholder")} required />
+              <SentenceInput id="device-name" name="deviceName" maxLength={80} placeholder={t("deviceNamePlaceholder")} required />
             </FormField>
             <FormField id="device-branch" label={t("shop")}>
               <Select id="device-branch" name="branchId">

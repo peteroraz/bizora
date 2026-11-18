@@ -1,22 +1,24 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, UNIT_CODES, parseMoneyInput, parseQuantity, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, UNIT_CODES, amountText, parseAmount, parseQuantity, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { can } from "../../../../lib/access";
-import { useAccess } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
+import { AmountInput, QuantityInput, SentenceInput } from "../../../../components/typing";
+import { formatCurrency } from "../../../../i18n/format";
 import { api } from "../../../../lib/api";
 
 type Pack = { unitCode: string; size: string; price: string };
 
-/** Turns a typed naira amount into kobo for the API. Empty stays empty; anything invalid throws. */
-function kobo(text: string): string | undefined {
+/** A typed amount in the currency's smallest unit, for the API. Empty stays empty; anything invalid throws. */
+function minorOf(text: string, currency: string): string | undefined {
   if (!text.trim()) return undefined;
-  const value = parseMoneyInput(text);
+  const value = parseAmount(text, currency);
   if (value === null) throw new Error("amount");
   return value.toString();
 }
@@ -32,6 +34,9 @@ function NewProductScreen() {
   const unitName = useUnitName();
   const access = useAccess();
   const seeCost = can(access, Permission.PRICES_COST_READ);
+  const { currency } = usePlace();
+  const locale = useLocale();
+  const kobo = (text: string) => minorOf(text, currency);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [baseUnit, setBaseUnit] = useState("piece");
@@ -45,6 +50,10 @@ function NewProductScreen() {
   const [openingCost, setOpeningCost] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // What the opening stock cost, worked out from the quantity and the cost per unit until the total is typed.
+  const openingThousandths = parseQuantity(openingQuantity);
+  const unitCost = parseAmount(cost, currency);
+  const workedOutCost = openingThousandths !== null && unitCost !== null ? (openingThousandths * unitCost + 500n) / 1000n : null;
 
   async function save() {
     setError(null);
@@ -64,7 +73,9 @@ function NewProductScreen() {
           .map((pack) => ({ unitCode: pack.unitCode, baseQuantity: quantity(pack.size), ...(kobo(pack.price) ? { priceMinor: kobo(pack.price) } : {}) })),
         ...(seeCost && kobo(cost) ? { defaultCostMinor: kobo(cost) } : {}),
         ...(trackStock && quantity(openingQuantity) ? { openingQuantity: quantity(openingQuantity) } : {}),
-        ...(trackStock && seeCost && kobo(openingCost) ? { openingCostMinor: kobo(openingCost) } : {}),
+        ...(trackStock && seeCost && (kobo(openingCost) ?? workedOutCost?.toString())
+          ? { openingCostMinor: kobo(openingCost) ?? workedOutCost?.toString() }
+          : {}),
       };
     } catch (problem) {
       setError((problem as Error).message === "amount" ? t("invalidAmount") : t("invalidQuantity"));
@@ -96,10 +107,10 @@ function NewProductScreen() {
       <PageHeader title={t("newTitle")} intro={t("newLead")} />
       <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
         <FormField id="product-name" label={t("name")}>
-          <Input id="product-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
+          <SentenceInput id="product-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
         </FormField>
         <FormField id="product-category" label={t("category")} hint={t("categoryHint")}>
-          <Input id="product-category" value={category} onChange={(event) => setCategory(event.target.value)} maxLength={60} />
+          <SentenceInput id="product-category" value={category} onChange={(event) => setCategory(event.target.value)} maxLength={60} />
         </FormField>
         <FormField id="product-unit" label={t("baseUnit")}>
           <Select id="product-unit" value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)}>
@@ -107,7 +118,7 @@ function NewProductScreen() {
           </Select>
         </FormField>
         <FormField id="product-price" label={t("priceLabel", { unit: unitName(baseUnit, 1) })} hint={t("optional")}>
-          <Input id="product-price" inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} />
+          <AmountInput currency={currency} id="product-price" value={price} onChange={(event) => setPrice(event.target.value)} />
         </FormField>
         <Card>
           <p className="text-sm font-medium">{t("packsTitle")}</p>
@@ -125,17 +136,16 @@ function NewProductScreen() {
                   </Select>
                 </FormField>
                 <FormField id={`pack-size-${index}`} label={t("packSize", { unit: unitName(baseUnit, 2) })}>
-                  <Input
+                  <QuantityInput
                     id={`pack-size-${index}`}
-                    inputMode="decimal"
                     value={pack.size}
                     onChange={(event) => setPacks(packs.map((item, i) => (i === index ? { ...item, size: event.target.value } : item)))}
                   />
                 </FormField>
                 <FormField id={`pack-price-${index}`} label={t("packPrice")}>
-                  <Input
+                  <AmountInput
+                    currency={currency}
                     id={`pack-price-${index}`}
-                    inputMode="decimal"
                     value={pack.price}
                     onChange={(event) => setPacks(packs.map((item, i) => (i === index ? { ...item, price: event.target.value } : item)))}
                   />
@@ -158,7 +168,7 @@ function NewProductScreen() {
         </label>
         {trackStock ? (
           <FormField id="product-low" label={t("lowStock", { unit: unitName(baseUnit, 2) })} hint={t("optional")}>
-            <Input id="product-low" inputMode="decimal" value={lowStock} onChange={(event) => setLowStock(event.target.value)} />
+            <QuantityInput id="product-low" value={lowStock} onChange={(event) => setLowStock(event.target.value)} />
           </FormField>
         ) : null}
         <FormField id="product-barcode" label={t("barcode")} hint={t("optional")}>
@@ -166,7 +176,7 @@ function NewProductScreen() {
         </FormField>
         {seeCost ? (
           <FormField id="product-cost" label={t("defaultCost", { unit: unitName(baseUnit, 1) })} hint={t("optional")}>
-            <Input id="product-cost" inputMode="decimal" value={cost} onChange={(event) => setCost(event.target.value)} />
+            <AmountInput currency={currency} id="product-cost" value={cost} onChange={(event) => setCost(event.target.value)} />
           </FormField>
         ) : null}
         {trackStock ? (
@@ -174,11 +184,29 @@ function NewProductScreen() {
             <p className="text-sm font-medium">{t("openingTitle")}</p>
             <div className="mt-3 space-y-3">
               <FormField id="product-opening" label={t("openingQuantity", { unit: unitName(baseUnit, 2) })} hint={t("optional")}>
-                <Input id="product-opening" inputMode="decimal" value={openingQuantity} onChange={(event) => setOpeningQuantity(event.target.value)} />
+                <QuantityInput id="product-opening" value={openingQuantity} onChange={(event) => setOpeningQuantity(event.target.value)} />
               </FormField>
               {seeCost ? (
-                <FormField id="product-opening-cost" label={t("openingCost")} hint={t("openingHint")}>
-                  <Input id="product-opening-cost" inputMode="decimal" value={openingCost} onChange={(event) => setOpeningCost(event.target.value)} />
+                <FormField
+                  id="product-opening-cost"
+                  label={t("openingCost")}
+                  hint={
+                    workedOutCost !== null && !openingCost.trim()
+                      ? t("openingWorkedOut", {
+                          quantity: openingQuantity,
+                          cost: formatCurrency(unitCost ?? 0n, currency, locale),
+                          total: formatCurrency(workedOutCost, currency, locale),
+                        })
+                      : t("openingHint")
+                  }
+                >
+                  <AmountInput
+                    currency={currency}
+                    id="product-opening-cost"
+                    value={openingCost}
+                    placeholder={workedOutCost !== null ? amountText(workedOutCost, currency) : undefined}
+                    onChange={(event) => setOpeningCost(event.target.value)}
+                  />
                 </FormField>
               ) : null}
             </div>

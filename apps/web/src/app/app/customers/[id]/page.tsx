@@ -13,6 +13,7 @@ import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { dayKey, formatCurrency, formatPhone, formatWhen } from "../../../../i18n/format";
 import type { SaleView } from "../../../../lib/sales-client";
+import { SentenceInput } from "../../../../components/typing";
 
 type Customer = {
   id: string;
@@ -45,7 +46,7 @@ function CustomerFullScreen() {
   const [items, setItems] = useState<Followup[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [business, setBusiness] = useState("");
-  const [timezone, setTimezone] = useState("Africa/Lagos");
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [tab, setTab] = useState("notes");
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("");
@@ -84,7 +85,7 @@ function CustomerFullScreen() {
     if (assigneeResponse.ok) setAssignees((await assigneeResponse.json()).data?.items ?? []);
     if (meResponse.ok) setBusiness((await meResponse.json()).data?.organization?.name ?? "");
     if (dashboardResponse.ok) {
-      const zone = String((await dashboardResponse.json()).data?.timezone ?? "Africa/Lagos");
+      const zone = String((await dashboardResponse.json()).data?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       setTimezone(zone);
       setDueOn((current) => current || dayKey(new Date(), zone));
     }
@@ -255,7 +256,7 @@ function CustomerFullScreen() {
           {canFollowUp ? (
             <SafeForm className="mt-4 space-y-3" pending={pending} onSubmit={addFollowup}>
               <FormField id="followup-reason" label={followups("reason")}>
-                <Input id="followup-reason" value={reason} onChange={(event) => setReason(event.target.value)} required />
+                <SentenceInput id="followup-reason" value={reason} onChange={(event) => setReason(event.target.value)} required />
               </FormField>
               <FormField id="followup-day" label={followups("day")}>
                 <Input id="followup-day" type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} required />
