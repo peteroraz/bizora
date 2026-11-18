@@ -12,7 +12,7 @@ import {
   quantityToString,
   uuidv7,
 } from "@bizora/contracts";
-import { Badge, Button, Card, FormField, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
+import { Badge, Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -89,6 +89,15 @@ function ProductScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [receive, setReceive] = useState<ReceiveDraft>(emptyReceive);
+  // Stock in on credit names the supplier owed and when to pay (ADR-029); names come from the supplier list.
+  const [receivePaid, setReceivePaid] = useState<"credit" | "cash" | "bank">("credit");
+  const [supplierNames, setSupplierNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (!can(access, Permission.STOCK_RECEIVE, Permission.PURCHASES_MANAGE)) return;
+    void api("/api/v1/suppliers/names")
+      .then(async (response) => (response.ok ? setSupplierNames(((await response.json()).data.items as { name: string }[]).map((item) => item.name)) : undefined))
+      .catch(() => undefined);
+  }, [access]);
 
   const load = useCallback(async () => {
     try {
@@ -207,6 +216,7 @@ function ProductScreen() {
               const cost = receive.total;
               if (!parseQuantity(quantity)) return setMessage({ tone: "danger", text: t("invalidQuantity") });
               if (cost && parseAmount(cost, product.currency) === null) return setMessage({ tone: "danger", text: t("invalidAmount") });
+              if (receivePaid === "credit" && field(form, "supplier").length < 2) return setMessage({ tone: "danger", text: t("supplierRequired") });
               const ok = await submit(
                 "receive",
                 "/api/v1/stock/receive",
@@ -218,6 +228,7 @@ function ProductScreen() {
                   paidFrom: field(form, "paidFrom") || "credit",
                   ...(cost ? { totalCostMinor: (parseAmount(cost, product.currency) as bigint).toString() } : {}),
                   ...(field(form, "supplier") ? { supplier: field(form, "supplier") } : {}),
+                  ...(receivePaid === "credit" && field(form, "payBy") ? { payBy: field(form, "payBy") } : {}),
                 },
                 t("received"),
                 "stock.receive",
@@ -225,6 +236,7 @@ function ProductScreen() {
               if (ok) {
                 (event.target as HTMLFormElement).reset();
                 setReceive(emptyReceive);
+                setReceivePaid("credit");
               }
             }}
           >
@@ -258,7 +270,12 @@ function ProductScreen() {
               />
             </FormField>
             <FormField id="receive-paid" label={t("paidFrom")}>
-              <Select id="receive-paid" name="paidFrom" defaultValue="credit">
+              <Select
+                id="receive-paid"
+                name="paidFrom"
+                value={receivePaid}
+                onChange={(event) => setReceivePaid(event.target.value as "credit" | "cash" | "bank")}
+              >
                 <option value="credit">{t("paid.credit")}</option>
                 {can(access, Permission.PURCHASES_MANAGE) ? (
                   <>
@@ -268,9 +285,19 @@ function ProductScreen() {
                 ) : null}
               </Select>
             </FormField>
-            <FormField id="receive-supplier" label={t("supplier")} hint={t("optional")}>
-              <NameInput id="receive-supplier" name="supplier" maxLength={160} />
+            <FormField id="receive-supplier" label={t("supplier")} hint={receivePaid === "credit" ? undefined : t("optional")}>
+              <NameInput id="receive-supplier" name="supplier" maxLength={160} list="supplier-names" required={receivePaid === "credit"} />
             </FormField>
+            <datalist id="supplier-names">
+              {supplierNames.map((supplierName) => (
+                <option key={supplierName} value={supplierName} />
+              ))}
+            </datalist>
+            {receivePaid === "credit" ? (
+              <FormField id="receive-pay-by" label={t("payBy")} hint={t("payByHint")}>
+                <Input id="receive-pay-by" name="payBy" type="date" />
+              </FormField>
+            ) : null}
             <div className="self-end">
               <SubmitButton pending={busy === "receive"} pendingLabel={t("saving")}>
                 {t("receive")}

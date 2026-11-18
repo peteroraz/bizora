@@ -64,6 +64,7 @@ test("boxes take only what fits: names, Ghana phone numbers, cedi amounts, and s
   await page.getByLabel("Quantity").first().pressSequentially("5");
   await page.getByLabel("Cost of one").pressSequentially("1100");
   await expect(page.getByLabel("Total cost")).toHaveValue("5,500");
+  await page.getByLabel("Supplier").pressSequentially("kwame wholesale");
   await page.getByRole("button", { name: "Record stock in" }).click();
   await expect(page.getByText("Stock in recorded.").or(page.getByRole("status"))).toBeVisible();
 

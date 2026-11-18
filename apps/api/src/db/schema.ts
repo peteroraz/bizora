@@ -821,6 +821,7 @@ export const stockMovements = pgTable(
     reason: varchar("reason", { length: 32 }),
     note: varchar("note", { length: 240 }),
     supplier: varchar("supplier", { length: 160 }),
+    supplierId: uuid("supplier_id"),
     paidFrom: varchar("paid_from", { length: 8 }),
     documentNumber: varchar("document_number", { length: 24 }),
     transferId: uuid("transfer_id"),
@@ -1360,5 +1361,61 @@ export const cashCounts = pgTable(
     index("cash_counts_branch_idx").on(table.tenantId, table.branchId, table.createdAt),
     foreignKey({ name: "cash_counts_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
     foreignKey({ name: "cash_counts_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+  ],
+);
+
+/** Sprint 7c (ADR-029): who the business buys from. */
+export const suppliers = pgTable(
+  "suppliers",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    phoneE164: varchar("phone_e164", { length: 20 }),
+    notes: varchar("notes", { length: 240 }),
+    unnamed: boolean("unnamed").notNull().default(false),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("suppliers_tenant_id_id_key").on(table.tenantId, table.id),
+    foreignKey({ name: "suppliers_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+  ],
+);
+
+/** Sprint 7c: what a supplier is owed, line by line. */
+export const supplierEntries = pgTable(
+  "supplier_entries",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    branchId: uuid("branch_id"),
+    kind: varchar("kind", { length: 10 }).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    entryDate: date("entry_date").notNull(),
+    payBy: date("pay_by"),
+    paidFrom: varchar("paid_from", { length: 10 }),
+    stockMovementId: uuid("stock_movement_id"),
+    note: varchar("note", { length: 240 }),
+    status: varchar("status", { length: 10 }).notNull().default("recorded"),
+    journalEntryId: uuid("journal_entry_id"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    voidReason: varchar("void_reason", { length: 240 }),
+    createdBy: uuid("created_by"),
+    membershipId: uuid("membership_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("supplier_entries_tenant_id_id_key").on(table.tenantId, table.id),
+    index("supplier_entries_supplier_idx").on(table.tenantId, table.supplierId, table.entryDate),
+    foreignKey({ name: "supplier_entries_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "supplier_entries_supplier_fk", columns: [table.tenantId, table.supplierId], foreignColumns: [suppliers.tenantId, suppliers.id] }),
   ],
 );

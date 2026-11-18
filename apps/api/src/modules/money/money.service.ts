@@ -57,6 +57,7 @@ const SOURCE_FLOW: Record<string, CashFlowKind> = {
   payment: "debt_payments",
   expense: "expenses",
   stock_movement: "stock_bought",
+  supplier_payment: "suppliers",
   cash_count: "counts",
 };
 

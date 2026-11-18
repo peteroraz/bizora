@@ -20,6 +20,7 @@ import { branches, products, shopDevices, stockBalances, stockCounts, stockMovem
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
+import { addPurchase, findOrAddSupplier } from "../suppliers/supplier-ledger.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import {
   type BranchRow,
@@ -37,6 +38,8 @@ export type MovementType = "opening" | "received" | "sold" | "returned" | "adjus
 
 export type MovementInput = {
   id?: string;
+  /** Who the stock came from (ADR-029); saved with the movement, which cannot change afterwards. */
+  supplierId?: string | null;
   type: MovementType;
   /** Signed thousandths of the base unit: positive in, negative out. */
   quantity: bigint;
@@ -145,6 +148,7 @@ export class StockService {
       reason: input.reason ?? null,
       note: input.note ?? null,
       supplier: input.supplier ?? null,
+      supplierId: input.supplierId ?? null,
       paidFrom: input.paidFrom ?? null,
       documentNumber,
       transferId: input.transferId ?? null,
@@ -201,18 +205,44 @@ export class StockService {
     const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
     const entered = parseQuantity(payload.quantity) as bigint;
     const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+    // The supplier named or chosen; a new name is added to the suppliers (ADR-029). Bought on credit with no
+    // supplier named: kept under "Supplier not named", so what is owed is never lost.
+    const supplier = await findOrAddSupplier(tx, tenant, context.business.id, {
+      supplierId: payload.supplierId,
+      name: payload.supplier,
+      unnamedWhenMissing: payload.paidFrom === "credit",
+    });
     const result = await this.applyMovement(tx, context, {
       ...(payload.id ? { id: payload.id } : {}),
       type: "received",
       quantity,
       enteredQuantity: entered,
       enteredUnit: payload.unit,
-      supplier: payload.supplier ?? null,
+      supplier: supplier && !supplier.unnamed ? supplier.name : (payload.supplier ?? null),
+      supplierId: supplier?.id ?? null,
       note: payload.note ?? null,
       paidFrom: payload.paidFrom,
       totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
       documentType: "stock_in",
     });
+    if (supplier && payload.paidFrom === "credit" && result.valueMinor > 0n) {
+      const [movement] = await tx
+        .select({ journalEntryId: stockMovements.journalEntryId, occurredAt: stockMovements.occurredAt })
+        .from(stockMovements)
+        .where(and(eq(stockMovements.tenantId, tenant.tenantId), eq(stockMovements.id, result.id)))
+        .limit(1);
+      await addPurchase(tx, tenant, {
+        businessId: context.business.id,
+        branchId: context.branch.id,
+        supplierId: supplier.id,
+        stockMovementId: result.id,
+        amountMinor: result.valueMinor,
+        currencyCode: context.business.baseCurrencyCode,
+        entryDate: localDate(movement?.occurredAt ?? new Date(), context.business.timezone),
+        payBy: payload.payBy,
+        journalEntryId: movement?.journalEntryId ?? null,
+      });
+    }
     await this.record(tx, tenant, "stock.received", result.id, context);
     return result;
   }

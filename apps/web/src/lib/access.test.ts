@@ -75,16 +75,16 @@ describe("job functions (real ROLE_PERMISSIONS)", () => {
     staffSession,
   });
   const menu = (access: Access) =>
-    ["home", "sales", "stock", "customers", "debtors", "money", "staff", "reports", "settings"].filter((id) => navAllowed(access, id));
+    ["home", "sales", "stock", "customers", "debtors", "suppliers", "money", "staff", "reports", "settings"].filter((id) => navAllowed(access, id));
 
   it("gives each role the menu for its job", () => {
-    expect(menu(as("OWNER"))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "staff", "reports", "settings"]);
-    expect(menu(as("MANAGER"))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "staff", "reports", "settings"]);
+    expect(menu(as("OWNER"))).toEqual(["home", "sales", "stock", "customers", "debtors", "suppliers", "money", "staff", "reports", "settings"]);
+    expect(menu(as("MANAGER"))).toEqual(["home", "sales", "stock", "customers", "debtors", "suppliers", "money", "staff", "reports", "settings"]);
     // Cashiers open Money only to count the drawer (without seeing what is expected).
     expect(menu(as("CASHIER", true))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "settings"]);
     expect(menu(as("SALES", true))).toEqual(["home", "sales", "stock", "customers", "settings"]);
     expect(menu(as("INVENTORY", true))).toEqual(["home", "stock", "reports", "settings"]);
-    expect(menu(as("ACCOUNTANT"))).toEqual(["home", "sales", "stock", "customers", "debtors", "money", "reports", "settings"]);
+    expect(menu(as("ACCOUNTANT"))).toEqual(["home", "sales", "stock", "customers", "debtors", "suppliers", "money", "reports", "settings"]);
     expect(menu(as("EMPLOYEE", true))).toEqual(["home", "settings"]);
   });
 

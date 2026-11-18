@@ -48,6 +48,10 @@ export const stockReceiveSchema = z.object({
   totalCostMinor: minorAmount.optional(),
   paidFrom: z.enum(PAID_FROM).default("credit"),
   supplier: z.string().trim().max(160).optional(),
+  /** A supplier already on the list (ADR-029); otherwise the name in `supplier` is found or added. */
+  supplierId: z.string().uuid().optional(),
+  /** When stock bought on credit must be paid for. */
+  payBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30.").optional(),
   note,
 });
 

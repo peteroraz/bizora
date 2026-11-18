@@ -80,6 +80,7 @@ export const CASH_FLOW_KINDS = [
   "bank",
   "other_in",
   "stock_bought",
+  "suppliers",
   "counts",
   "other",
 ] as const;

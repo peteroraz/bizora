@@ -20,6 +20,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { CaptureModule } from "./modules/capture/capture.module.js";
 import { DebtorsModule } from "./modules/debtors/debtors.module.js";
 import { MoneyModule } from "./modules/money/money.module.js";
+import { SupplierModule } from "./modules/suppliers/supplier.module.js";
 import { BrandingModule } from "./modules/branding/branding.module.js";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module.js";
 import { LedgerModule } from "./modules/ledger/ledger.module.js";
@@ -68,6 +69,7 @@ export class AppModule {
         CaptureModule,
         DebtorsModule,
         MoneyModule,
+        SupplierModule,
         ReconciliationModule,
     BrandingModule,
       ],
