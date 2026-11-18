@@ -56,6 +56,13 @@ export class InventoryController {
     return success({ items: await this.stock.movements(tenant, id, branchId) }, tenant.correlationId);
   }
 
+  /** Changes to a product and decisions on its counts, with the reasons given (7f). */
+  @Get("products/:id/changes")
+  @RequirePermissions(Permission.STOCK_READ)
+  async changes(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    return success({ items: await this.products.changes(tenant, id) }, tenant.correlationId);
+  }
+
   @Post("products")
   @RequirePermissions(Permission.PRODUCTS_MANAGE)
   @Idempotent()
@@ -72,8 +79,8 @@ export class InventoryController {
   @Post("products/:id/archive")
   @HttpCode(200)
   @RequirePermissions(Permission.PRODUCTS_MANAGE)
-  async archive(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
-    return success(await this.products.archive(tenant, id), tenant.correlationId);
+  async archive(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.products.archive(tenant, id, body), tenant.correlationId);
   }
 
   @Post("stock/receive")
@@ -121,15 +128,15 @@ export class InventoryController {
   @Post("stock/counts/:id/approve")
   @HttpCode(200)
   @RequirePermissions(Permission.STOCK_ADJUST)
-  async approve(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
-    return success({ count: await this.stock.approveCount(tenant, id) }, tenant.correlationId);
+  async approve(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success({ count: await this.stock.approveCount(tenant, id, body) }, tenant.correlationId);
   }
 
   @Post("stock/counts/:id/reject")
   @HttpCode(200)
   @RequirePermissions(Permission.STOCK_ADJUST)
-  async reject(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
-    return success({ count: await this.stock.rejectCount(tenant, id) }, tenant.correlationId);
+  async reject(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success({ count: await this.stock.rejectCount(tenant, id, body) }, tenant.correlationId);
   }
 
   @Get("stock/shops")

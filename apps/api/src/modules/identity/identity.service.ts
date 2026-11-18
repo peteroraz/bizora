@@ -248,7 +248,7 @@ export class IdentityService {
     if (!only) {
       throw new ApiError("NO_MEMBERSHIP", "This user has no tenant membership.", 403);
     }
-    const selected = await this.defaultSelectedScope(only);
+    const selected = await this.defaultSelectedScope(only, { useDefaultShop: true });
     return this.issueWorkspaceSession({
       userId: user.id,
       email: user.email,
@@ -288,7 +288,8 @@ export class IdentityService {
       businessName: null,
       branchId: membership.branchId ?? payload.branchId ?? null,
       branchName: null,
-    });
+      // Choosing a workspace opens in the person's default shop; choosing a business or "all shops" does not.
+    }, { useDefaultShop: !payload.businessId });
     const businessId = selected.businessId;
     const branchId = selected.branchId;
     if (businessId) {
@@ -664,9 +665,18 @@ export class IdentityService {
     };
   }
 
-  private async defaultSelectedScope(workspace: WorkspaceOption) {
+  private async defaultSelectedScope(workspace: WorkspaceOption, options: { useDefaultShop?: boolean } = {}) {
     let businessId = workspace.businessId;
     let branchId = workspace.branchId;
+    // The shop this person's Bizora opens in, when they may work in more than one (ADR-032).
+    if (!branchId && options.useDefaultShop) {
+      const membership = await this.tenants.findMembershipById(workspace.membershipId);
+      const preferred = membership?.defaultBranchId ? await this.tenants.findBranch(workspace.organizationId, membership.defaultBranchId) : null;
+      if (preferred && !preferred.closedAt && (!businessId || preferred.businessId === businessId)) {
+        businessId = preferred.businessId;
+        branchId = preferred.id;
+      }
+    }
     if (!businessId) {
       const items = await this.tenants.listBusinesses(workspace.organizationId);
       if (items.length === 1 && items[0]) {

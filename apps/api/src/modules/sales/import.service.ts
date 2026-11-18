@@ -124,7 +124,7 @@ export class ImportService {
 
     if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
     for (const plan of plans) {
-      if (plan.existing) await this.productService.update(tenant, plan.existing.id, plan.body);
+      if (plan.existing) await this.productService.update(tenant, plan.existing.id, { ...plan.body, changeReason: payload.source === "capture" ? "Updated from a photo or scan" : "Updated from a product file" });
       else await this.productService.create(tenant, plan.body);
     }
     await this.recordImport(tenant, business.id, "products", payload.source, results.length);

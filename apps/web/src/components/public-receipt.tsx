@@ -14,6 +14,7 @@ export type Receipt = {
   handle?: string | null;
   color?: string | null;
   customerName: string | null;
+  customerAddress?: string | null;
   number: string | null;
   invoiceNumber: string | null;
   provisionalNumber: string | null;
@@ -76,7 +77,12 @@ export async function ReceiptView({ token, receipt }: { token: string; receipt: 
           {t("unpaid")}
         </p>
       ) : null}
-      {receipt.customerName ? <p className="text-sm">{t("customer", { name: receipt.customerName })}</p> : null}
+      {receipt.customerName ? (
+        <p className="text-sm">
+          {t("customer", { name: receipt.customerName })}
+          {receipt.customerAddress ? <span className="block text-muted">{receipt.customerAddress}</span> : null}
+        </p>
+      ) : null}
       <ul className="divide-y divide-border border-y border-border">
         {receipt.lines.map((line, index) => {
           const quantity = quantityToString(BigInt(line.enteredQuantity));
@@ -109,7 +115,7 @@ export async function ReceiptView({ token, receipt }: { token: string; receipt: 
         ))}
         {BigInt(receipt.balanceMinor) > 0n ? (
           <>
-            <dt className="text-warning">{t("owing")}</dt>
+            <dt className="font-medium">{t("owing")}</dt>
             <dd className="text-right tabular-nums">{money(receipt.balanceMinor)}</dd>
           </>
         ) : null}

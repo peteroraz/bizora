@@ -167,7 +167,7 @@ describe("products and stock", () => {
     const ownUse = await request(http)
       .post("/api/v1/stock/adjust")
       .set(auth(a.token))
-      .send({ productId: riceId, direction: "remove", reason: "own_use", quantity: "1", unit: "bag" })
+      .send({ productId: riceId, direction: "remove", reason: "own_use", quantity: "1", unit: "bag", note: "For the house" })
       .expect(201);
     expect(ownUse.body.data.valueMinor).toBe("-7750000");
 
@@ -222,7 +222,7 @@ describe("products and stock", () => {
 
     await request(http).post("/api/v1/stock/receive").set(auth(salesToken)).send({ productId: riceId, quantity: "1", unit: "bag" }).expect(403);
     await request(http).post("/api/v1/products").set(auth(salesToken)).send({ name: "Sneaky", baseUnit: "piece" }).expect(403);
-    await request(http).post("/api/v1/stock/adjust").set(auth(storekeeperToken)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "1", unit: "bag" }).expect(403);
+    await request(http).post("/api/v1/stock/adjust").set(auth(storekeeperToken)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "1", unit: "bag", note: "Cannot find it" }).expect(403);
 
     // The storekeeper receives goods owed to the supplier, but cannot record paying cash.
     const paid = await request(http).post("/api/v1/stock/receive").set(auth(storekeeperToken)).send({ productId: riceId, quantity: "1", unit: "bag", paidFrom: "cash" }).expect(403);
@@ -256,7 +256,7 @@ describe("products and stock", () => {
 
   it("flags products below zero instead of correcting them, and lists low stock", async () => {
     const http = app.getHttpServer();
-    await request(http).post("/api/v1/stock/adjust").set(auth(a.token)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "15", unit: "bag" }).expect(201);
+    await request(http).post("/api/v1/stock/adjust").set(auth(a.token)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "15", unit: "bag", note: "Not on the shelf" }).expect(201);
     const product = await request(http).get(`/api/v1/products/${riceId}`).set(auth(a.token)).expect(200);
     expect(product.body.data.product.stock).toMatchObject({ quantity: "-3000", belowZero: true, low: true });
     const flagged = await request(http).get("/api/v1/stock/below-zero").set(auth(a.token)).expect(200);
@@ -303,7 +303,7 @@ describe("products and stock", () => {
       .expect(200);
     expect(nothingNew.body.data.products).toEqual([]);
     expect(nothingNew.body.data.balances).toEqual([]);
-    await request(http).patch(`/api/v1/products/${riceId}`).set(auth(a.token)).send({ name: "Rice 50kg", baseUnit: "bag", priceMinor: "9000000", lowStockLevel: "5" }).expect(200);
+    await request(http).patch(`/api/v1/products/${riceId}`).set(auth(a.token)).send({ name: "Rice 50kg", baseUnit: "bag", priceMinor: "9000000", lowStockLevel: "5", changeReason: "New price list" }).expect(200);
     const changed = await request(http)
       .get("/api/v1/products/sync")
       .query({ products: first.body.data.cursors.products, balances: first.body.data.cursors.balances })

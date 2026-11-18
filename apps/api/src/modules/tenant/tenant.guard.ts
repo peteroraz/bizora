@@ -46,7 +46,7 @@ export class TenantGuard implements CanActivate {
     }
 
     const businessId = membership.businessId ?? sessionBusinessId ?? null;
-    const branchId = membership.branchId ?? sessionBranchId ?? null;
+    let branchId = membership.branchId ?? sessionBranchId ?? null;
 
     if (businessId) {
       const business = await this.tenants.findBusiness(membership.tenantId, businessId);
@@ -60,6 +60,8 @@ export class TenantGuard implements CanActivate {
       if (!branch) {
         throw new ApiError("FORBIDDEN", "Branch is outside the authenticated tenant.", 403);
       }
+      // A shop closed since this sign-in (ADR-032): carry on in "all shops" rather than in a closed shop.
+      if (branch.closedAt && !membership.branchId) branchId = null;
       if (businessId && branch.businessId !== businessId) {
         throw new ApiError("FORBIDDEN", "Branch does not belong to the selected business.", 403);
       }

@@ -30,7 +30,10 @@ export async function resolveBranch(executor: DbExecutor, tenant: TenantContext,
   if (tenant.membershipBranchId && branchId !== tenant.membershipBranchId) {
     throw new ApiError("BRANCH_NOT_FOUND", "Shop was not found.", 404);
   }
-  return findBranch(executor, tenant, businessId, branchId);
+  const branch = await findBranch(executor, tenant, businessId, branchId);
+  // New sales, stock and money happen in open shops only (ADR-032); a closed shop keeps its history.
+  if (branch.closedAt) throw new ApiError("SHOP_CLOSED", "This shop is closed. Choose another shop.", 409);
+  return branch;
 }
 
 /** Any shop of the same business (for example the shop stock is moved to). */

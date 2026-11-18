@@ -3,6 +3,8 @@ import { Permission } from "@bizora/contracts";
 /** What the signed-in person may see. Comes from GET /api/v1/auth/me (tenant.permissions and tenant.deviceId). */
 export type Access = {
   permissions: readonly string[];
+  /** The person's job function (OWNER, MANAGER, …). Only the owner closes a shop (ADR-032). */
+  role?: string;
   /** True when a shop staff member signed in with a PIN on an enrolled shop device. */
   staffSession: boolean;
   /** Who owns work saved offline on this device (see lib/offline/outbox.ts). */

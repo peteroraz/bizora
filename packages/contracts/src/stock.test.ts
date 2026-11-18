@@ -48,9 +48,16 @@ describe("money input", () => {
 
 describe("stock adjustments", () => {
   it("only accepts reasons that match the direction", () => {
-    const base = { productId: "8f0d9c5e-0d7f-4c55-9d3f-2a4b6e7c8d90", quantity: "2", unit: "piece" };
+    const base = { productId: "8f0d9c5e-0d7f-4c55-9d3f-2a4b6e7c8d90", quantity: "2", unit: "piece", note: "Water got in" };
     expect(stockAdjustSchema.safeParse({ ...base, direction: "remove", reason: "damaged" }).success).toBe(true);
     expect(stockAdjustSchema.safeParse({ ...base, direction: "add", reason: "damaged" }).success).toBe(false);
     expect(stockAdjustSchema.safeParse({ ...base, direction: "add", reason: "found" }).success).toBe(true);
+  });
+
+  it("asks what happened whenever stock is adjusted by hand (7f)", () => {
+    const base = { productId: "8f0d9c5e-0d7f-4c55-9d3f-2a4b6e7c8d90", quantity: "2", unit: "piece", direction: "remove", reason: "damaged" };
+    expect(stockAdjustSchema.safeParse(base).success).toBe(false);
+    expect(stockAdjustSchema.safeParse({ ...base, note: "ok" }).success).toBe(false);
+    expect(stockAdjustSchema.safeParse({ ...base, note: "Rats got in" }).success).toBe(true);
   });
 });

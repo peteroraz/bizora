@@ -18,6 +18,7 @@ import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { type SaleDetail, type SaleReleaseDetail, whatsAppLink } from "../../../../lib/sales-client";
 import { ActionLink, BackLink } from "../../../../components/action-link";
+import { CopyButton } from "../../../../components/copy-button";
 import { SentenceInput } from "../../../../components/typing";
 
 type Loaded = (SaleDetail & { view: "full" }) | (SaleReleaseDetail & { view: "release" });
@@ -37,7 +38,6 @@ function SaleScreen() {
   const [releaseComment, setReleaseComment] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const response = await api(`/api/v1/sales/${id}`).catch(() => null);
@@ -249,15 +249,14 @@ function SaleScreen() {
                     ? t("sendInvoiceLinkCustomer")
                     : t("sendInvoiceLink")}
               </a>
-              <button
-                type="button"
+              <CopyButton
                 className="inline-flex min-h-11 items-center text-primary"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(`${window.location.origin}${full.receiptPath}`).then(() => setCopied(true));
-                }}
-              >
-                {copied ? t("copied") : t("copyLinkPlain")}
-              </button>
+                data-testid="copy-receipt-link"
+                text={() => `${window.location.origin}${full.receiptPath}`}
+                label={t("copyLinkPlain")}
+                copiedLabel={t("copied")}
+                failedLabel={t("copyFailed")}
+              />
               <Link href={full.receiptPath} className="inline-flex min-h-11 items-center text-primary" target="_blank">
                 {t("viewAsCustomer")}
               </Link>

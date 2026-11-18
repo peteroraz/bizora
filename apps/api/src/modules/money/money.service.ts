@@ -391,7 +391,8 @@ export class MoneyService {
     const shops = await this.db
       .select({ id: branches.id, name: branches.name })
       .from(branches)
-      .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), ...(shopFilter ? [eq(branches.id, shopFilter)] : [])))
+      // Closed shops (ADR-032) are left out unless asked for by name, for their history.
+      .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), ...(shopFilter ? [eq(branches.id, shopFilter)] : [isNull(branches.closedAt)])))
       .orderBy(asc(branches.createdAt));
     if (shopFilter && shops.length === 0) throw new ApiError("BRANCH_NOT_FOUND", "Shop was not found.", 404);
     const accounts = await this.cashAccounts(this.db, tenant.tenantId, business.id, shops.map((shop) => shop.id));

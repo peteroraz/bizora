@@ -83,7 +83,7 @@ export type ShellProfile = {
     membershipId?: string;
   };
   onboardingCompleted?: boolean;
-  membership?: { businessId: string | null; branchId: string | null } | null;
+  membership?: { businessId: string | null; branchId: string | null; defaultBranchId?: string | null } | null;
   businesses: ShellBusiness[];
   branches: ShellBranch[];
   workspaces?: AuthWorkspace[];
@@ -121,6 +121,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const access = useMemo(
     () => ({
       permissions: profile.tenant?.permissions ?? [],
+      ...(profile.tenant?.role ? { role: profile.tenant.role } : {}),
       staffSession: Boolean(profile.tenant?.deviceId),
       owner: tenantId && membershipId ? { tenantId, membershipId } : null,
       branchId: profile.tenant?.branchId ?? null,
@@ -131,6 +132,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     }),
     [
       profile.tenant?.permissions,
+      profile.tenant?.role,
       profile.tenant?.deviceId,
       tenantId,
       membershipId,
@@ -254,6 +256,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   }
 
   const staffMode = Boolean(profile.tenant?.deviceId);
+  const [defaultShop, setDefaultShop] = useState(profile.membership?.defaultBranchId ?? null);
   const placeName = visibleBranches.find((branch) => branch.id === branchId)?.name ?? (branchId ? "" : visibleBranches.length > 1 ? t("allShops") : (visibleBranches[0]?.name ?? ""));
   // Staff tied to one shop, and owners with one shop, have nothing to switch.
   const canSwitchPlace = !staffMode && (profile.businesses.length > 1 || (visibleBranches.length > 1 && !profile.membership?.branchId));
@@ -407,6 +410,24 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                         ))}
                       </Select>
                     </label>
+                  ) : null}
+                  {branchId && !profile.membership?.branchId && membershipId ? (
+                    // The shop Bizora opens in next time (ADR-032).
+                    defaultShop === branchId ? (
+                      <p className="text-sm text-muted">{t("opensHere")}</p>
+                    ) : (
+                      <button
+                        type="button"
+                        className="min-h-11 text-sm font-medium text-primary"
+                        onClick={() =>
+                          void api(`/api/v1/memberships/${membershipId}/default-shop`, { method: "PUT", body: JSON.stringify({ branchId }) }).then((response) => {
+                            if (response.ok) setDefaultShop(branchId);
+                          })
+                        }
+                      >
+                        {t("openHere")}
+                      </button>
+                    )
                   ) : null}
                 </div>
               </LazySheet>

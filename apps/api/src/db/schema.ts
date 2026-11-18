@@ -198,6 +198,11 @@ export const branches = pgTable(
     name: varchar("name", { length: 160 }).notNull(),
     addressId: uuid("address_id"),
     phoneE164: varchar("phone_e164", { length: 20 }),
+    // A closed shop keeps its history (ADR-032).
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedBy: uuid("closed_by"),
+    closedReason: varchar("closed_reason", { length: 240 }),
+    movedIntoBranchId: uuid("moved_into_branch_id"),
     ...timestamps,
   },
   (table) => [
@@ -226,6 +231,8 @@ export const memberships = pgTable(
     role: varchar("role", { length: 32 }).notNull(),
     businessId: uuid("business_id"),
     branchId: uuid("branch_id"),
+    /** The shop Bizora opens in for someone who may work in more than one (ADR-032). */
+    defaultBranchId: uuid("default_branch_id"),
     status: varchar("status", { length: 24 }).notNull().default("ACTIVE"),
     phoneE164: varchar("phone_e164", { length: 20 }),
     ...timestamps,
@@ -898,6 +905,7 @@ export const stockCounts = pgTable(
     difference: bigint("difference", { mode: "bigint" }).notNull(),
     status: varchar("status", { length: 10 }).notNull().default("pending"),
     note: varchar("note", { length: 240 }),
+    decisionNote: varchar("decision_note", { length: 240 }),
     countedBy: uuid("counted_by"),
     countedMembershipId: uuid("counted_membership_id"),
     deviceId: uuid("device_id"),

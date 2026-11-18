@@ -11,6 +11,7 @@ const countQuantity = z.string().trim().refine((value) => parseCountQuantity(val
 const minorAmount = z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas).");
 const clientId = z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.");
 const note = z.string().trim().max(240).optional();
+const requiredNote = z.string().trim().min(3, "Say what happened, in a few words.").max(240);
 
 export const packUnitInputSchema = z.object({
   unitCode: unitCodeSchema,
@@ -29,6 +30,8 @@ export const productWriteSchema = z.object({
   barcode: z.string().trim().max(64).optional().nullable(),
   trackStock: z.boolean().optional(),
   packs: z.array(packUnitInputSchema).max(5).optional(),
+  /** Why the product was changed (7f). Needed when the selling price or cost changes; kept in its history. */
+  changeReason: z.string().trim().max(240).optional(),
 });
 
 export const productCreateSchema = productWriteSchema.extend({
@@ -63,7 +66,8 @@ export const stockAdjustSchema = z
     reason: z.enum([...STOCK_REMOVE_REASONS, ...STOCK_ADD_REASONS]),
     quantity: decimalQuantity,
     unit: unitCodeSchema,
-    note,
+    /** Taking stock off or adding it by hand always says what happened (7f). */
+    note: requiredNote,
   })
   .refine(
     (value) =>
@@ -91,3 +95,10 @@ export const stockCountSchema = z.object({
   note,
 });
 
+
+/** Approving a stock count may carry a note; rejecting one says why (7f). */
+export const stockCountApproveSchema = z.object({ note }).strict();
+export const stockCountRejectSchema = z.object({ note: requiredNote }).strict();
+
+/** Why a product is removed from the list (7f). */
+export const productArchiveSchema = z.object({ reason: note }).strict();

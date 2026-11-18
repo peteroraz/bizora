@@ -33,6 +33,8 @@ export type DocumentInput = {
   business: { name: string; phone: string | null; timezone: string };
   branch: { name: string; address: string | null; phone: string | null };
   customerName: string | null;
+  /** The customer's address, when one is saved (7f). */
+  customerAddress?: string | null;
   servedBy: string | null;
   cashier: string | null;
   lines: { description: string; enteredQuantity: bigint; enteredUnit: string; unitPriceMinor: bigint; lineTotalMinor: bigint }[];
@@ -103,6 +105,7 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
   if (sale.provisionalNumber) details.push(["Offline no.", sale.provisionalNumber]);
   details.push(["Date", when(type === "receipt" && sale.collectedAt ? sale.collectedAt : sale.soldAt)]);
   if (input.customerName) details.push(["Customer", input.customerName]);
+  if (input.customerName && input.customerAddress) details.push(["Address", input.customerAddress]);
   if (input.servedBy) details.push(["Served by", input.servedBy]);
   if (type === "receipt" && input.cashier && input.cashier !== input.servedBy) details.push(["Cashier", input.cashier]);
 
@@ -156,7 +159,6 @@ function formatDate(isoDate: string) {
 const require = createRequire(import.meta.url);
 const FONT = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans.ttf");
 const BOLD = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf");
-const TONE = { info: "#1f6f43", warning: "#8a5a00", danger: "#b42318" } as const;
 
 export function renderPdf(model: DocumentModel, brand: DocumentBrand = { color: null, logo: null, message: null, terms: null }): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -227,7 +229,8 @@ export function renderPdf(model: DocumentModel, brand: DocumentBrand = { color: 
     }
     doc.moveDown();
     for (const notice of model.notices) {
-      doc.font("bold").fontSize(9).fillColor(TONE[notice.tone]).text(notice.text, left, doc.y, { width });
+      // Notices are printed in black: coloured text fades or vanishes on shop printers and photocopies (7f).
+      doc.font("bold").fontSize(9).fillColor("#111111").text(notice.text, left, doc.y, { width });
       doc.moveDown(0.5);
     }
     if (brand.message) {
