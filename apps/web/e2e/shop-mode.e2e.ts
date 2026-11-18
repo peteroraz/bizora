@@ -57,6 +57,10 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   await page.getByLabel("Device name").fill("Counter phone");
   await page.getByRole("button", { name: "Turn on Shop mode here" }).click();
   await expect(page).toHaveURL(/\/shop$/);
+  // The owner is signed out on the shop phone: its screens cannot be opened from the counter.
+  expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain("bizora_refresh");
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/shop$/);
 
   // Staff picks their name and types the PIN on the pad.
   await expect(page.getByRole("heading", { name: "Who is selling?" })).toBeVisible();

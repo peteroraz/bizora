@@ -49,6 +49,12 @@ The web app never used the long pass, so 15 minutes after signing in, everyone w
 - **Where you signed in from stays the first sign-in's.** Renewals keep the device and address of the first sign-in, not the web server's.
 - **One row per sign-in on the account page.** It lists each sign-in once.
 
+### Turning on Shop mode signs the owner out on that phone
+
+- Before, the owner's own sign-in stayed on the phone after "Turn on Shop mode here". Anyone at the counter could open `/app` and act as the owner. It used to run out after 15 minutes; with renewal it would have lasted a week.
+- Now `POST /shop-devices` from a browser also ends the owner's sign-in on that phone and clears its cookies. Only the device cookie stays.
+- An API client that sends its own token keeps it.
+
 ### Shop device auto-lock
 
 - **Activity:** shop devices still lock after 5 minutes without use. Scrolling inside lists and sheets, typing and the mouse wheel now count as use. Before, only page-level scrolling did.

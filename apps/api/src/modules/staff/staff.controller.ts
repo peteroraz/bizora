@@ -6,7 +6,7 @@ import type { Request, Response } from "express";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { APP_ENV } from "../../tokens.js";
 import { EntitlementService } from "../entitlements/entitlement.service.js";
-import { clearDeviceCookie, writeDeviceCookie, writeSessionCookies } from "../identity/session-cookies.js";
+import { clearDeviceCookie, clearSessionCookies, writeDeviceCookie, writeSessionCookies } from "../identity/session-cookies.js";
 import { SessionService } from "../identity/session.service.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequirePermissions } from "../rbac/permissions.js";
@@ -94,6 +94,13 @@ export class StaffController {
   ) {
     const { device, token } = await this.devices.enroll(tenant, body, meta(req));
     writeDeviceCookie(res, this.env, token);
+    // The phone now belongs to the counter: the owner's own sign-in must not stay on it, or anyone could open the
+    // owner's screens from the shop. Only a browser sign-in (cookie) is ended; an API client keeps its token.
+    if (!req.headers.authorization) {
+      const identity = await this.sessions.requireIdentity(req);
+      await this.sessions.revoke(identity.sessionId, identity.userId);
+      clearSessionCookies(res, this.env);
+    }
     return success({ device }, tenant.correlationId);
   }
 
