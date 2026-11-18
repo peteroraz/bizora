@@ -253,7 +253,7 @@ describe("sprint 2.5 security", () => {
     expect(decode(loggedIn.body.data.accessToken as string).br).toBe(branchAId);
   });
 
-  it("rotates refresh tokens with at most one winner", async () => {
+  it("rotates a refresh token used twice at once into one sign-in (ADR-026 grace)", async () => {
     const minted = await request(app.getHttpServer())
       .post("/api/v1/auth/login")
       .send({ email: "owner@tenant-a.test", password: "LocalOnly!Passw0rd" })
@@ -262,8 +262,14 @@ describe("sprint 2.5 security", () => {
     const results = await Promise.all(
       [0, 1].map(() => request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: token })),
     );
-    expect(results.filter((result) => result.status === 201)).toHaveLength(1);
-    expect(results.filter((result) => result.status === 401)).toHaveLength(1);
+    expect(results.map((result) => result.status)).toEqual([201, 201]);
+    const families = await Promise.all(
+      results.map(async (result) => {
+        const [row] = await db.select().from(sessions).where(eq(sessions.refreshTokenHash, sha256Hex(result.body.data.refreshToken as string)));
+        return row?.familyId;
+      }),
+    );
+    expect(new Set(families).size).toBe(1);
   });
 
   it("records an audit event when an invitation is resent", async () => {
@@ -477,7 +483,10 @@ describe("sprint 2.5 security", () => {
     const rotated = first.body.data.refreshToken as string;
     expect(rotated).not.toBe(ownerRefresh);
 
+    // Past the grace for duplicates sent at the same moment, a swapped token is a stolen one.
+    await db.update(sessions).set({ revokedAt: new Date(Date.now() - 60_000) }).where(eq(sessions.refreshTokenHash, sha256Hex(ownerRefresh)));
     await request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: ownerRefresh }).expect(401);
+    await request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: rotated }).expect(401);
 
     const expiredLogin = await request(app.getHttpServer())
       .post("/api/v1/auth/login")

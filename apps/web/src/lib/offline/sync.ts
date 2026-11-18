@@ -4,7 +4,7 @@ import { flush, type OutboxOwner, type PushFn } from "./outbox";
 
 /** Sends operations to the server. Throws on network failure or a server error, so the outbox backs off. */
 export const pushToServer: PushFn = async (operations) => {
-  const response = await api("/api/v1/sync/push", { method: "POST", body: JSON.stringify({ operations }) });
+  const response = await api("/api/v1/sync/push", { method: "POST", body: JSON.stringify({ operations }) }, { background: true });
   if (!response.ok) throw new Error(`Sync failed with ${response.status}`);
   const payload = (await response.json()) as { data: { results: SyncOperationResult[] } };
   return payload.data.results;

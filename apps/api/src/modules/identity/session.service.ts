@@ -14,13 +14,16 @@ import {
 import type { AppEnv } from "@bizora/config/env";
 import { ttlToMs } from "@bizora/config/env";
 import type { Role } from "@bizora/contracts";
-import { and, eq, gt, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, ne } from "drizzle-orm";
 import type { Request } from "express";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
 import { sessions, shopDevices } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
+
+/** How long a just-swapped refresh token is still accepted from the same live sign-in (ADR-026). */
+export const REFRESH_REUSE_GRACE_MS = 30_000;
 
 export type IssuedTokens = {
   sessionId: string;
@@ -83,11 +86,15 @@ export class SessionService {
     return { sessionId, accessToken, refreshToken };
   }
 
+  /** Live sessions, one per sign-in: renewals and their brief siblings share a family, so only the newest shows. */
   async listActive(userId: string) {
-    return this.db
+    const rows = await this.db
       .select()
       .from(sessions)
-      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())));
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+      .orderBy(desc(sessions.createdAt));
+    const seen = new Set<string>();
+    return rows.filter((row) => (seen.has(row.familyId) ? false : (seen.add(row.familyId), true)));
   }
 
   async revokeAllForUser(userId: string) {
@@ -97,11 +104,19 @@ export class SessionService {
       .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
   }
 
+  /** Signs out every other sign-in. The current one is kept whole, including a sibling made in the renewal grace. */
   async revokeOthers(userId: string, sessionId: string) {
+    const familyId = await this.familyOf(sessionId, userId);
     await this.db
       .update(sessions)
       .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), ne(sessions.id, sessionId)));
+      .where(
+        and(
+          eq(sessions.userId, userId),
+          isNull(sessions.revokedAt),
+          familyId ? ne(sessions.familyId, familyId) : ne(sessions.id, sessionId),
+        ),
+      );
   }
 
   /** Revoke every live session created on a shop device (device revoked or suspended). */
@@ -112,13 +127,26 @@ export class SessionService {
       .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.revokedAt)));
   }
 
+  /** Sign out: ends the whole sign-in, so a sibling made in the renewal grace cannot outlive it. */
   async revoke(sessionId: string, userId: string) {
+    const familyId = await this.familyOf(sessionId, userId);
     await this.db
       .update(sessions)
       .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+      .where(
+        and(
+          eq(sessions.userId, userId),
+          isNull(sessions.revokedAt),
+          familyId ? eq(sessions.familyId, familyId) : eq(sessions.id, sessionId),
+        ),
+      );
   }
 
+  /**
+   * Swaps a refresh token for a new pair (rotation). Presenting a token that was already swapped normally means it
+   * was stolen, so the whole sign-in is ended. The one exception is a duplicate within a few seconds of the swap
+   * while the sign-in is still live: one browser sends several requests at once when its pass runs out (ADR-026).
+   */
   async refresh(
     rawToken: string,
     meta?: { userAgent?: string | null; ip?: string | null; deviceToken?: string | null },
@@ -132,10 +160,8 @@ export class SessionService {
       await this.assertDeviceBinding(current.deviceId, current.tenantId, meta?.deviceToken ?? null);
     }
     if (current.revokedAt) {
-      await this.db
-        .update(sessions)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(sessions.familyId, current.familyId), isNull(sessions.revokedAt)));
+      if (await this.withinRenewalGrace(current)) return this.mint(this.db, current, meta);
+      await this.revokeFamily(current.familyId);
       throw new ApiError("UNAUTHENTICATED", "Refresh token reuse detected.", 401);
     }
     if (current.expiresAt.getTime() < Date.now()) {
@@ -143,8 +169,7 @@ export class SessionService {
     }
 
     const sessionId = newId();
-    const refreshToken = newRefreshToken();
-    const claimed = await this.db.transaction(async (tx) => {
+    const issued = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(sessions)
         .set({ revokedAt: new Date(), replacedBy: sessionId })
@@ -153,44 +178,79 @@ export class SessionService {
       if (!row) {
         return null;
       }
-      await tx.insert(sessions).values({
-        id: sessionId,
-        userId: current.userId,
-        tenantId: current.tenantId,
-        membershipId: current.membershipId,
-        businessId: current.businessId,
-        branchId: current.branchId,
-        refreshTokenHash: sha256Hex(refreshToken),
-        familyId: current.familyId,
-        expiresAt: new Date(Date.now() + this.refreshTtlMs(current.deviceId)),
-        userAgent: meta?.userAgent ?? current.userAgent,
-        ip: meta?.ip ?? current.ip,
-        deviceId: current.deviceId,
-      });
-      return row;
+      return this.mint(tx, current, meta, sessionId);
     });
-    if (!claimed) {
-      await this.db
-        .update(sessions)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(sessions.familyId, current.familyId), isNull(sessions.revokedAt)));
-      throw new ApiError("UNAUTHENTICATED", "Refresh token reuse detected.", 401);
-    }
+    if (issued) return issued;
+    // Another request swapped this token a moment ago.
+    const [latest] = await this.db.select().from(sessions).where(eq(sessions.id, current.id)).limit(1);
+    if (latest && (await this.withinRenewalGrace(latest))) return this.mint(this.db, latest, meta);
+    await this.revokeFamily(current.familyId);
+    throw new ApiError("UNAUTHENTICATED", "Refresh token reuse detected.", 401);
+  }
 
+  /** A swapped token presented again within the grace, while its sign-in still has a live session. */
+  private async withinRenewalGrace(row: typeof sessions.$inferSelect) {
+    if (!row.replacedBy || !row.revokedAt || Date.now() - row.revokedAt.getTime() > REFRESH_REUSE_GRACE_MS) return false;
+    const [live] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.familyId, row.familyId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+      .limit(1);
+    return Boolean(live);
+  }
+
+  /** A new session in the same sign-in. Where it was signed in from stays the first sign-in's, not the web server's. */
+  private async mint(
+    executor: Pick<AppDatabase, "insert">,
+    from: typeof sessions.$inferSelect,
+    meta?: { userAgent?: string | null; ip?: string | null },
+    sessionId: string = newId(),
+  ): Promise<IssuedTokens> {
+    const refreshToken = newRefreshToken();
+    await executor.insert(sessions).values({
+      id: sessionId,
+      userId: from.userId,
+      tenantId: from.tenantId,
+      membershipId: from.membershipId,
+      businessId: from.businessId,
+      branchId: from.branchId,
+      refreshTokenHash: sha256Hex(refreshToken),
+      familyId: from.familyId,
+      expiresAt: new Date(Date.now() + this.refreshTtlMs(from.deviceId)),
+      userAgent: from.userAgent ?? meta?.userAgent ?? null,
+      ip: from.ip ?? meta?.ip ?? null,
+      deviceId: from.deviceId,
+    });
     const accessToken = await signAccessToken(
       {
-        sub: current.userId,
+        sub: from.userId,
         sid: sessionId,
-        typ: current.membershipId ? "access" : "preauth",
-        org: current.tenantId ?? undefined,
-        mid: current.membershipId ?? undefined,
-        bid: current.businessId,
-        br: current.branchId,
+        typ: from.membershipId ? "access" : "preauth",
+        org: from.tenantId ?? undefined,
+        mid: from.membershipId ?? undefined,
+        bid: from.businessId,
+        br: from.branchId,
       },
       this.env.JWT_SECRET,
       this.env.JWT_ACCESS_TTL,
     );
     return { sessionId, accessToken, refreshToken };
+  }
+
+  private async revokeFamily(familyId: string) {
+    await this.db
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.familyId, familyId), isNull(sessions.revokedAt)));
+  }
+
+  async familyOf(sessionId: string, userId: string) {
+    const [row] = await this.db
+      .select({ familyId: sessions.familyId })
+      .from(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+      .limit(1);
+    return row?.familyId ?? null;
   }
 
   async requireIdentity(request: Request) {

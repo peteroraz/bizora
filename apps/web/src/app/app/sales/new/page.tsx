@@ -19,7 +19,7 @@ import { nextProvisionalNumber } from "../../../../lib/provisional";
 import { baseQuantity, lineTotal, listPrice, sellingUnits } from "../../../../lib/sales-client";
 import { refreshOfflineCatalog } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
-import { DueDatePicker } from "../../../../components/day-switcher";
+import { DueDatePicker } from "../../../../components/due-date-picker";
 
 type Line = { key: string; product: CachedProduct; unit: string; quantity: string; price: string };
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";

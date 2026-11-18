@@ -5,7 +5,7 @@ import { Button, Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { dayKey, formatCurrency } from "../i18n/format";
-import { DueDatePicker } from "./day-switcher";
+import { DueDatePicker } from "./due-date-picker";
 import { can } from "../lib/access";
 import { useAccess } from "../lib/access-context";
 import { api } from "../lib/api";

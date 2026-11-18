@@ -65,8 +65,9 @@ export class IdentityController {
     return success(await this.identity.listAuthWorkspaces(identity.userId), req.correlationId ?? "auth");
   }
 
+  // Not rate-limited by address: renewals from the web server all share its address, and a refresh token is a
+  // 256-bit secret that cannot be guessed (ADR-026).
   @Post("refresh")
-  @UseGuards(ThrottlerGuard)
   async refresh(@Body() body: unknown, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
     const parsed = refreshRequestSchema.parse(body ?? {});
     const token = this.sessions.readRefreshToken(req, parsed.refreshToken);

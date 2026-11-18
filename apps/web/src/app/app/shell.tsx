@@ -37,10 +37,7 @@ import type { AccountMenuProps } from "./account-menu";
 import { setShopMode } from "../../lib/shop-mode";
 import { navAllowed } from "../../lib/access";
 import { AccessProvider } from "../../lib/access-context";
-import { dismissRejected, subscribe, summary } from "../../lib/offline/outbox";
 import { signOutEverywhere } from "../../lib/offline/sw-client";
-import { startBackgroundSync } from "../../lib/offline/sync";
-import { refreshOfflineCatalog } from "../../lib/stock-client";
 import { bottomItemsFor, primaryNav, type NavId } from "../../lib/nav";
 
 const icons = {
@@ -131,21 +128,32 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     rejected: [],
   });
 
-  // Send work saved offline whenever the device is online, and show what is still waiting.
+  // Send work saved offline whenever the device is online, and show what is still waiting. The sync code loads
+  // after the screen, so it does not add to the JavaScript every screen needs first (Spec §8 budget).
   useEffect(() => {
     if (!tenantId || !membershipId) return;
     const owner = { tenantId, membershipId };
-    const refresh = () => {
-      void summary(owner)
-        .then((next) => setOutbox({ pending: next.pending, rejected: next.rejected }))
-        .catch(() => undefined);
-    };
-    refresh();
-    const unsubscribe = subscribe(refresh);
-    const stop = startBackgroundSync(owner);
+    let stopped = false;
+    let cleanup = () => undefined as void;
+    void Promise.all([import("../../lib/offline/outbox"), import("../../lib/offline/sync")]).then(([queue, sync]) => {
+      if (stopped) return;
+      const refresh = () => {
+        void queue
+          .summary(owner)
+          .then((next) => setOutbox({ pending: next.pending, rejected: next.rejected }))
+          .catch(() => undefined);
+      };
+      refresh();
+      const unsubscribe = queue.subscribe(refresh);
+      const stop = sync.startBackgroundSync(owner);
+      cleanup = () => {
+        unsubscribe();
+        stop();
+      };
+    });
     return () => {
-      unsubscribe();
-      stop();
+      stopped = true;
+      cleanup();
     };
   }, [tenantId, membershipId]);
 
@@ -154,7 +162,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
   const readsStock = access.permissions.includes(Permission.STOCK_READ);
   useEffect(() => {
     if (!readsStock || !tenantId || !currentBranchId) return;
-    const refresh = () => void refreshOfflineCatalog(tenantId, currentBranchId);
+    const refresh = () => void import("../../lib/stock-client").then((stock) => stock.refreshOfflineCatalog(tenantId, currentBranchId));
     refresh();
     window.addEventListener("online", refresh);
     return () => window.removeEventListener("online", refresh);
@@ -237,20 +245,30 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
     window.location.assign(staffMode ? "/shop" : "/login");
   }
 
-  // Shop mode: lock back to the staff list after a few minutes without a tap or key press.
+  // Shop mode: lock back to the staff list after a few minutes without a tap, key press or scroll. A warning
+  // shows first, so someone reading a long list or waiting for a customer can keep the screen with one tap.
+  const [lockWarning, setLockWarning] = useState(false);
   useEffect(() => {
     if (!staffMode) return;
     setShopMode(true);
-    let timer = window.setTimeout(() => void logout(), PIN_LOCKOUT.autoLockMinutesDefault * 60_000);
+    const lockAfter = PIN_LOCKOUT.autoLockMinutesDefault * 60_000;
+    let warnTimer = 0;
+    let lockTimer = 0;
     const reset = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => void logout(), PIN_LOCKOUT.autoLockMinutesDefault * 60_000);
+      window.clearTimeout(warnTimer);
+      window.clearTimeout(lockTimer);
+      setLockWarning(false);
+      warnTimer = window.setTimeout(() => setLockWarning(true), lockAfter - AUTO_LOCK_WARNING_MS);
+      lockTimer = window.setTimeout(() => void logout(), lockAfter);
     };
-    const events = ["pointerdown", "keydown", "touchstart", "scroll"] as const;
-    events.forEach((name) => window.addEventListener(name, reset, { passive: true }));
+    reset();
+    // Capture phase: scrolling inside a list or a sheet never reaches the window otherwise.
+    const events = ["pointerdown", "keydown", "touchstart", "scroll", "wheel", "input"] as const;
+    events.forEach((name) => document.addEventListener(name, reset, { capture: true, passive: true }));
     return () => {
-      window.clearTimeout(timer);
-      events.forEach((name) => window.removeEventListener(name, reset));
+      window.clearTimeout(warnTimer);
+      window.clearTimeout(lockTimer);
+      events.forEach((name) => document.removeEventListener(name, reset, { capture: true }));
     };
   }, [staffMode]);
 
@@ -439,8 +457,17 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
                 ))}
               </ul>
             </div>
-            <Button variant="secondary" onClick={() => access.owner && void dismissRejected(access.owner)}>
+            <Button variant="secondary" onClick={() => access.owner && void import("../../lib/offline/outbox").then((queue) => access.owner && queue.dismissRejected(access.owner))}>
               {t("syncDismiss")}
+            </Button>
+          </div>
+        ) : null}
+        {lockWarning ? (
+          <div className="flex flex-wrap items-center gap-3 border-b border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="alert" data-testid="lock-warning">
+            <p className="flex-1 font-medium">{t("lockSoon")}</p>
+            {/* Any tap already keeps the screen; the button says so. */}
+            <Button variant="secondary" onClick={() => setLockWarning(false)}>
+              {t("keepWorking")}
             </Button>
           </div>
         ) : null}
@@ -538,6 +565,9 @@ function EmailVerificationBanner() {
     </div>
   );
 }
+
+/** How long before the shop screen locks the warning shows. */
+const AUTO_LOCK_WARNING_MS = 30_000;
 
 function PlaceText({ organization, place }: { organization: string; place: string }) {
   return (
