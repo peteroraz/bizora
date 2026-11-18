@@ -1264,3 +1264,101 @@ export const schema = {
 };
 
 export type DatabaseSchema = typeof schema;
+
+/** Sprint 7b (ADR-028): what was paid for running the business. */
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    paidFrom: varchar("paid_from", { length: 10 }).notNull(),
+    expenseDate: date("expense_date").notNull(),
+    payee: varchar("payee", { length: 120 }),
+    note: varchar("note", { length: 240 }),
+    status: varchar("status", { length: 20 }).notNull(),
+    journalEntryId: uuid("journal_entry_id"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    voidReason: varchar("void_reason", { length: 240 }),
+    createdBy: uuid("created_by").notNull(),
+    membershipId: uuid("membership_id"),
+    deviceId: uuid("device_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("expenses_tenant_id_id_key").on(table.tenantId, table.id),
+    index("expenses_day_idx").on(table.tenantId, table.businessId, table.expenseDate),
+    foreignKey({ name: "expenses_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "expenses_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({
+      name: "expenses_account_fk",
+      columns: [table.tenantId, table.businessId, table.accountId],
+      foreignColumns: [ledgerAccounts.tenantId, ledgerAccounts.businessId, ledgerAccounts.id],
+    }),
+  ],
+);
+
+/** Sprint 7b: the owner's money in and out, and cash moved between a drawer and the bank. */
+export const moneyMovements = pgTable(
+  "money_movements",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    movementDate: date("movement_date").notNull(),
+    note: varchar("note", { length: 240 }),
+    status: varchar("status", { length: 10 }).notNull().default("recorded"),
+    journalEntryId: uuid("journal_entry_id"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    voidReason: varchar("void_reason", { length: 240 }),
+    createdBy: uuid("created_by").notNull(),
+    membershipId: uuid("membership_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("money_movements_tenant_id_id_key").on(table.tenantId, table.id),
+    index("money_movements_day_idx").on(table.tenantId, table.businessId, table.movementDate),
+    foreignKey({ name: "money_movements_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "money_movements_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+  ],
+);
+
+/** Sprint 7b: a count of a shop's drawer; the difference from what was expected is posted. */
+export const cashCounts = pgTable(
+  "cash_counts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    countDate: date("count_date").notNull(),
+    expectedMinor: bigint("expected_minor", { mode: "bigint" }).notNull(),
+    countedMinor: bigint("counted_minor", { mode: "bigint" }).notNull(),
+    differenceMinor: bigint("difference_minor", { mode: "bigint" }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    note: varchar("note", { length: 240 }),
+    journalEntryId: uuid("journal_entry_id"),
+    createdBy: uuid("created_by").notNull(),
+    membershipId: uuid("membership_id"),
+    deviceId: uuid("device_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("cash_counts_tenant_id_id_key").on(table.tenantId, table.id),
+    index("cash_counts_branch_idx").on(table.tenantId, table.branchId, table.createdAt),
+    foreignKey({ name: "cash_counts_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "cash_counts_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+  ],
+);

@@ -42,6 +42,38 @@ export default function AppHomePage() {
   const seesDebtors = shown.includes("debtors");
   const reconciles = can(access, Permission.BANK_RECONCILE) && shown.includes("money");
   const [bank, setBank] = useState<{ open: number } | null>(null);
+  const seesCash = shown.includes("cash");
+  const seesProfit = can(access, Permission.REPORTS_PROFIT_READ) && shown.includes("money");
+  const approvesExpenses = can(access, Permission.EXPENSES_APPROVE);
+  const [cash, setCash] = useState<{ currency: string; totalMinor: bigint; shops: number } | null>(null);
+  const [profit, setProfit] = useState<{ currency: string; profitMinor: string; active: boolean } | null>(null);
+  const [expensesToApprove, setExpensesToApprove] = useState(0);
+
+  useEffect(() => {
+    if (seesCash) {
+      void api("/api/v1/money/cash")
+        .then(async (response) => {
+          if (!response.ok) return;
+          const data = (await response.json()).data as { currency: string; shops: { expectedMinor: string }[] };
+          setCash({ currency: data.currency, totalMinor: data.shops.reduce((sum, shop) => sum + BigInt(shop.expectedMinor), 0n), shops: data.shops.length });
+        })
+        .catch(() => undefined);
+    }
+    if (seesProfit) {
+      void api("/api/v1/money/profit")
+        .then(async (response) => {
+          if (!response.ok) return;
+          const data = (await response.json()).data as { currency: string; profitMinor: string; salesMinor: string; expensesMinor: string };
+          setProfit({ currency: data.currency, profitMinor: data.profitMinor, active: data.salesMinor !== "0" || data.expensesMinor !== "0" });
+        })
+        .catch(() => undefined);
+    }
+    if (approvesExpenses) {
+      void api("/api/v1/money/expenses/waiting")
+        .then(async (response) => (response.ok ? setExpensesToApprove((await response.json()).data.count) : undefined))
+        .catch(() => undefined);
+    }
+  }, [seesCash, seesProfit, approvesExpenses]);
 
   useEffect(() => {
     if (!reconciles) return;
@@ -119,7 +151,7 @@ export default function AppHomePage() {
       ["toRelease", t("toRelease"), t("toReleaseEmpty")],
       ["sales", t("sales"), t("emptySales")],
       ["mySales", t("mySales"), t("emptySales")],
-      ["money", t("bankTitle"), t("emptyMoney")],
+      ["money", seesProfit ? t("profit") : t("bankTitle"), seesProfit ? t("emptyProfit") : t("emptyMoney")],
       ["cash", t("cash"), t("emptyCash")],
       ["debtors", t("debtors"), t("emptyDebtors")],
       ["stock", t("stock"), t("emptyStock")],
@@ -127,9 +159,8 @@ export default function AppHomePage() {
       ["approval", t("approval"), t("emptyApproval")],
     ] as const
   )
-    // Cash at hand and staff activity arrive with Sprint 7; until then they would only say "nothing yet".
-    // Money shows only when there are bank lines to check.
-    .filter(([id]) => shown.includes(id) && id !== "cash" && id !== "staff" && (id !== "money" || (bank?.open ?? 0) > 0));
+    // Staff activity is not built yet. Money shows with today's profit, or when there are bank lines to check.
+    .filter(([id]) => shown.includes(id) && id !== "staff" && (id !== "money" || seesProfit || (bank?.open ?? 0) > 0));
   const unfinished = checks.filter((check) => !check.done);
   const today = t("today", { date: formatWhen(new Date(), locale, timezone) });
 
@@ -227,9 +258,31 @@ export default function AppHomePage() {
                   {t("recordSale")}
                 </Link>
               </>
-            ) : id === "approval" && countsToApprove > 0 ? (
-              <Link href="/app/stock" className="mt-2 inline-block text-sm text-primary">
-                {t("approvalCounts", { count: countsToApprove })}
+            ) : id === "approval" && (countsToApprove > 0 || expensesToApprove > 0) ? (
+              <div className="mt-2 space-y-1 text-sm">
+                {countsToApprove > 0 ? (
+                  <Link href="/app/stock" className="block text-primary">
+                    {t("approvalCounts", { count: countsToApprove })}
+                  </Link>
+                ) : null}
+                {expensesToApprove > 0 ? (
+                  <Link href="/app/money/expenses?status=waiting" className="block text-primary" data-testid="home-expenses-to-approve">
+                    {t("approvalExpenses", { count: expensesToApprove })}
+                  </Link>
+                ) : null}
+              </div>
+            ) : id === "cash" && cash ? (
+              <Link href="/app/money/cash" className="mt-1 block" data-testid="home-cash">
+                <span className="block text-xl font-semibold tabular-nums">{formatCurrency(cash.totalMinor, cash.currency, locale)}</span>
+                <span className="block text-sm text-muted">{t("cashTotal", { count: cash.shops })}</span>
+                <span className="text-sm text-primary">{t("seeCash")}</span>
+              </Link>
+            ) : id === "money" && profit && profit.active ? (
+              <Link href="/app/money/profit" className="mt-1 block" data-testid="home-profit">
+                <span className={`block text-xl font-semibold tabular-nums ${BigInt(profit.profitMinor) < 0n ? "text-danger" : ""}`}>
+                  {formatCurrency(BigInt(profit.profitMinor), profit.currency, locale)}
+                </span>
+                <span className="text-sm text-primary">{t("seeProfit")}</span>
               </Link>
             ) : (
               <p className="mt-2 text-sm">{empty}</p>

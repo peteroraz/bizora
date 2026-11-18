@@ -14,9 +14,18 @@ export function loadPhoneRules() {
   return loading;
 }
 
-/** Checks a typed number for the business's country; null when nothing was typed. */
+/**
+ * Checks a typed number for the business's country; null when nothing was typed. With no network before the rules
+ * arrived, the number goes as typed: the server checks it (and says what is wrong) when it syncs.
+ */
 export async function checkTypedPhone(text: string, country: string): Promise<PhoneCheck | null> {
-  return (await loadPhoneRules()).checkPhone(text, country);
+  try {
+    return (await loadPhoneRules()).checkPhone(text, country);
+  } catch {
+    loading = null;
+    const typed = text.trim();
+    return typed ? { ok: true, e164: typed, country: null, national: typed, international: typed } : null;
+  }
 }
 
 /**
@@ -36,7 +45,12 @@ export function PhoneInput({
 
   useEffect(() => {
     let live = true;
-    void loadPhoneRules().then((loaded) => live && setRules(loaded));
+    void loadPhoneRules()
+      .then((loaded) => live && setRules(loaded))
+      .catch(() => {
+        // No network yet: the box still takes digits, and the number is checked when it can be.
+        loading = null;
+      });
     return () => {
       live = false;
     };

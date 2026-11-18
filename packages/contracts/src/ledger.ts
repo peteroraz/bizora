@@ -29,6 +29,7 @@ export type LedgerRole =
   | "materials"
   | "expense"
   | "bank_charges"
+  | "cash_over_short"
   | "fx";
 
 export type AccountTemplate = { code: string; name: string; type: LedgerAccountType; role: LedgerRole };
@@ -63,6 +64,8 @@ const base: AccountTemplate[] = [
   { code: "6600", name: "Bank and POS charges", type: "expense", role: "bank_charges" },
   { code: "6700", name: "Market levies and dues", type: "expense", role: "expense" },
   { code: "6900", name: "Other expenses", type: "expense", role: "expense" },
+  // A drawer that counts more or less than expected (ADR-028). Short is a cost; over lowers it.
+  { code: "6950", name: "Cash short or over", type: "expense", role: "cash_over_short" },
   { code: "7000", name: "Exchange rate gains and losses", type: "expense", role: "fx" },
 ];
 
