@@ -91,11 +91,14 @@ function ProductScreen() {
   const [receive, setReceive] = useState<ReceiveDraft>(emptyReceive);
   // Stock in on credit names the supplier owed and when to pay (ADR-029); names come from the supplier list.
   const [receivePaid, setReceivePaid] = useState<"credit" | "cash" | "bank">("credit");
-  const [supplierNames, setSupplierNames] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
+  const supplierNames = suppliers.map((supplier) => supplier.name);
+  // Goods sent back to a supplier (ADR-030): off what is owed, or money back.
+  const [sendBackSettle, setSendBackSettle] = useState<"owed" | "cash" | "bank">("owed");
   useEffect(() => {
     if (!can(access, Permission.STOCK_RECEIVE, Permission.PURCHASES_MANAGE)) return;
     void api("/api/v1/suppliers/names")
-      .then(async (response) => (response.ok ? setSupplierNames(((await response.json()).data.items as { name: string }[]).map((item) => item.name)) : undefined))
+      .then(async (response) => (response.ok ? setSuppliers((await response.json()).data.items as { id: string; name: string }[]) : undefined))
       .catch(() => undefined);
   }, [access]);
 
@@ -301,6 +304,76 @@ function ProductScreen() {
             <div className="self-end">
               <SubmitButton pending={busy === "receive"} pendingLabel={t("saving")}>
                 {t("receive")}
+              </SubmitButton>
+            </div>
+          </SafeForm>
+        </Card>
+      ) : null}
+
+      {product.trackStock && can(access, Permission.STOCK_RECEIVE) && suppliers.length > 0 ? (
+        <Card>
+          <p className="text-sm font-medium">{t("sendBackTitle")}</p>
+          <p className="text-sm text-muted">{t("sendBackLead")}</p>
+          <SafeForm
+            className="mt-3 grid gap-3 sm:grid-cols-2"
+            pending={busy === "sendBack"}
+            onSubmit={async (event) => {
+              const form = new FormData(event.currentTarget);
+              const quantity = field(form, "quantity").replace(/,/g, "");
+              if (!parseQuantity(quantity)) return setMessage({ tone: "danger", text: t("invalidQuantity") });
+              const ok = await submit(
+                "sendBack",
+                "/api/v1/stock/return-to-supplier",
+                {
+                  id: uuidv7(),
+                  productId: product.id,
+                  supplierId: field(form, "supplierId"),
+                  quantity,
+                  unit: field(form, "unit"),
+                  settle: sendBackSettle,
+                  ...(field(form, "note") ? { note: field(form, "note") } : {}),
+                },
+                t("sentBack"),
+              );
+              if (ok) {
+                (event.target as HTMLFormElement).reset();
+                setSendBackSettle("owed");
+              }
+            }}
+          >
+            <FormField id="sendback-supplier" label={t("supplier")}>
+              <Select id="sendback-supplier" name="supplierId" required defaultValue="">
+                <option value="" disabled>
+                  {t("pickSupplier")}
+                </option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField id="sendback-quantity" label={t("quantity")}>
+              <QuantityInput id="sendback-quantity" name="quantity" required />
+            </FormField>
+            {unitSelect("sendback")}
+            <FormField id="sendback-settle" label={t("sendBackSettle")}>
+              <Select id="sendback-settle" value={sendBackSettle} onChange={(event) => setSendBackSettle(event.target.value as "owed" | "cash" | "bank")}>
+                <option value="owed">{t("settle.owed")}</option>
+                {can(access, Permission.PURCHASES_MANAGE) ? (
+                  <>
+                    <option value="cash">{t("settle.cash")}</option>
+                    <option value="bank">{t("settle.bank")}</option>
+                  </>
+                ) : null}
+              </Select>
+            </FormField>
+            <FormField id="sendback-note" label={t("note")} hint={t("optional")}>
+              <SentenceInput id="sendback-note" name="note" maxLength={240} />
+            </FormField>
+            <div className="self-end">
+              <SubmitButton pending={busy === "sendBack"} pendingLabel={t("saving")}>
+                {t("sendBack")}
               </SubmitButton>
             </div>
           </SafeForm>

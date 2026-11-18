@@ -24,7 +24,8 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, sales, users } from "../../db/schema.js";
+import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, users } from "../../db/schema.js";
+import { ReturnService } from "./return.service.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
@@ -68,6 +69,7 @@ export class SaleService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NotificationService) private readonly notifications: NotificationService,
     @Inject(BrandingService) private readonly branding: BrandingService,
+    @Inject(ReturnService) private readonly returns: ReturnService,
   ) {}
 
   async create(tenant: TenantContext, raw: unknown, options: { source?: SaleSource; soldAt?: Date; allowOlder?: boolean } = {}) {
@@ -363,6 +365,10 @@ export class SaleService {
         .where(and(eq(paymentAllocations.tenantId, tenant.tenantId), eq(paymentAllocations.saleId, sale.id), eq(customerPayments.status, "recorded")))
         .limit(1);
       if (paidLater) throw new ApiError("HAS_PAYMENTS", `Payment ${paidLater.number} was made against this sale. Cancel that payment first.`, 409);
+      // Goods already came back (ADR-030): the return stands, so the sale cannot be undone as a whole.
+      if (sale.returnedMinor > 0n || (await tx.select({ id: saleReturns.id }).from(saleReturns).where(and(eq(saleReturns.tenantId, tenant.tenantId), eq(saleReturns.saleId, sale.id))).limit(1)).length > 0) {
+        throw new ApiError("HAS_RETURNS", "Goods were returned from this sale, so it can no longer be cancelled. Return the rest of the goods instead.", 409);
+      }
       const business = await requireBusiness(tx, tenant);
       const today = localDate(new Date(), business.timezone);
       if (!sale.historyOnly && sale.journalEntryId) {
@@ -533,6 +539,9 @@ export class SaleService {
       this.laterPayments(sale),
     ]);
     const extra = extras[0];
+    // The sale's returns, and how much of each line has come back in the unit it was sold in (ADR-030).
+    const returned = await this.returns.forSale(this.db, tenant.tenantId, sale.id, lines.map((line) => line.id));
+    const returnedByLine = returned.returnedByLine;
     const stages = {
       /** Whether this person recorded the sale (they may cancel it while it waits for payment). */
       mine: sale.membershipId === tenant.membershipId,
@@ -583,7 +592,13 @@ export class SaleService {
         phone: seeContact && customer?.phoneE164 ? customer.phoneE164 : null,
         hrefPrefix: seeContact && customer?.phoneE164 ? whatsAppHref(customer.phoneE164, "") : "https://wa.me/",
       },
+      returnedMinor: sale.returnedMinor.toString(),
+      returns: returned.returns,
+      // Who may record returns, and whether this sale can still take one.
+      canReturn: tenant.permissions.includes(Permission.SALES_VOID) && sale.status === "completed" && !sale.historyOnly,
       lines: lines.map((line) => ({
+        id: line.id,
+        returnedQuantity: (returnedByLine.get(line.id) ?? 0n).toString(),
         productId: line.productId,
         description: line.description,
         quantity: line.quantity.toString(),

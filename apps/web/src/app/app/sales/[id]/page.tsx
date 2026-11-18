@@ -10,6 +10,7 @@ import { RequireAccess } from "../../../../components/require-access";
 import { SaleCollect } from "../../../../components/sale-collect";
 import { SaleComments } from "../../../../components/sale-comments";
 import { SaleDocuments } from "../../../../components/sale-documents";
+import { SaleReturnPanel, SaleReturnsList } from "../../../../components/sale-returns";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatDay, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
@@ -77,7 +78,7 @@ function SaleScreen() {
   const money = (minor: string) => formatCurrency(BigInt(minor), full?.currency ?? "NGN", locale);
   const when = (value: string) => formatWhen(value, locale, "Africa/Lagos");
   const ownUnpaid = sale.status === "awaiting_payment" && sale.mine;
-  const canVoid = sale.status !== "voided" && !sale.historyOnly && (can(access, Permission.SALES_VOID) || (ownUnpaid && can(access, Permission.SALES_CREATE)));
+  const canVoid = sale.status !== "voided" && !sale.historyOnly && !(full && BigInt(full.returnedMinor) > 0n) && (can(access, Permission.SALES_VOID) || (ownUnpaid && can(access, Permission.SALES_CREATE)));
   const canCollect = full !== null && sale.status === "awaiting_payment" && can(access, Permission.SALES_COLLECT);
   const canRelease = sale.status === "awaiting_release" && can(access, Permission.SALES_RELEASE);
   const plural = (quantity: string) => (Number(quantityToString(BigInt(quantity))) === 1 ? 1 : 2);
@@ -132,6 +133,9 @@ function SaleScreen() {
                       {t("lineDetail", { quantity: quantityToString(BigInt(line.enteredQuantity)), unit: unitName(line.enteredUnit, plural(line.enteredQuantity)), price: money(line.unitPriceMinor) })}
                     </span>
                     {line.costMinor !== undefined ? <span className="block text-xs text-muted">{t("lineCost", { cost: money(line.costMinor) })}</span> : null}
+                    {BigInt(line.returnedQuantity) > 0n ? (
+                      <span className="block text-xs text-warning">{t("lineReturned", { quantity: quantityToString(BigInt(line.returnedQuantity)) })}</span>
+                    ) : null}
                   </span>
                   <span className="tabular-nums">{money(line.lineTotalMinor)}</span>
                 </li>
@@ -167,6 +171,12 @@ function SaleScreen() {
                 <dd className="text-right tabular-nums">{money(payment.amountMinor)}</dd>
               </Fragment>
             ))}
+            {BigInt(full.returnedMinor) > 0n ? (
+              <>
+                <dt className="text-muted">{t("returnedTotal")}</dt>
+                <dd className="text-right tabular-nums" data-testid="sale-returned">{money((-BigInt(full.returnedMinor)).toString())}</dd>
+              </>
+            ) : null}
             {sale.status !== "awaiting_payment" && BigInt(full.balanceMinor) > 0n ? (
               <>
                 <dt className="text-warning">{t("owing")}</dt>
@@ -190,6 +200,9 @@ function SaleScreen() {
       {full?.note ? <p className="text-sm text-muted">{full.note}</p> : null}
 
       {canCollect && full ? <SaleCollect sale={full} onDone={(next) => setSale(next)} /> : null}
+
+      {full ? <SaleReturnsList sale={full} /> : null}
+      {full?.canReturn ? <SaleReturnPanel sale={full} onDone={(next) => setSale({ ...next, view: "full" })} /> : null}
 
       {canRelease ? (
         <Card>

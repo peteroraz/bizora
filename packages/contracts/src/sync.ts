@@ -45,6 +45,8 @@ export const DOCUMENT_PREFIXES = {
   stock_count: "SC",
   stock_transfer: "TR",
   expense: "EXP",
+  sale_return: "RET",
+  supplier_return: "SR",
 } as const;
 export type DocumentType = keyof typeof DOCUMENT_PREFIXES;
 

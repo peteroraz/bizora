@@ -74,6 +74,7 @@ export const PROFIT_DAILY_MAX_DAYS = 62;
 /** Where cash in a drawer came from or went to on a day, by what caused it. */
 export const CASH_FLOW_KINDS = [
   "sales",
+  "refunds",
   "debt_payments",
   "expenses",
   "owner",

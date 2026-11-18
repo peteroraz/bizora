@@ -1,6 +1,10 @@
 import type { CachedProduct } from "./offline/catalog";
 
 export type SaleLineView = {
+  /** Only on the full view. */
+  id: string;
+  /** How much of the line came back (ADR-030), in the unit it was sold in. */
+  returnedQuantity: string;
   productId: string | null;
   description: string;
   quantity: string;
@@ -86,6 +90,23 @@ export type SaleDetail = Omit<SaleView, "itemCount"> &
   lines: SaleLineView[];
   payments: { method: "cash" | "transfer" | "pos"; amountMinor: string; reference: string | null }[];
   laterPayments: { id: string; number: string; method: "cash" | "transfer" | "pos"; amountMinor: string; receivedAt: string }[];
+  returnedMinor: string;
+  returns: SaleReturn[];
+  canReturn: boolean;
+};
+
+/** Goods a customer brought back from a sale (ADR-030). */
+export type SaleReturn = {
+  id: string;
+  number: string;
+  totalMinor: string;
+  offBalanceMinor: string;
+  refundMinor: string;
+  refundMethod: "cash" | "transfer";
+  reason: string;
+  byName: string | null;
+  createdAt: string;
+  lines: { saleLineId: string; enteredQuantity: string; enteredUnit: string; amountMinor: string; backToStock: boolean }[];
 };
 
 export type SaleSummary = {

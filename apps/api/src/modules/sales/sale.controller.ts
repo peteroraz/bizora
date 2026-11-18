@@ -7,6 +7,7 @@ import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
 import { SALE_DOCUMENT_TYPES, type SaleDocumentType } from "./sale-document.js";
+import { ReturnService } from "./return.service.js";
 import { SaleService } from "./sale.service.js";
 
 /** Anyone who handles sales: the sales person (own), the cashier and store keeper (their desk), managers (all). */
@@ -15,7 +16,10 @@ const SEE_SALES = [Permission.SALES_READ_ALL, Permission.SALES_READ_OWN, Permiss
 @Controller("api/v1/sales")
 @UseGuards(TenantGuard, PermissionGuard)
 export class SaleController {
-  constructor(@Inject(SaleService) private readonly sales: SaleService) {}
+  constructor(
+    @Inject(SaleService) private readonly sales: SaleService,
+    @Inject(ReturnService) private readonly returns: ReturnService,
+  ) {}
 
   @Post()
   @RequirePermissions(Permission.SALES_CREATE)
@@ -97,6 +101,15 @@ export class SaleController {
   @RequireAnyPermission(Permission.SALES_VOID, Permission.SALES_CREATE)
   async void(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
     return success({ sale: await this.sales.void(tenant, id, body) }, tenant.correlationId);
+  }
+
+  /** Goods a customer brings back (ADR-030): those who may cancel sales record returns. */
+  @Post(":id/returns")
+  @RequirePermissions(Permission.SALES_VOID)
+  @Idempotent()
+  async returnGoods(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    const result = await this.returns.returnGoods(tenant, id, body);
+    return success({ ...result, sale: await this.sales.get(tenant, id) }, tenant.correlationId);
   }
 }
 

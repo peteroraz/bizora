@@ -91,6 +91,7 @@ function ProfitScreen() {
             <dl className="space-y-1 text-sm">
               <Line label={t("profit.sales")} value={money(profit.salesMinor)} />
               {profit.discountsMinor !== "0" ? <Line label={t("profit.discounts")} value={`− ${money(profit.discountsMinor)}`} /> : null}
+              {profit.returnsMinor !== "0" ? <Line label={t("profit.returns")} value={`− ${money(profit.returnsMinor)}`} /> : null}
               <Line label={t("profit.cost")} value={`− ${money(profit.costOfSalesMinor)}`} />
               <Line label={t("profit.gross")} value={money(profit.grossProfitMinor)} strong />
               {profit.otherIncomeMinor !== "0" ? <Line label={t("profit.otherIncome")} value={`+ ${money(profit.otherIncomeMinor)}`} /> : null}

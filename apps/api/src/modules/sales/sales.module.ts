@@ -12,12 +12,13 @@ import { ImportController } from "./import.controller.js";
 import { ImportService } from "./import.service.js";
 import { PublicReceiptController, SaleController } from "./sale.controller.js";
 import { SaleSyncHandler } from "./sale-sync.handler.js";
+import { ReturnService } from "./return.service.js";
 import { SaleService } from "./sale.service.js";
 
 @Module({
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, InventoryModule, NotificationsModule, BrandingModule],
   controllers: [SaleController, PublicReceiptController, ImportController],
-  providers: [SaleService, SaleSyncHandler, ImportService, PermissionGuard],
+  providers: [SaleService, ReturnService, SaleSyncHandler, ImportService, PermissionGuard],
   exports: [SaleService],
 })
 export class SalesModule {}

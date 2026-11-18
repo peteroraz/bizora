@@ -23,6 +23,7 @@ export type LedgerRole =
   | "sales"
   | "service_income"
   | "discounts"
+  | "sales_returns"
   | "other_income"
   | "cogs"
   | "stock_loss"
@@ -54,6 +55,8 @@ const base: AccountTemplate[] = [
   { code: "3100", name: "Owner's withdrawals", type: "equity", role: "drawings" },
   { code: "3200", name: "Profit kept in the business", type: "equity", role: "retained" },
   { code: "4100", name: "Discounts given", type: "income", role: "discounts" },
+  // Money given back for goods customers returned (ADR-030). Like discounts, it lowers sales.
+  { code: "4150", name: "Returns from customers", type: "income", role: "sales_returns" },
   { code: "4900", name: "Other money in", type: "income", role: "other_income" },
   { code: "6000", name: "Rent", type: "expense", role: "expense" },
   { code: "6100", name: "Salaries and wages", type: "expense", role: "expense" },

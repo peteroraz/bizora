@@ -22,40 +22,15 @@ import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { requireBusiness, resolveBranch } from "../inventory/inventory-scope.js";
 import { LedgerPostingService, type AccountRef } from "../ledger/ledger-posting.service.js";
+import { owedOf, type SupplierLine as Entry } from "./supplier-ledger.js";
 
-type Business = typeof businesses.$inferSelect;
-type Supplier = typeof suppliers.$inferSelect;
-type Entry = { kind: string; amountMinor: bigint; entryDate: string; payBy: string | null };
+export { owedOf };
 
 const DAY_MS = 86_400_000;
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
-const adds = (kind: string) => kind === "purchase" || kind === "opening";
 
-/**
- * What is owed to a supplier and how much of it is late. Payments settle the oldest amounts first, so the amounts
- * still owed are the newest; one of those is late when its pay-by day has passed.
- */
-export function owedOf(entries: Entry[], today: string) {
-  let owed = 0n;
-  let paid = 0n;
-  const debts = entries.filter((entry) => adds(entry.kind)).sort((a, b) => (a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : 0));
-  for (const entry of entries) {
-    if (adds(entry.kind)) owed += entry.amountMinor;
-    else paid += entry.amountMinor;
-  }
-  let settled = paid;
-  let overdue = 0n;
-  let nextPayBy: string | null = null;
-  for (const debt of debts) {
-    const left = debt.amountMinor > settled ? debt.amountMinor - settled : 0n;
-    settled = settled > debt.amountMinor ? settled - debt.amountMinor : 0n;
-    if (left === 0n || !debt.payBy) continue;
-    if (debt.payBy < today) overdue += left;
-    else if (!nextPayBy || debt.payBy < nextPayBy) nextPayBy = debt.payBy;
-  }
-  return { owedMinor: owed - paid, overdueMinor: overdue, nextPayBy };
-}
-
+type Business = typeof businesses.$inferSelect;
+type Supplier = typeof suppliers.$inferSelect;
 /**
  * Suppliers and what is owed to them (ADR-029). Paying a supplier posts Dr "Suppliers we owe" Cr cash, bank or the
  * owner's money; an amount owed from before Bizora posts Dr the owner's money put in Cr "Suppliers we owe". Stock
@@ -225,6 +200,7 @@ export class SupplierService {
         and(
           eq(stockMovements.tenantId, tenant.tenantId),
           eq(stockMovements.supplierId, id),
+          eq(stockMovements.movementType, "received"),
           inArray(stockMovements.paidFrom, ["cash", "bank"]),
         ),
       )
@@ -244,7 +220,7 @@ export class SupplierService {
         quantity: line.quantity === null ? null : line.quantity.toString(),
         createdAt: line.createdAt.toISOString(),
         // Deliveries are corrected through stock; payments and amounts from before can be cancelled by the owner.
-        canCancel: voids && line.status === "recorded" && line.kind !== "purchase",
+        canCancel: voids && line.status === "recorded" && (line.kind === "payment" || line.kind === "opening"),
       })),
       paidDeliveries: paidDeliveries.map((delivery) => ({
         ...delivery,
@@ -365,8 +341,8 @@ export class SupplierService {
         .limit(1);
       if (!entry) throw new ApiError("NOT_FOUND", "Not found.", 404);
       supplierId = entry.supplierId;
-      if (entry.kind === "purchase") {
-        throw new ApiError("CORRECT_IN_STOCK", "A delivery is corrected in stock (remove the stock), not here.", 409);
+      if (entry.kind === "purchase" || entry.kind === "return") {
+        throw new ApiError("CORRECT_IN_STOCK", "Deliveries and goods sent back are corrected in stock, not here.", 409);
       }
       if (entry.status === "voided") throw new ApiError("ALREADY_VOIDED", "This has already been cancelled.", 409);
       if (entry.kind === "opening") {

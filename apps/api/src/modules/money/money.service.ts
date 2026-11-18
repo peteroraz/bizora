@@ -58,6 +58,7 @@ const SOURCE_FLOW: Record<string, CashFlowKind> = {
   expense: "expenses",
   stock_movement: "stock_bought",
   supplier_payment: "suppliers",
+  sale_return: "refunds",
   cash_count: "counts",
 };
 
@@ -613,8 +614,8 @@ export class MoneyService {
       )
       .groupBy(journalEntries.entryDate, ledgerAccounts.id, ledgerAccounts.name, ledgerAccounts.role, ledgerAccounts.accountType);
 
-    type Totals = { sales: bigint; discounts: bigint; cost: bigint; otherIncome: bigint; expenses: bigint };
-    const empty = (): Totals => ({ sales: 0n, discounts: 0n, cost: 0n, otherIncome: 0n, expenses: 0n });
+    type Totals = { sales: bigint; discounts: bigint; returns: bigint; cost: bigint; otherIncome: bigint; expenses: bigint };
+    const empty = (): Totals => ({ sales: 0n, discounts: 0n, returns: 0n, cost: 0n, otherIncome: 0n, expenses: 0n });
     const all = empty();
     const byDay = new Map<string, Totals>();
     const byExpense = new Map<string, { name: string; amount: bigint }>();
@@ -629,6 +630,7 @@ export class MoneyService {
       if (row.type === "income") {
         if (SALES_ROLES.has(row.role)) add("sales", credit - debit);
         else if (row.role === "discounts") add("discounts", debit - credit);
+        else if (row.role === "sales_returns") add("returns", debit - credit);
         else add("otherIncome", credit - debit);
       } else if (COST_OF_SALES_ROLES.has(row.role)) {
         add("cost", debit - credit);
@@ -641,11 +643,12 @@ export class MoneyService {
       byDay.set(row.day, day);
     }
     const view = (totals: Totals) => {
-      const netSales = totals.sales - totals.discounts;
+      const netSales = totals.sales - totals.discounts - totals.returns;
       const gross = netSales - totals.cost;
       return {
         salesMinor: totals.sales.toString(),
         discountsMinor: totals.discounts.toString(),
+        returnsMinor: totals.returns.toString(),
         netSalesMinor: netSales.toString(),
         costOfSalesMinor: totals.cost.toString(),
         grossProfitMinor: gross.toString(),

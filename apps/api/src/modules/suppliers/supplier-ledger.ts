@@ -102,3 +102,65 @@ export async function addPurchase(
     })
     .onConflictDoNothing();
 }
+
+export type SupplierLine = { kind: string; amountMinor: bigint; entryDate: string; payBy: string | null };
+
+const adds = (kind: string) => kind === "purchase" || kind === "opening";
+
+/**
+ * What is owed to a supplier and how much of it is late. Payments and goods sent back settle the oldest amounts
+ * first, so the amounts still owed are the newest; one of those is late when its pay-by day has passed.
+ */
+export function owedOf(entries: SupplierLine[], today: string) {
+  let owed = 0n;
+  let paid = 0n;
+  const debts = entries.filter((entry) => adds(entry.kind)).sort((a, b) => (a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : 0));
+  for (const entry of entries) {
+    if (adds(entry.kind)) owed += entry.amountMinor;
+    else paid += entry.amountMinor;
+  }
+  let settled = paid;
+  let overdue = 0n;
+  let nextPayBy: string | null = null;
+  for (const debt of debts) {
+    const left = debt.amountMinor > settled ? debt.amountMinor - settled : 0n;
+    settled = settled > debt.amountMinor ? settled - debt.amountMinor : 0n;
+    if (left === 0n || !debt.payBy) continue;
+    if (debt.payBy < today) overdue += left;
+    else if (!nextPayBy || debt.payBy < nextPayBy) nextPayBy = debt.payBy;
+  }
+  return { owedMinor: owed - paid, overdueMinor: overdue, nextPayBy };
+}
+
+/** What is owed to one supplier now, read inside the caller's transaction. */
+export async function owedNow(tx: DbExecutor, tenantId: string, supplierId: string, today: string) {
+  const rows = await tx
+    .select({ kind: supplierEntries.kind, amountMinor: supplierEntries.amountMinor, entryDate: supplierEntries.entryDate, payBy: supplierEntries.payBy })
+    .from(supplierEntries)
+    .where(and(eq(supplierEntries.tenantId, tenantId), eq(supplierEntries.supplierId, supplierId), eq(supplierEntries.status, "recorded")));
+  return owedOf(rows, today).owedMinor;
+}
+
+/** Goods sent back to a supplier and taken off what is owed to them (ADR-030). */
+export async function addSupplierReturn(
+  tx: DbExecutor,
+  tenant: TenantContext,
+  input: { businessId: string; branchId: string; supplierId: string; stockMovementId: string; amountMinor: bigint; currencyCode: string; entryDate: string; note?: string | null; journalEntryId: string | null },
+) {
+  await tx.insert(supplierEntries).values({
+    id: newId(),
+    tenantId: tenant.tenantId,
+    businessId: input.businessId,
+    supplierId: input.supplierId,
+    branchId: input.branchId,
+    kind: "return",
+    amountMinor: input.amountMinor,
+    currencyCode: input.currencyCode,
+    entryDate: input.entryDate,
+    stockMovementId: input.stockMovementId,
+    note: input.note ?? null,
+    journalEntryId: input.journalEntryId,
+    createdBy: tenant.userId,
+    membershipId: tenant.membershipId,
+  });
+}

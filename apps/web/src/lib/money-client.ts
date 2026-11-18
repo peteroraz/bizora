@@ -61,6 +61,7 @@ export type CashPosition = { currency: string; date: string; today: string; shop
 export type ProfitFigures = {
   salesMinor: string;
   discountsMinor: string;
+  returnsMinor: string;
   netSalesMinor: string;
   costOfSalesMinor: string;
   grossProfitMinor: string;
