@@ -1012,6 +1012,14 @@ export const salePayments = pgTable(
     method: varchar("method", { length: 10 }).notNull(),
     amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
     reference: varchar("reference", { length: 64 }),
+    // Transfers wait for someone who can see the bank (ADR-031).
+    confirmation: varchar("confirmation", { length: 12 }).notNull().default("confirmed"),
+    confirmedVia: varchar("confirmed_via", { length: 16 }),
+    confirmedBy: uuid("confirmed_by"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confirmationEntryId: uuid("confirmation_entry_id"),
+    notReceivedAs: varchar("not_received_as", { length: 8 }),
+    confirmationNote: varchar("confirmation_note", { length: 240 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1036,6 +1044,13 @@ export const customerPayments = pgTable(
     note: varchar("note", { length: 240 }),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
     status: varchar("status", { length: 10 }).notNull().default("recorded"),
+    // Transfers wait for someone who can see the bank (ADR-031).
+    confirmation: varchar("confirmation", { length: 12 }).notNull().default("confirmed"),
+    confirmedVia: varchar("confirmed_via", { length: 16 }),
+    confirmedBy: uuid("confirmed_by"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confirmationEntryId: uuid("confirmation_entry_id"),
+    confirmationNote: varchar("confirmation_note", { length: 240 }),
     journalEntryId: uuid("journal_entry_id"),
     receiptToken: varchar("receipt_token", { length: 64 }).notNull(),
     voidedAt: timestamp("voided_at", { withTimezone: true }),

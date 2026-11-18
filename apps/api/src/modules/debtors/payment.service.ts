@@ -14,6 +14,8 @@ import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { requireBusiness, resolveBranch } from "../inventory/inventory-scope.js";
+import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
+import { NotificationService } from "../notifications/notification.service.js";
 import { LedgerPostingService } from "../ledger/ledger-posting.service.js";
 import { BrandingService } from "../branding/branding.service.js";
 import { renderPdf, type DocumentModel } from "../sales/sale-document.js";
@@ -41,6 +43,7 @@ export class PaymentService {
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(BrandingService) private readonly branding: BrandingService,
+    @Inject(NotificationService) private readonly notifications: NotificationService,
   ) {}
 
   async record(tenant: TenantContext, customerId: string, raw: unknown, options: { source?: "online" | "offline" } = {}) {
@@ -97,7 +100,13 @@ export class PaymentService {
       }
 
       const number = await this.numbers.next(tx, tenant.tenantId, business.id, "payment");
-      const methodAccount = { cash: { role: "cash" as const, branchId: branch.id }, transfer: { role: "bank" as const }, pos: { role: "pos_clearing" as const } }[payload.method];
+      // Staff who cannot see the bank put transfers in "waiting for confirmation" until someone checks (ADR-031).
+      const waits = payload.method === "transfer" && transferWaits(tenant, input.source);
+      const methodAccount = {
+        cash: { role: "cash" as const, branchId: branch.id },
+        transfer: { role: waits ? ("transfers_waiting" as const) : ("bank" as const) },
+        pos: { role: "pos_clearing" as const },
+      }[payload.method];
       const posted = await this.ledger.post(
         tx,
         { tenantId: tenant.tenantId, userId: tenant.userId },
@@ -129,6 +138,7 @@ export class PaymentService {
         receivedAt,
         journalEntryId: posted.entryId,
         receiptToken: randomBytes(24).toString("base64url"),
+        confirmation: waits ? "waiting" : "confirmed",
         createdBy: tenant.userId,
         membershipId: tenant.membershipId,
         deviceId: tenant.deviceId ?? null,
@@ -140,6 +150,15 @@ export class PaymentService {
           .update(sales)
           .set({ paidMinor: sql`${sales.paidMinor} + ${allocation.amount}`, balanceMinor: sql`${sales.balanceMinor} - ${allocation.amount}` })
           .where(and(eq(sales.tenantId, tenant.tenantId), eq(sales.id, allocation.sale.id)));
+      }
+      if (waits) {
+        await this.notifications.notify(tx, tenant.tenantId, await bankCheckers(tx, tenant.tenantId, business.id), {
+          kind: "transfer.waiting",
+          saleId: null,
+          actorName: await this.actorName(tx, tenant),
+          data: { number: number.number },
+          except: tenant.membershipId,
+        });
       }
       await this.record_(tx, tenant, business.id, branch.id, "payment.recorded", id, {
         number: number.number,
@@ -166,8 +185,13 @@ export class PaymentService {
       const payment = await this.requirePayment(tx, tenant, id, true);
       if (payment.status === "voided") throw new ApiError("ALREADY_VOIDED", "This payment has already been cancelled.", 409);
       const business = await requireBusiness(tx, tenant);
-      if (payment.journalEntryId) {
-        await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, payment.journalEntryId, {
+      // A transfer confirmed from a bank statement is unmatched there first; one confirmed by hand is undone with it (ADR-031).
+      if (payment.confirmedVia === "bank_statement") {
+        throw new ApiError("MATCHED_TO_BANK", "This transfer is matched to a bank statement line. Unmatch it in Bank first.", 409);
+      }
+      for (const entryId of [payment.journalEntryId, payment.confirmationEntryId]) {
+        if (!entryId) continue;
+        await this.ledger.reverse(tx, { tenantId: tenant.tenantId, userId: tenant.userId }, entryId, {
           entryDate: localDate(new Date(), business.timezone),
           reason: `Payment ${payment.paymentNumber} cancelled: ${reason}`,
         });
@@ -513,6 +537,7 @@ export class PaymentService {
       receivedAt: payment.receivedAt,
       status: payment.status,
       voidReason: payment.voidReason,
+      confirmation: payment.confirmation,
     };
   }
 
@@ -570,6 +595,11 @@ export class PaymentService {
     if (date.getTime() > now + 5 * 60_000) throw new ApiError("VALIDATION_ERROR", "The payment time is in the future. Check the phone's clock.", 400, [{ field: "receivedAt", message: "In the future." }]);
     if (date.getTime() < now - SEVEN_DAYS_MS) throw new ApiError("TOO_OLD", "Payments older than 7 days need a manager to record them.", 400, [{ field: "receivedAt", message: "Too old." }]);
     return date;
+  }
+
+  private async actorName(tx: DbExecutor, tenant: TenantContext) {
+    const [row] = await tx.select({ name: users.displayName }).from(users).where(eq(users.id, tenant.userId)).limit(1);
+    return row?.name ?? null;
   }
 
   private async record_(executor: DbExecutor, tenant: TenantContext, businessId: string, branchId: string | null, action: string, entityId: string, metadata: Record<string, unknown>) {

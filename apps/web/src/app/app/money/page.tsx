@@ -9,15 +9,16 @@ import { ActionLink } from "../../../components/action-link";
 import { RequireAccess } from "../../../components/require-access";
 import { formatCurrency } from "../../../i18n/format";
 import { can } from "../../../lib/access";
-import { useAccess } from "../../../lib/access-context";
+import { useAccess, usePlace } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
-import type { CashPosition, Profit } from "../../../lib/money-client";
+import type { CashPosition, Profit, TransferList } from "../../../lib/money-client";
 
 /** Money (ADR-020, ADR-028): cash in each shop, profit, expenses, money in and out, and bank statements. */
 function MoneyScreen() {
   const t = useTranslations("money");
   const locale = useLocale();
   const access = useAccess();
+  const place = usePlace();
   const reconciles = can(access, Permission.BANK_RECONCILE);
   const seesCash = can(access, Permission.CASH_EXPECTED_READ);
   const counts = can(access, Permission.CASH_CLOSE);
@@ -30,6 +31,7 @@ function MoneyScreen() {
   const [waiting, setWaiting] = useState(0);
   const seesSuppliers = can(access, Permission.PURCHASES_MANAGE, Permission.MONEY_READ);
   const [suppliers, setSuppliers] = useState<{ currency: string; owedMinor: string; overdueMinor: string } | null>(null);
+  const [transfers, setTransfers] = useState<TransferList | null>(null);
 
   useEffect(() => {
     const load = <T,>(path: string, set: (data: T) => void) =>
@@ -37,6 +39,7 @@ function MoneyScreen() {
         .then(async (response) => (response.ok ? set((await response.json()).data as T) : undefined))
         .catch(() => undefined);
     if (reconciles) load("/api/v1/reconciliation/counts", setBank);
+    if (reconciles) load("/api/v1/transfers", setTransfers);
     if (seesCash) load("/api/v1/money/cash", setCash);
     if (seesProfit) load("/api/v1/money/profit", setProfit);
     if (approves) load<{ count: number }>("/api/v1/money/expenses/waiting", (data) => setWaiting(data.count));
@@ -50,6 +53,21 @@ function MoneyScreen() {
     <div className="space-y-6">
       <PageHeader title={t("title")} intro={t("lead")} />
       <div className="grid gap-4 sm:grid-cols-2">
+        {reconciles ? (
+          <Card data-testid="money-transfers">
+            <p className="text-sm font-medium">{t("transfersTitle")}</p>
+            {transfers && transfers.waitingCount > 0 ? (
+              <p className="mt-1 text-xl font-semibold tabular-nums text-warning">
+                {t("transfersWaiting", { count: transfers.waitingCount, amount: money(transfers.waitingMinor, place.currency) })}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-muted">{transfers ? t("transfersNone") : t("transfersLead")}</p>
+            )}
+            <ActionLink href="/app/money/transfers" size="sm" className="mt-3">
+              {t("seeTransfers")}
+            </ActionLink>
+          </Card>
+        ) : null}
         {seesCash || counts ? (
           <Card data-testid="money-cash">
             <p className="text-sm font-medium">{t("cashTitle")}</p>
@@ -82,6 +100,15 @@ function MoneyScreen() {
             )}
             <ActionLink href="/app/money/profit" size="sm" className="mt-3">
               {t("seeProfit")}
+            </ActionLink>
+          </Card>
+        ) : null}
+        {seesProfit ? (
+          <Card data-testid="money-discounts">
+            <p className="text-sm font-medium">{t("discountsTitle")}</p>
+            <p className="mt-1 text-sm text-muted">{t("discountsLead")}</p>
+            <ActionLink href="/app/money/discounts" size="sm" className="mt-3">
+              {t("seeDiscounts")}
             </ActionLink>
           </Card>
         ) : null}

@@ -7,7 +7,7 @@ import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { notifications, sales } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 
-export type NotificationKind = "sale.paid" | "sale.credit" | "sale.released" | "sale.comment" | "sale.voided";
+export type NotificationKind = "sale.paid" | "sale.credit" | "sale.released" | "sale.comment" | "sale.voided" | "transfer.waiting" | "transfer.not_received";
 
 const INBOX_SIZE = 30;
 
@@ -23,7 +23,7 @@ export class NotificationService {
     tx: DbExecutor,
     tenantId: string,
     recipients: Iterable<string | null | undefined>,
-    input: { kind: NotificationKind; saleId: string; actorName: string | null; data?: Record<string, unknown>; except?: string },
+    input: { kind: NotificationKind; saleId: string | null; actorName: string | null; data?: Record<string, unknown>; except?: string },
   ) {
     const unique = [...new Set([...recipients].filter((id): id is string => Boolean(id) && id !== input.except))];
     if (unique.length === 0) return;

@@ -85,3 +85,51 @@ export async function problemOf(response: Response, fallback: string) {
   const payload = await response.json().catch(() => null);
   return (payload?.error?.message as string | undefined) ?? fallback;
 }
+
+/** A transfer waiting for confirmation, or one checked lately (ADR-031). */
+export type TransferItem = {
+  kind: "sale_payment" | "customer_payment";
+  id: string;
+  amountMinor: string;
+  reference: string | null;
+  number: string | null;
+  saleId: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  branchName: string | null;
+  recordedByName: string | null;
+  recordedAt: string;
+  confirmation: "confirmed" | "waiting" | "not_received";
+  confirmedVia: "by_hand" | "bank_statement" | null;
+  notReceivedAs: "owed" | "lost" | null;
+  checkedByName: string | null;
+  checkedAt: string | null;
+  note: string | null;
+};
+
+export type TransferList = { waiting: TransferItem[]; waitingCount: number; waitingMinor: string; recent: TransferItem[] };
+
+/** Discounts and cancellations for a day or a month (ADR-031). */
+export type DiscountsReport = {
+  currency: string;
+  today: string;
+  from: string;
+  to: string;
+  totals: { discountsMinor: string; cancelledSalesMinor: string; returnsMinor: string; paymentsCancelledMinor: string; transfersNotReceivedMinor: string };
+  people: {
+    name: string;
+    discountsMinor: string;
+    discountCount: number;
+    cancelledMinor: string;
+    cancelledCount: number;
+    returnsMinor: string;
+    returnsCount: number;
+    lostMinor: string;
+    lostCount: number;
+  }[];
+  discounts: { saleId: string; number: string | null; at: string | null; totalMinor: string; discountMinor: string; loweredMinor: string; givenMinor: string; customerName: string | null; byName: string | null }[];
+  cancellations: { saleId: string; number: string | null; at: string | null; soldAt: string | null; totalMinor: string; paid: boolean; reason: string | null; customerName: string | null; soldByName: string | null; byName: string | null }[];
+  returns: { id: string; number: string; saleId: string; saleNumber: string | null; at: string | null; totalMinor: string; reason: string; customerName: string | null; byName: string | null }[];
+  paymentsCancelled: { id: string; number: string; at: string | null; amountMinor: string; method: string; reason: string | null; customerName: string | null; byName: string | null }[];
+  transfersNotReceived: { kind: "sale_payment" | "customer_payment"; id: string; number: string | null; saleId: string | null; at: string | null; amountMinor: string; settle: string; reason: string | null; customerName: string | null; byName: string | null }[];
+};
