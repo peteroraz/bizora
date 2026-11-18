@@ -393,6 +393,7 @@ export class InvitationService {
         role: membership.role,
         businessId: membership.businessId,
         branchId: membership.branchId,
+        defaultBranchId: membership.defaultBranchId,
         status: membership.status,
       });
     }

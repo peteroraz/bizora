@@ -304,7 +304,8 @@
   },
   "oauth": {
     "google": "Continue with Google",
-    "or": "or"
+    "or": "or",
+    "opening": "Opening Google…"
   },
   "security": {
     "methods": "Sign-in methods",
@@ -369,7 +370,9 @@
     "switchPlaceLabel": "Change business or shop (now {place})",
     "hideForNow": "Hide for a week",
     "lockSoon": "This screen locks in 30 seconds. Tap anywhere to keep working.",
-    "keepWorking": "Keep working"
+    "keepWorking": "Keep working",
+    "opensHere": "Bizora opens in this shop when you sign in.",
+    "openHere": "Always open Bizora in this shop"
   },
   "nav": {
     "home": "Home",
@@ -572,7 +575,36 @@
       "desk": "The sales person records the sale, the cashier takes the money or gives credit, and the store keeper gives out the goods. Stock leaves when the goods are given out."
     },
     "deskNeedsStaff": "The sales desk flow needs 3 staff: a sales person, a cashier and a store keeper. Your {plan} plan allows {limit}. The Business plan allows more.",
-    "phoneCheck": "Check the phone number: it is not a valid number for the country."
+    "phoneCheck": "Check the phone number: it is not a valid number for the country.",
+    "worksIn": "Works in {shop} only.",
+    "opensIn": "Bizora opens in",
+    "opensInLabel": "Shop Bizora opens in for {name}",
+    "allShopsOption": "All shops",
+    "defaultShopSaved": "Saved. It opens in that shop from their next sign-in.",
+    "defaultShopFailed": "That did not save. Try again.",
+    "closeShop": {
+      "open": "Close {shop}…",
+      "onlyShop": "This is your only shop. Add another shop before closing this one.",
+      "title": "Close {shop}",
+      "lead": "Only the owner can close a shop. Its sales, stock and money history stay. What is still in it moves to the shop you choose.",
+      "leftStock": "{count, plural, =0 {No stock} one {# product in stock} other {# products in stock}}",
+      "leftCash": "Cash in the drawer: {amount}",
+      "leftStaff": "{count, plural, =0 {No staff work only here} one {# person works only here} other {# people work only here}}",
+      "leftCustomers": "{count, plural, =0 {No customers belong here} one {# customer belongs here} other {# customers belong here}}",
+      "openSales": "{count, plural, one {# sale is} other {# sales are}} still waiting at the cashier or for goods to be given out. Finish or cancel them first.",
+      "belowZero": "{count, plural, one {# product shows} other {# products show}} less than zero here. Count them first.",
+      "moveTo": "Move stock, cash, staff and customers to",
+      "moveToHint": "Staff who move sign in again. Shop phones in the closed shop stop working.",
+      "reason": "Why are you closing it?",
+      "reasonHint": "For example: lease ended, moved to the new market",
+      "confirm": "Close {shop}",
+      "closing": "Closing…",
+      "cancel": "Keep it open",
+      "failed": "That did not work. Try again.",
+      "needsNetwork": "Closing a shop needs the internet. Connect and try again.",
+      "closed": "{shop} is closed.",
+      "closedMoved": "{shop} is closed. Everything in it moved to {target}."
+    }
   },
   "address": {
     "country": "Country",
@@ -679,7 +711,14 @@
     "removeYes": "Yes, remove",
     "removeKeep": "Keep",
     "moreDetails": "+ Email, notes and address",
-    "phoneCheck": "Check the phone number: it is not a valid number."
+    "phoneCheck": "Check the phone number: it is not a valid number.",
+    "lessActions": "Less",
+    "fewerDetails": "− Hide email, notes and address",
+    "edit": "Edit details",
+    "editTitle": "Edit customer",
+    "saveChanges": "Save changes",
+    "cancelEdit": "Cancel",
+    "editNeedsNetwork": "Changing a customer needs the internet. Connect and try again."
   },
   "followups": {
     "title": "Follow-ups",
@@ -978,7 +1017,39 @@
       "bank": "They paid back to the bank"
     },
     "sendBack": "Send back",
-    "sentBack": "Sent back. Your stock went down."
+    "sentBack": "Sent back. Your stock went down.",
+    "receiveNoteHint": "Optional. For example: two cartons dented, delivery came late",
+    "whatHappened": "What happened",
+    "whatHappenedHint": "Needed. For example: rats ate two bags, found in the back store",
+    "countNoteHint": "Optional. For example: counted with Chidi, three cartons in the back store",
+    "changeReason": "Why are you changing it?",
+    "changeReasonHint": "Needed when the selling price or cost changes. Shown in the history.",
+    "archiveReason": "Why are you removing it?",
+    "changesTitle": "Changes",
+    "changeKinds": {
+      "product_updated": "Product changed",
+      "product_archived": "Removed from the list",
+      "stock_count_rejected": "Count rejected"
+    },
+    "changeFields": {
+      "name": "Name",
+      "price": "Selling price",
+      "cost": "Cost",
+      "lowStockLevel": "Low-stock level",
+      "category": "Category",
+      "trackStock": "Counted in stock"
+    },
+    "changedFrom": "{field}: {before} → {after}",
+    "changeNone": "none",
+    "changeYes": "yes",
+    "changeNo": "no",
+    "rejectedCount": "Counted {counted}",
+    "reasonLine": "Reason: {reason}",
+    "changedBy": "{who}, {when}",
+    "rejectNeedsReason": "Say why you are rejecting this count.",
+    "countNoteLine": "Their note: {note}",
+    "decisionNote": "Your note",
+    "decisionNoteHint": "Optional to approve; needed to reject."
   },
   "sales": {
     "title": "Sales",
@@ -1229,7 +1300,8 @@
       "waiting": "Waiting for the owner to check the bank",
       "lost": "Never came: written off",
       "owed": "Never came: customer owes it"
-    }
+    },
+    "copyFailed": "Could not copy here. Open View as customer and copy the page address."
   },
   "imports": {
     "chooseFile": "Choose a CSV file",

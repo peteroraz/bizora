@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { PermissionCode } from "@bizora/contracts";
 import {
   addresses,
@@ -50,16 +50,17 @@ export class TenantRepository {
       return this.db
         .select()
         .from(branches)
-        .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.id, tenant.membershipBranchId)));
+        .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.id, tenant.membershipBranchId), isNull(branches.closedAt)));
     }
     const businessId = tenant.membershipBusinessId ?? tenant.businessId;
     if (businessId) {
       return this.db
         .select()
         .from(branches)
-        .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, businessId)));
+        .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, businessId), isNull(branches.closedAt)));
     }
-    return this.db.select().from(branches).where(eq(branches.tenantId, tenant.tenantId));
+    // Closed shops keep their history but are no longer listed or chosen (ADR-032).
+    return this.db.select().from(branches).where(and(eq(branches.tenantId, tenant.tenantId), isNull(branches.closedAt)));
   }
 
   async findBranch(tenantId: string, branchId: string) {

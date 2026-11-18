@@ -258,3 +258,14 @@ export const createBranchSchema = z.object({
   name: z.string().min(1).max(160),
   businessId: z.string().uuid().optional(),
 });
+
+/** Owners close a shop (ADR-032). Anything left in it (stock, cash, staff, customers) moves into another shop. */
+export const closeShopSchema = z
+  .object({
+    reason: z.string().trim().min(3, "Say why the shop is closing, in a few words.").max(240),
+    moveToBranchId: z.string().uuid().optional(),
+  })
+  .strict();
+
+/** The shop someone's Bizora opens in when they may work in more than one (ADR-032). Null clears it. */
+export const defaultShopSchema = z.object({ branchId: z.string().uuid().nullable() }).strict();

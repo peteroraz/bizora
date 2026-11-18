@@ -32,6 +32,16 @@ type Detail = ProductView & {
   currency: string;
   shops: { branchId: string; branchName: string; quantity: string; belowZero: boolean; valueMinor?: string }[];
 };
+type ProductChange = {
+  id: string;
+  action: "product.updated" | "product.archived" | "stock.count_rejected";
+  at: string;
+  byName: string | null;
+  reason: string | null;
+  changes: Record<string, [string | null, string | null]>;
+  countedQuantity?: string | null;
+};
+
 type Movement = {
   id: string;
   type: string;
@@ -84,6 +94,8 @@ function ProductScreen() {
   const seeCost = can(access, Permission.PRICES_COST_READ);
   const [product, setProduct] = useState<Detail | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [changes, setChanges] = useState<ProductChange[]>([]);
+  const [archiveReason, setArchiveReason] = useState("");
   const [shops, setShops] = useState<{ id: string; name: string }[]>([]);
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -104,7 +116,12 @@ function ProductScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [productResponse, movementResponse] = await Promise.all([api(`/api/v1/products/${id}`), api(`/api/v1/products/${id}/movements`)]);
+      const [productResponse, movementResponse, changesResponse] = await Promise.all([
+        api(`/api/v1/products/${id}`),
+        api(`/api/v1/products/${id}/movements`),
+        api(`/api/v1/products/${id}/changes`).catch(() => null),
+      ]);
+      if (changesResponse?.ok) setChanges((await changesResponse.json()).data.items);
       if (productResponse.ok) setProduct((await productResponse.json()).data.product);
       if (movementResponse.ok) setMovements((await movementResponse.json()).data.items);
     } catch {
@@ -165,6 +182,40 @@ function ProductScreen() {
     </FormField>
   );
   const money = (minor: string | null | undefined) => (minor ? formatCurrency(BigInt(minor), product.currency, locale) : "");
+  // One history, newest first: stock movements and changes to the product with their reasons (7f).
+  const timeline = [
+    ...movements.map((movement) => ({ kind: "movement" as const, at: String(movement.createdAt), movement })),
+    ...changes.map((change) => ({ kind: "change" as const, at: change.at, change })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  const changeValue = (name: string, value: string | null) => {
+    if (value === null || value === "") return t("changeNone");
+    if (name === "price" || name === "cost") return money(value);
+    if (name === "lowStockLevel") return stockText(value, product.baseUnit, product.packs);
+    if (name === "trackStock") return value === "true" ? t("changeYes") : t("changeNo");
+    return value;
+  };
+  const movementRow = (movement: Movement) => (
+            <li key={movement.id} className="py-2">
+              <div className="flex flex-wrap justify-between gap-2">
+                <span className="font-medium">
+                  {t(`types.${movement.type}`)}
+                  {movement.reason && t.has(`reasons.${movement.reason}`) ? ` · ${t(`reasons.${movement.reason}`)}` : ""}
+                  {movement.documentNumber ? ` · ${movement.documentNumber}` : ""}
+                </span>
+                <span className={BigInt(movement.quantity) < 0n ? "text-danger" : "text-success"}>
+                  {BigInt(movement.quantity) > 0n ? "+" : ""}
+                  {stockText(movement.quantity, product.baseUnit, product.packs)}
+                </span>
+              </div>
+              <p className="text-muted">
+                {t("byLine", { who: movement.byName ?? "", shop: movement.branchName, when: formatWhen(movement.createdAt, locale, "Africa/Lagos") })}
+                {movement.deviceName ? ` ${t("onDevice", { device: movement.deviceName })}` : ""}
+                {movement.supplier ? ` · ${movement.supplier}` : ""}
+                {seeCost && movement.valueMinor ? ` · ${money(movement.valueMinor.replace("-", ""))}` : ""}
+              </p>
+              {movement.note ? <p className="text-muted">{movement.note}</p> : null}
+            </li>
+  );
   const field = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
   const otherShops = shops.filter((shop) => shop.id !== access.branchId);
 
@@ -232,6 +283,7 @@ function ProductScreen() {
                   ...(cost ? { totalCostMinor: (parseAmount(cost, product.currency) as bigint).toString() } : {}),
                   ...(field(form, "supplier") ? { supplier: field(form, "supplier") } : {}),
                   ...(receivePaid === "credit" && field(form, "payBy") ? { payBy: field(form, "payBy") } : {}),
+                  ...(field(form, "note") ? { note: field(form, "note") } : {}),
                 },
                 t("received"),
                 "stock.receive",
@@ -301,6 +353,9 @@ function ProductScreen() {
                 <Input id="receive-pay-by" name="payBy" type="date" />
               </FormField>
             ) : null}
+            <FormField id="receive-note" label={t("note")} hint={t("receiveNoteHint")}>
+              <SentenceInput id="receive-note" name="note" maxLength={240} />
+            </FormField>
             <div className="self-end">
               <SubmitButton pending={busy === "receive"} pendingLabel={t("saving")}>
                 {t("receive")}
@@ -395,7 +450,7 @@ function ProductScreen() {
               const ok = await submit(
                 "adjust",
                 "/api/v1/stock/adjust",
-                { productId: product.id, direction, reason, quantity, unit: field(form, "unit"), ...(field(form, "note") ? { note: field(form, "note") } : {}) },
+                { productId: product.id, direction, reason, quantity, unit: field(form, "unit"), note: field(form, "note") },
                 t("adjusted"),
               );
               if (ok) (event.target as HTMLFormElement).reset();
@@ -423,8 +478,8 @@ function ProductScreen() {
               <QuantityInput id="adjust-quantity" name="quantity" required />
             </FormField>
             {unitSelect("adjust")}
-            <FormField id="adjust-note" label={t("note")} hint={t("optional")}>
-              <SentenceInput id="adjust-note" name="note" maxLength={240} />
+            <FormField id="adjust-note" label={t("whatHappened")} hint={t("whatHappenedHint")}>
+              <SentenceInput id="adjust-note" name="note" required minLength={3} maxLength={240} />
             </FormField>
             <div>
               <SubmitButton pending={busy === "adjust"} pendingLabel={t("saving")}>
@@ -448,7 +503,7 @@ function ProductScreen() {
               const ok = await submit(
                 "transfer",
                 "/api/v1/stock/transfer",
-                { productId: product.id, toBranchId: field(form, "toBranchId"), quantity, unit: field(form, "unit") },
+                { productId: product.id, toBranchId: field(form, "toBranchId"), quantity, unit: field(form, "unit"), ...(field(form, "note") ? { note: field(form, "note") } : {}) },
                 t("transferred"),
               );
               if (ok) (event.target as HTMLFormElement).reset();
@@ -467,6 +522,9 @@ function ProductScreen() {
               <QuantityInput id="transfer-quantity" name="quantity" required />
             </FormField>
             {unitSelect("transfer")}
+            <FormField id="transfer-note" label={t("note")} hint={t("optional")}>
+              <SentenceInput id="transfer-note" name="note" maxLength={240} />
+            </FormField>
             <div className="self-end">
               <SubmitButton pending={busy === "transfer"} pendingLabel={t("saving")}>
                 {t("transfer")}
@@ -489,7 +547,7 @@ function ProductScreen() {
               const ok = await submit(
                 "count",
                 "/api/v1/stock/counts",
-                { id: uuidv7(), productId: product.id, countedQuantity: counted, unit: field(form, "unit") },
+                { id: uuidv7(), productId: product.id, countedQuantity: counted, unit: field(form, "unit"), ...(field(form, "note") ? { note: field(form, "note") } : {}) },
                 t("countSaved"),
                 "stock.count",
               );
@@ -500,6 +558,9 @@ function ProductScreen() {
               <QuantityInput id="count-quantity" name="counted" required />
             </FormField>
             {unitSelect("count")}
+            <FormField id="count-note" label={t("note")} hint={t("countNoteHint")}>
+              <SentenceInput id="count-note" name="note" maxLength={240} />
+            </FormField>
             <div>
               <SubmitButton pending={busy === "count"} pendingLabel={t("saving")}>
                 {t("count")}
@@ -511,30 +572,32 @@ function ProductScreen() {
 
       <Card>
         <p className="text-sm font-medium">{t("history")}</p>
-        {movements.length === 0 ? <p className="mt-2 text-sm text-muted">{t("noHistory")}</p> : null}
-        <ul className="mt-3 divide-y divide-border text-sm">
-          {movements.map((movement) => (
-            <li key={movement.id} className="py-2">
-              <div className="flex flex-wrap justify-between gap-2">
-                <span className="font-medium">
-                  {t(`types.${movement.type}`)}
-                  {movement.reason && t.has(`reasons.${movement.reason}`) ? ` · ${t(`reasons.${movement.reason}`)}` : ""}
-                  {movement.documentNumber ? ` · ${movement.documentNumber}` : ""}
-                </span>
-                <span className={BigInt(movement.quantity) < 0n ? "text-danger" : "text-success"}>
-                  {BigInt(movement.quantity) > 0n ? "+" : ""}
-                  {stockText(movement.quantity, product.baseUnit, product.packs)}
-                </span>
-              </div>
-              <p className="text-muted">
-                {t("byLine", { who: movement.byName ?? "", shop: movement.branchName, when: formatWhen(movement.createdAt, locale, "Africa/Lagos") })}
-                {movement.deviceName ? ` ${t("onDevice", { device: movement.deviceName })}` : ""}
-                {movement.supplier ? ` · ${movement.supplier}` : ""}
-                {seeCost && movement.valueMinor ? ` · ${money(movement.valueMinor.replace("-", ""))}` : ""}
-              </p>
-              {movement.note ? <p className="text-muted">{movement.note}</p> : null}
-            </li>
-          ))}
+        {movements.length === 0 && changes.length === 0 ? <p className="mt-2 text-sm text-muted">{t("noHistory")}</p> : null}
+
+        <ul className="mt-3 divide-y divide-border text-sm" data-testid="product-history">
+          {timeline.map((entry) =>
+            entry.kind === "change" ? (
+              <li key={entry.change.id} className="py-2" data-testid="product-change">
+                <p className="font-medium">{t(`changeKinds.${entry.change.action.replace(".", "_")}`)}</p>
+                {Object.entries(entry.change.changes).map(([name, [before, after]]) => (
+                  <p key={name} className="text-muted">
+                    {t("changedFrom", {
+                      field: t.has(`changeFields.${name}`) ? t(`changeFields.${name}`) : name,
+                      before: changeValue(name, before),
+                      after: changeValue(name, after),
+                    })}
+                  </p>
+                ))}
+                {entry.change.action === "stock.count_rejected" && entry.change.countedQuantity ? (
+                  <p className="text-muted">{t("rejectedCount", { counted: stockText(entry.change.countedQuantity, product.baseUnit, product.packs) })}</p>
+                ) : null}
+                {entry.change.reason ? <p>{t("reasonLine", { reason: entry.change.reason })}</p> : null}
+                <p className="text-muted">{t("changedBy", { who: entry.change.byName ?? "", when: formatWhen(entry.change.at, locale, "Africa/Lagos") })}</p>
+              </li>
+            ) : (
+              movementRow(entry.movement)
+            ),
+          )}
         </ul>
       </Card>
 
@@ -574,6 +637,7 @@ function ProductScreen() {
                   trackStock: product.trackStock,
                   packs,
                   ...(seeCost ? { defaultCostMinor: cost ? (parseAmount(cost, product.currency) as bigint).toString() : null } : {}),
+                  ...(field(form, "changeReason") ? { changeReason: field(form, "changeReason") } : {}),
                 }),
               }).catch(() => null);
               setBusy(null);
@@ -581,6 +645,10 @@ function ProductScreen() {
               if (response?.ok) {
                 setProduct(payload.data.product);
                 setMessage({ tone: "success", text: t("updated") });
+                const reasonBox = (event.target as HTMLFormElement).querySelector<HTMLInputElement>("#edit-reason");
+                if (reasonBox) reasonBox.value = "";
+                const refreshed = await api(`/api/v1/products/${product.id}/changes`).catch(() => null);
+                if (refreshed?.ok) setChanges((await refreshed.json()).data.items);
               } else {
                 setMessage({ tone: "danger", text: response?.status === 409 ? t("duplicate") : (payload?.error?.message ?? t("failed")) });
               }
@@ -615,6 +683,9 @@ function ProductScreen() {
                 <AmountInput currency={product.currency} id="edit-cost" name="cost" defaultValue={amountInput(product.defaultCostMinor, product.currency)} />
               </FormField>
             ) : null}
+            <FormField id="edit-reason" label={t("changeReason")} hint={t("changeReasonHint")}>
+              <SentenceInput id="edit-reason" name="changeReason" maxLength={240} />
+            </FormField>
             <div className="self-end">
               <SubmitButton pending={busy === "edit"} pendingLabel={t("saving")}>
                 {t("save")}
@@ -625,16 +696,26 @@ function ProductScreen() {
       ) : null}
 
       {can(access, Permission.PRODUCTS_MANAGE) && !product.archived ? (
-        <Button
-          variant={confirmArchive ? "danger" : "secondary"}
-          onClick={async () => {
-            if (!confirmArchive) return setConfirmArchive(true);
-            const response = await api(`/api/v1/products/${product.id}/archive`, { method: "POST" }).catch(() => null);
-            if (response?.ok) window.location.href = "/app/stock";
-          }}
-        >
-          {confirmArchive ? t("archiveConfirm") : t("archive")}
-        </Button>
+        <div className="space-y-3">
+          {confirmArchive ? (
+            <FormField id="archive-reason" label={t("archiveReason")} hint={t("optional")}>
+              <SentenceInput id="archive-reason" value={archiveReason} maxLength={240} onChange={(event) => setArchiveReason(event.target.value)} />
+            </FormField>
+          ) : null}
+          <Button
+            variant={confirmArchive ? "danger" : "secondary"}
+            onClick={async () => {
+              if (!confirmArchive) return setConfirmArchive(true);
+              const response = await api(`/api/v1/products/${product.id}/archive`, {
+                method: "POST",
+                body: JSON.stringify(archiveReason.trim() ? { reason: archiveReason.trim() } : {}),
+              }).catch(() => null);
+              if (response?.ok) window.location.href = "/app/stock";
+            }}
+          >
+            {confirmArchive ? t("archiveConfirm") : t("archive")}
+          </Button>
+        </div>
       ) : null}
     </div>
   );

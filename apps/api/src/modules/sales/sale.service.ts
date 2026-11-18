@@ -18,7 +18,7 @@ import {
   type SaleCreateInput,
   type SaleStatus,
 } from "@bizora/contracts";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -36,6 +36,20 @@ import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting
 import { NotificationService } from "../notifications/notification.service.js";
 import { BrandingService } from "../branding/branding.service.js";
 import { availableDocuments, documentModel, renderPdf, type DocumentInput, type SaleDocumentType } from "./sale-document.js";
+
+/** A customer's saved address, as one line for documents. */
+const customerAddresses = aliasedTable(addresses, "customer_address");
+const addressText = (address: typeof addresses.$inferSelect | null) =>
+  address
+    ? formatAddressDisplay({
+        shopNumber: address.shopNumber,
+        lineOrBlock: address.lineOrBlock,
+        marketOrPlaza: address.marketOrPlaza,
+        line1: address.line1,
+        city: address.city,
+        subdivisionName: null,
+      }) || null
+    : null;
 
 type SaleRow = typeof sales.$inferSelect;
 type CustomerRow = typeof customers.$inferSelect;
@@ -659,12 +673,14 @@ export class SaleService {
         branchPhone: branches.phoneE164,
         address: addresses,
         customerName: customers.name,
+        customerAddress: customerAddresses,
       })
       .from(sales)
       .innerJoin(businesses, and(eq(businesses.tenantId, sales.tenantId), eq(businesses.id, sales.businessId)))
       .innerJoin(branches, and(eq(branches.tenantId, sales.tenantId), eq(branches.id, sales.branchId)))
       .leftJoin(addresses, and(eq(addresses.tenantId, branches.tenantId), eq(addresses.id, branches.addressId)))
       .leftJoin(customers, and(eq(customers.tenantId, sales.tenantId), eq(customers.id, sales.customerId)))
+      .leftJoin(customerAddresses, and(eq(customerAddresses.tenantId, customers.tenantId), eq(customerAddresses.id, customers.addressId)))
       .where(eq(sales.receiptToken, token))
       .limit(1);
     if (!row) throw new ApiError("NOT_FOUND", "Receipt not found.", 404);
@@ -697,6 +713,8 @@ export class SaleService {
       handle: brand.handle,
       color: brand.color,
       customerName: row.customerName,
+      // The same address the invoice and receipt PDFs behind this link print (7f).
+      customerAddress: row.customerName ? addressText(row.customerAddress) : null,
       number: row.sale.saleNumber,
       invoiceNumber: row.sale.invoiceNumber,
       provisionalNumber: row.sale.provisionalNumber,
@@ -761,6 +779,7 @@ export class SaleService {
         branch: branches,
         address: addresses,
         customerName: customers.name,
+        customerAddress: customerAddresses,
         servedBy: name(sale.createdBy),
         cashier: name(sale.collectedBy),
       })
@@ -769,6 +788,7 @@ export class SaleService {
       .innerJoin(branches, and(eq(branches.tenantId, sales.tenantId), eq(branches.id, sales.branchId)))
       .leftJoin(addresses, and(eq(addresses.tenantId, branches.tenantId), eq(addresses.id, branches.addressId)))
       .leftJoin(customers, and(eq(customers.tenantId, sales.tenantId), eq(customers.id, sales.customerId)))
+      .leftJoin(customerAddresses, and(eq(customerAddresses.tenantId, customers.tenantId), eq(customerAddresses.id, customers.addressId)))
       .where(and(eq(sales.tenantId, sale.tenantId), eq(sales.id, sale.id)))
       .limit(1);
     if (!extra) throw new ApiError("NOT_FOUND", "Sale not found.", 404);
@@ -807,6 +827,7 @@ export class SaleService {
       business: { name: extra.business.name, phone: extra.business.phoneE164, timezone: extra.business.timezone },
       branch: { name: extra.branch.name, address: address || null, phone: extra.branch.phoneE164 },
       customerName: extra.customerName,
+      customerAddress: addressText(extra.customerAddress),
       servedBy: extra.servedBy,
       cashier: extra.cashier,
       lines: lines.map((line) => ({

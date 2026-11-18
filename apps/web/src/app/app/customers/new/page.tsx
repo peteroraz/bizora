@@ -166,6 +166,9 @@ function NewCustomerPageScreen() {
             />
           </FormField>
         )}
+        <button type="button" className="min-h-11 text-sm font-medium text-primary" aria-expanded={details} onClick={() => setDetails((open) => !open)}>
+          {details ? t("fewerDetails") : t("moreDetails")}
+        </button>
         {details ? (
           <>
             <FormField id="customer-email" label={common("email")} hint={common("optional")}>
@@ -179,11 +182,7 @@ function NewCustomerPageScreen() {
             </FormField>
             <AddressFields idPrefix="customer" countries={countries} subdivisions={subdivisions} value={address} onChange={setAddress} />
           </>
-        ) : (
-          <button type="button" className="min-h-11 text-sm font-medium text-primary" onClick={() => setDetails(true)}>
-            {t("moreDetails")}
-          </button>
-        )}
+        ) : null}
         {canApprove ? (
           <div className="space-y-3 rounded-card border border-border p-4">
             <label className="flex items-center gap-2 text-sm">

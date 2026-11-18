@@ -9,9 +9,11 @@ import {
   supplierReturnSchema,
   stockTransferSchema,
   type DocumentType,
+  stockCountApproveSchema,
+  stockCountRejectSchema,
 } from "@bizora/contracts";
 import { averageUnitCost, issueStock, QUANTITY_SCALE } from "@bizora/money";
-import { and, desc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -244,7 +246,7 @@ export class StockService {
         journalEntryId: movement?.journalEntryId ?? null,
       });
     }
-    await this.record(tx, tenant, "stock.received", result.id, context);
+    await this.record(tx, tenant, "stock.received", result.id, context, { note: payload.note ?? null, supplier: payload.supplier ?? null });
     return result;
   }
 
@@ -313,7 +315,7 @@ export class StockService {
           journalEntryId: movement?.journalEntryId ?? null,
         });
       }
-      await this.record(tx, tenant, "stock.returned_to_supplier", result.id, context);
+      await this.record(tx, tenant, "stock.returned_to_supplier", result.id, context, { note: payload.note ?? null, settle: payload.settle });
       return this.presentResult(tenant, result);
     });
   }
@@ -335,7 +337,7 @@ export class StockService {
         reason: payload.reason,
         note: payload.note ?? null,
       });
-      await this.record(tx, tenant, "stock.adjusted", result.id, context);
+      await this.record(tx, tenant, "stock.adjusted", result.id, context, { reason: payload.reason, note: payload.note, quantity: payload.quantity, unit: payload.unit, direction: payload.direction });
       return this.presentResult(tenant, result);
     });
   }
@@ -350,6 +352,7 @@ export class StockService {
         throw new ApiError("SAME_SHOP", "Choose a different shop to move the stock to.", 422, [{ field: "toBranchId", message: "Choose another shop." }]);
       }
       const to = { ...from, branch: await findBranch(tx, tenant, from.business.id, payload.toBranchId) };
+      if (to.branch.closedAt) throw new ApiError("SHOP_CLOSED", "That shop is closed. Choose another shop.", 409, [{ field: "toBranchId", message: "Choose an open shop." }]);
       const units = (await productUnitsFor(tx, tenant.tenantId, [from.product.id])).get(from.product.id) ?? [];
       const entered = parseQuantity(payload.quantity) as bigint;
       const amount = this.toBase(entered, unitFactor(from.product, units, payload.unit));
@@ -373,9 +376,45 @@ export class StockService {
         transferId,
         valueMinor: -out.valueMinor,
       });
-      await this.record(tx, tenant, "stock.transferred", out.id, from);
+      await this.record(tx, tenant, "stock.transferred", out.id, from, { note: payload.note ?? null, toBranchId: payload.toBranchId, quantity: payload.quantity, unit: payload.unit });
       return this.presentResult(tenant, out);
     });
+  }
+
+  /**
+   * Moves every product on hand in one shop into another, at the value it holds, when the owner closes a shop
+   * (ADR-032). Products below zero are refused before this is called. Returns how many products moved.
+   */
+  async moveAllStock(tx: DbExecutor, tenant: TenantContext, fromBranchId: string, toBranchId: string, note: string) {
+    const rows = await tx
+      .select({ productId: stockBalances.productId, quantity: stockBalances.quantity })
+      .from(stockBalances)
+      .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, fromBranchId), gt(stockBalances.quantity, 0n)));
+    for (const row of rows) {
+      const from = await this.context(tx, tenant, row.productId, fromBranchId, { anyBranchInScope: true });
+      const to = { ...from, branch: await findBranch(tx, tenant, from.business.id, toBranchId) };
+      const transferId = newId();
+      const out = await this.applyMovement(tx, from, {
+        type: "transfer_out",
+        quantity: -row.quantity,
+        enteredQuantity: row.quantity,
+        enteredUnit: from.product.baseUnit,
+        note,
+        transferId,
+        documentType: "stock_transfer",
+      });
+      await this.applyMovement(tx, to, {
+        type: "transfer_in",
+        quantity: row.quantity,
+        enteredQuantity: row.quantity,
+        enteredUnit: from.product.baseUnit,
+        note,
+        transferId,
+        valueMinor: -out.valueMinor,
+      });
+      await this.record(tx, tenant, "stock.transferred", out.id, from, { note, toBranchId, quantity: row.quantity.toString(), unit: from.product.baseUnit, shopClosed: true });
+    }
+    return rows.length;
   }
 
   // Counts --------------------------------------------------------------------------------------------------------
@@ -423,19 +462,22 @@ export class StockService {
         deviceId: tenant.deviceId ?? null,
         countedAt: new Date(),
       });
-      await this.record(tx, tenant, "stock.counted", id, context);
+      await this.record(tx, tenant, "stock.counted", id, context, { note: payload.note ?? null, countedQuantity: payload.countedQuantity, unit: payload.unit });
       if (tenant.permissions.includes(Permission.STOCK_ADJUST)) await this.decide(tx, tenant, id, "approved");
       const [row] = await tx.select().from(stockCounts).where(eq(stockCounts.id, id)).limit(1);
       return this.presentCount(row as typeof stockCounts.$inferSelect);
     });
   }
 
-  async approveCount(tenant: TenantContext, id: string) {
-    return this.db.transaction(async (tx) => this.presentCount(await this.decide(tx, tenant, id, "approved")));
+  async approveCount(tenant: TenantContext, id: string, raw: unknown) {
+    const { note } = stockCountApproveSchema.parse(raw ?? {});
+    return this.db.transaction(async (tx) => this.presentCount(await this.decide(tx, tenant, id, "approved", note)));
   }
 
-  async rejectCount(tenant: TenantContext, id: string) {
-    return this.db.transaction(async (tx) => this.presentCount(await this.decide(tx, tenant, id, "rejected")));
+  /** Rejecting a count says why, so the person who counted can see it in the history (7f). */
+  async rejectCount(tenant: TenantContext, id: string, raw: unknown) {
+    const { note } = stockCountRejectSchema.parse(raw ?? {});
+    return this.db.transaction(async (tx) => this.presentCount(await this.decide(tx, tenant, id, "rejected", note)));
   }
 
   async pendingCounts(tenant: TenantContext) {
@@ -460,7 +502,7 @@ export class StockService {
     }));
   }
 
-  private async decide(tx: DbExecutor, tenant: TenantContext, id: string, decision: "approved" | "rejected") {
+  private async decide(tx: DbExecutor, tenant: TenantContext, id: string, decision: "approved" | "rejected", decisionNote?: string) {
     const [count] = await tx
       .select()
       .from(stockCounts)
@@ -481,15 +523,38 @@ export class StockService {
         enteredQuantity: count.countedQuantity,
         enteredUnit: product.baseUnit,
         reason: count.difference < 0n ? "count_short" : "count_over",
-        note: count.note,
+        // What the counter said, and what the approver added.
+        note: [count.note, decisionNote].filter((part): part is string => Boolean(part)).join(" · ").slice(0, 240) || null,
         countId: count.id,
       });
       movementId = movement.id;
     }
     await tx
       .update(stockCounts)
-      .set({ status: decision, decidedBy: tenant.userId, decidedAt: new Date(), movementId })
+      .set({ status: decision, decidedBy: tenant.userId, decidedAt: new Date(), movementId, decisionNote: decisionNote ?? null })
       .where(eq(stockCounts.id, count.id));
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: decision === "approved" ? "stock.count_approved" : "stock.count_rejected",
+        entityType: "product",
+        entityId: count.productId,
+        correlationId: tenant.correlationId,
+        businessId: count.businessId,
+        branchId: count.branchId,
+        metadata: {
+          movementOrCountId: count.id,
+          note: decisionNote ?? null,
+          countNote: count.note,
+          countedQuantity: count.countedQuantity.toString(),
+          systemQuantity: count.systemQuantity.toString(),
+          difference: count.difference.toString(),
+        },
+        actorType: tenant.actorType ?? "HUMAN",
+      },
+      tx,
+    );
     const [updated] = await tx.select().from(stockCounts).where(eq(stockCounts.id, count.id)).limit(1);
     return updated as typeof stockCounts.$inferSelect;
   }
@@ -572,7 +637,7 @@ export class StockService {
     return this.db
       .select({ id: branches.id, name: branches.name })
       .from(branches)
-      .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id)))
+      .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), isNull(branches.closedAt)))
       .orderBy(branches.name);
   }
 
@@ -737,12 +802,14 @@ export class StockService {
       difference: count.difference.toString(),
       status: count.status,
       note: count.note,
+      decisionNote: count.decisionNote,
       countedAt: count.countedAt,
       decidedAt: count.decidedAt,
     };
   }
 
-  private async record(tx: DbExecutor, tenant: TenantContext, action: string, entityId: string, context: Context) {
+  /** Every stock action in the audit trail carries what was said about it (7f). */
+  private async record(tx: DbExecutor, tenant: TenantContext, action: string, entityId: string, context: Context, details: Record<string, unknown> = {}) {
     await this.audit.record(
       {
         tenantId: tenant.tenantId,
@@ -753,7 +820,7 @@ export class StockService {
         correlationId: tenant.correlationId,
         businessId: context.business.id,
         branchId: context.branch.id,
-        metadata: { movementOrCountId: entityId },
+        metadata: { movementOrCountId: entityId, ...details },
         actorType: tenant.actorType ?? "HUMAN",
       },
       tx,

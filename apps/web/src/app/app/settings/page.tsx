@@ -13,6 +13,7 @@ import { Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton, Tab
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
+import { CloseShop } from "../../../components/close-shop";
 import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { BrandSettings } from "../../../components/brand-settings";
@@ -24,7 +25,7 @@ import { api } from "../../../lib/api";
 import { hasPlace, persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
 
-type Person = { membershipId: string; email: string | null; displayName: string | null; role: string };
+type Person = { membershipId: string; email: string | null; displayName: string | null; role: string; branchId?: string | null; defaultBranchId?: string | null };
 type Invitation = { id: string; email: string; role: string; status: string };
 type Business = {
   id: string;
@@ -85,6 +86,8 @@ function SettingsScreen() {
   const access = useAccess();
   const canSeePeople = can(access, Permission.USERS_READ);
   const canInvite = can(access, Permission.USERS_INVITE);
+  const canManagePeople = can(access, Permission.USERS_MANAGE);
+  const isOwner = access.role === "OWNER" && !access.staffSession;
   const params = useSearchParams();
   const requested = params.get("tab") === "password" ? "security" : (params.get("tab") ?? "organization");
   const { theme, setTheme } = useTheme();
@@ -283,6 +286,18 @@ function SettingsScreen() {
     } finally {
       setPending(false);
     }
+  }
+
+  async function setDefaultShop(membershipId: string, branchId: string | null) {
+    setError(null);
+    const response = await api(`/api/v1/memberships/${membershipId}/default-shop`, { method: "PUT", body: JSON.stringify({ branchId }) }).catch(() => null);
+    if (!response?.ok) {
+      const payload = response ? await response.json().catch(() => null) : null;
+      setError(payload?.error?.message ?? t("defaultShopFailed"));
+      return;
+    }
+    setPeople((current) => current.map((person) => (person.membershipId === membershipId ? { ...person, defaultBranchId: branchId } : person)));
+    setNotice(t("defaultShopSaved"));
   }
 
   async function saveBranch(branchId: string) {
@@ -618,6 +633,18 @@ function SettingsScreen() {
                       {common("save")}
                     </SubmitButton>
                   </SafeForm>
+                  {isOwner ? (
+                    <div className="mt-4 border-t border-border pt-4">
+                      <CloseShop
+                        shop={{ id: branch.id, name: branch.name }}
+                        otherShops={branches.filter((other) => other.id !== branch.id).map((other) => ({ id: other.id, name: other.name }))}
+                        onClosed={(text) => {
+                          setNotice(text);
+                          void refresh();
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </Card>
               );
             })}
@@ -637,9 +664,32 @@ function SettingsScreen() {
           <Card className="space-y-4">
             <ul className="space-y-2 text-sm">
               {people.map((person) => (
-                <li key={person.membershipId}>
-                  {person.displayName}
-                  {person.email ? ` (${person.email})` : ""} · {roleLabel(person.role)}
+                <li key={person.membershipId} className="space-y-1">
+                  <p>
+                    {person.displayName}
+                    {person.email ? ` (${person.email})` : ""} · {roleLabel(person.role)}
+                  </p>
+                  {person.branchId ? (
+                    <p className="text-muted">{t("worksIn", { shop: branches.find((branch) => branch.id === person.branchId)?.name ?? "" })}</p>
+                  ) : branches.length > 1 && canManagePeople ? (
+                    // The shop Bizora opens in for this person (ADR-032).
+                    <label className="flex flex-wrap items-center gap-2 text-muted">
+                      {t("opensIn")}
+                      <Select
+                        className="w-auto"
+                        aria-label={t("opensInLabel", { name: person.displayName ?? person.email ?? "" })}
+                        value={person.defaultBranchId ?? ""}
+                        onChange={(event) => void setDefaultShop(person.membershipId, event.target.value || null)}
+                      >
+                        <option value="">{t("allShopsOption")}</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  ) : null}
                 </li>
               ))}
             </ul>

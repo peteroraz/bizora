@@ -51,15 +51,19 @@ test("owner adds a product, records stock in and damage, sees low stock, and cou
   // 110 tins were damaged: stock falls below the warning level.
   await page.locator("#adjust-reason").selectOption("damaged");
   await page.locator("#adjust-quantity").fill("110");
+  // Taking stock off says what happened (7f).
+  await page.locator("#adjust-note").pressSequentially("roof leaked on the pallet");
   await page.getByRole("button", { name: "Save change" }).click();
   await expect(page.getByText("Stock updated.")).toBeVisible();
   await expect(page.getByText("26 tins").first()).toBeVisible();
   await expect(page.getByText("Low", { exact: true })).toBeVisible();
   await expect(page.getByText(/Removed or added · Damaged/)).toBeVisible();
+  await expect(page.getByText("Roof leaked on the pallet")).toBeVisible();
   await expect(page.getByText(/Bola Owner · Main/).first()).toBeVisible();
 
   // Prices change: the owner updates the selling price.
   await page.locator("#edit-price").fill("500");
+  await page.locator("#edit-reason").pressSequentially("new price list");
   await page.getByRole("button", { name: "Save product" }).click();
   await expect(page.getByText("Product updated.")).toBeVisible();
   await expect(page.getByText(/₦500\.00 per tin/)).toBeVisible();

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  productArchiveSchema,
   Permission,
   PRODUCT_PAGE_SIZE,
   PULL_PAGE_SIZE,
@@ -7,12 +8,12 @@ import {
   productCreateSchema,
   productWriteSchema,
 } from "@bizora/contracts";
-import { and, asc, eq, gt, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { branches, productUnits, products, stockBalances } from "../../db/schema.js";
+import { auditEvents, branches, productUnits, products, stockBalances, users } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { type ProductRow, type ProductUnitRow, productUnitsFor, requireBusiness, requireProduct, resolveBranch } from "./inventory-scope.js";
@@ -181,23 +182,112 @@ export class ProductService {
     }
     const values = this.values(payload);
     // Without permission to see cost, the existing default cost is kept as it is.
-    if (!tenant.permissions.includes(Permission.PRICES_COST_READ)) delete (values as Partial<typeof values>).defaultCostMinor;
+    const seesCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
+    if (!seesCost) delete (values as Partial<typeof values>).defaultCostMinor;
+    // What changed, for the product's history (7f). A new selling price or cost says why.
+    const text = (value: bigint | null | undefined) => (value === null || value === undefined ? null : value.toString());
+    const changes: Record<string, [string | null, string | null]> = {};
+    if (values.name !== existing.name) changes.name = [existing.name, values.name];
+    if (text(values.priceMinor) !== text(existing.priceMinor)) changes.price = [text(existing.priceMinor), text(values.priceMinor)];
+    if (seesCost && text(values.defaultCostMinor) !== text(existing.defaultCostMinor)) changes.cost = [text(existing.defaultCostMinor), text(values.defaultCostMinor)];
+    if (text(values.lowStockLevel) !== text(existing.lowStockLevel)) changes.lowStockLevel = [text(existing.lowStockLevel), text(values.lowStockLevel)];
+    if ((values.category ?? null) !== (existing.category ?? null)) changes.category = [existing.category ?? null, values.category ?? null];
+    if (values.trackStock !== existing.trackStock) changes.trackStock = [String(existing.trackStock), String(values.trackStock)];
+    const reason = payload.changeReason?.trim() || null;
+    if ((changes.price || changes.cost) && !reason) {
+      throw new ApiError("REASON_REQUIRED", "Say why the price or cost is changing.", 400, [{ field: "changeReason", message: "Say why." }]);
+    }
     await this.db.transaction(async (tx) => {
       await tx.update(products).set({ ...values, updatedBy: tenant.userId, updatedAt: new Date() }).where(and(eq(products.tenantId, tenant.tenantId), eq(products.id, id)));
       if (payload.packs) await this.replacePacks(tx, tenant, business.id, id, payload.packs);
       await this.audit.record(
-        { tenantId: tenant.tenantId, actorUserId: tenant.userId, action: "product.updated", entityType: "product", entityId: id, correlationId: tenant.correlationId, businessId: business.id, actorType: tenant.actorType ?? "HUMAN" },
+        {
+          tenantId: tenant.tenantId,
+          actorUserId: tenant.userId,
+          action: "product.updated",
+          entityType: "product",
+          entityId: id,
+          correlationId: tenant.correlationId,
+          businessId: business.id,
+          actorType: tenant.actorType ?? "HUMAN",
+          metadata: { changes, reason, packsChanged: Boolean(payload.packs) },
+        },
         tx,
       );
     });
     return this.get(tenant, id);
   }
 
-  async archive(tenant: TenantContext, id: string) {
+  /**
+   * The product's own changes (name, price, cost, low-stock level) and rejected counts, with the reasons given (7f).
+   * Stock movements are listed separately; together they are the product's history. Cost changes are only shown to
+   * people who may see cost.
+   */
+  async changes(tenant: TenantContext, id: string) {
+    const business = await requireBusiness(this.db, tenant);
+    await requireProduct(this.db, tenant, business.id, id, { includeArchived: true });
+    const rows = await this.db
+      .select({ event: auditEvents, byName: users.displayName })
+      .from(auditEvents)
+      .leftJoin(users, eq(users.id, auditEvents.actorUserId))
+      .where(
+        and(
+          eq(auditEvents.tenantId, tenant.tenantId),
+          eq(auditEvents.entityType, "product"),
+          eq(auditEvents.entityId, id),
+          inArray(auditEvents.action, ["product.updated", "product.archived", "stock.count_rejected"]),
+          ...(tenant.membershipBranchId ? [or(isNull(auditEvents.branchId), eq(auditEvents.branchId, tenant.membershipBranchId)) as SQL] : []),
+        ),
+      )
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(50);
+    const seesCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
+    return rows
+      .map(({ event, byName }) => {
+        let metadata: Record<string, unknown> = {};
+        try {
+          metadata = event.metadataJson ? (JSON.parse(event.metadataJson) as Record<string, unknown>) : {};
+        } catch {
+          metadata = {};
+        }
+        const changes = { ...((metadata.changes as Record<string, [string | null, string | null]> | undefined) ?? {}) };
+        const changedSomething = Object.keys(changes).length > 0;
+        if (!seesCost) delete changes.cost;
+        // A change only to cost is hidden whole (with its reason) from people who may not see cost.
+        const onlyHidden = changedSomething && Object.keys(changes).length === 0;
+        return {
+          id: event.id,
+          action: event.action,
+          at: event.createdAt.toISOString(),
+          byName,
+          reason: (metadata.reason as string | null | undefined) ?? (metadata.note as string | null | undefined) ?? null,
+          changes,
+          onlyHidden,
+          ...(event.action === "stock.count_rejected"
+            ? { countedQuantity: (metadata.countedQuantity as string | undefined) ?? null, countNote: (metadata.countNote as string | null | undefined) ?? null }
+            : {}),
+        };
+      })
+      // A save that changed nothing worth showing (packs only, or cost hidden) without a reason is left out.
+      .filter((item) => !item.onlyHidden && (item.action !== "product.updated" || Object.keys(item.changes).length > 0 || item.reason))
+      .map(({ onlyHidden: _hidden, ...item }) => item);
+  }
+
+  async archive(tenant: TenantContext, id: string, raw: unknown = {}) {
+    const { reason } = productArchiveSchema.parse(raw ?? {});
     const business = await requireBusiness(this.db, tenant);
     await requireProduct(this.db, tenant, business.id, id);
     await this.db.update(products).set({ archivedAt: new Date(), updatedAt: new Date(), updatedBy: tenant.userId }).where(and(eq(products.tenantId, tenant.tenantId), eq(products.id, id)));
-    await this.audit.record({ tenantId: tenant.tenantId, actorUserId: tenant.userId, action: "product.archived", entityType: "product", entityId: id, correlationId: tenant.correlationId, businessId: business.id });
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "product.archived",
+      entityType: "product",
+      entityId: id,
+      correlationId: tenant.correlationId,
+      businessId: business.id,
+      metadata: { reason: reason ?? null },
+    });
     return { archived: true };
   }
 

@@ -24,6 +24,7 @@ type PendingCount = {
   countedByName: string | null;
   countedQuantity: string;
   systemQuantity: string;
+  note: string | null;
 };
 type BelowZero = { productId: string; name: string; baseUnit: string; branchName: string; quantity: string };
 
@@ -132,8 +133,23 @@ function StockScreen() {
     void loadChecks();
   }, [load, loadChecks]);
 
+  // What the approver says about each count (7f): optional to approve, needed to reject.
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [decisionError, setDecisionError] = useState<Record<string, string>>({});
+
   async function decide(id: string, decision: "approve" | "reject") {
-    await api(`/api/v1/stock/counts/${id}/${decision}`, { method: "POST" });
+    const note = (decisionNotes[id] ?? "").trim();
+    if (decision === "reject" && note.length < 3) {
+      setDecisionError((current) => ({ ...current, [id]: t("rejectNeedsReason") }));
+      return;
+    }
+    setDecisionError((current) => ({ ...current, [id]: "" }));
+    const response = await api(`/api/v1/stock/counts/${id}/${decision}`, { method: "POST", body: JSON.stringify(note ? { note } : {}) }).catch(() => null);
+    if (!response?.ok) {
+      const payload = response ? await response.json().catch(() => null) : null;
+      setDecisionError((current) => ({ ...current, [id]: payload?.error?.message ?? t("failed") }));
+      return;
+    }
     await Promise.all([loadChecks(), load(query, page)]);
   }
 
@@ -202,8 +218,8 @@ function StockScreen() {
           <p className="text-sm font-medium">{t("pendingTitle")}</p>
           <ul className="mt-3 space-y-3 text-sm">
             {counts.map((count) => (
-              <li key={count.id} className="flex flex-wrap items-center gap-3">
-                <span className="flex-1">
+              <li key={count.id} className="space-y-2 rounded-md border border-border p-3" data-testid="pending-count">
+                <p>
                   {t("pendingLine", {
                     name: count.productName,
                     shop: count.branchName,
@@ -211,13 +227,24 @@ function StockScreen() {
                     system: stockText(count.systemQuantity, count.baseUnit),
                     by: count.countedByName ?? "",
                   })}
-                </span>
-                <Button size="sm" onClick={() => void decide(count.id, "approve")}>
-                  {t("approve")}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => void decide(count.id, "reject")}>
-                  {t("reject")}
-                </Button>
+                </p>
+                {count.note ? <p className="text-muted">{t("countNoteLine", { note: count.note })}</p> : null}
+                <FormField id={`decision-${count.id}`} label={t("decisionNote")} hint={t("decisionNoteHint")} error={decisionError[count.id] || undefined}>
+                  <Input
+                    id={`decision-${count.id}`}
+                    maxLength={240}
+                    value={decisionNotes[count.id] ?? ""}
+                    onChange={(event) => setDecisionNotes((current) => ({ ...current, [count.id]: event.target.value }))}
+                  />
+                </FormField>
+                <div className="flex flex-wrap gap-3">
+                  <Button size="sm" onClick={() => void decide(count.id, "approve")}>
+                    {t("approve")}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => void decide(count.id, "reject")}>
+                    {t("reject")}
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

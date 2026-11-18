@@ -64,7 +64,8 @@ export class EntitlementService {
     const [branchRow] = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(branches)
-      .where(eq(branches.tenantId, tenantId));
+      // Closed shops do not count towards the plan (ADR-032).
+      .where(and(eq(branches.tenantId, tenantId), isNull(branches.closedAt)));
     const [memberRow] = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(memberships)

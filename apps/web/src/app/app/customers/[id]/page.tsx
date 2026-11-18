@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { CustomerCredit, type CustomerCreditView } from "../../../../components/customer-credit";
+import { CustomerEdit, type EditableCustomer } from "../../../../components/customer-edit";
 import { RequireAccess } from "../../../../components/require-access";
 import { can, customerMode } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
@@ -24,6 +25,7 @@ type Customer = {
   tags: string[];
   notesSummary: string | null;
   addressFormatted: string | null;
+  address?: EditableCustomer["address"];
   credit: CustomerCreditView;
   owingMinor: string;
 };
@@ -56,6 +58,8 @@ function CustomerFullScreen() {
   const [pending, setPending] = useState(false);
   const [missing, setMissing] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [purchases, setPurchases] = useState<SaleView[] | null>(null);
   const seesSales = can(access, Permission.SALES_READ_ALL);
 
@@ -182,12 +186,28 @@ function CustomerFullScreen() {
           </>
         }
       />
-      <div className="space-y-1 text-sm">
-        {customer.email ? <p>{customer.email}</p> : null}
-        {customer.addressFormatted ? <p>{customer.addressFormatted}</p> : null}
-        {customer.tags.length > 0 ? <p>{customer.tags.join(", ")}</p> : null}
-        {customer.notesSummary ? <p className="text-muted">{customer.notesSummary}</p> : null}
-      </div>
+      {editing ? (
+        <CustomerEdit
+          customer={customer}
+          onCancel={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            void load();
+          }}
+        />
+      ) : (
+        <div className="space-y-1 text-sm" data-testid="customer-details">
+          {customer.email ? <p>{customer.email}</p> : null}
+          {customer.addressFormatted ? <p>{customer.addressFormatted}</p> : null}
+          {customer.tags.length > 0 ? <p>{customer.tags.join(", ")}</p> : null}
+          {customer.notesSummary ? <p className="text-muted">{customer.notesSummary}</p> : null}
+          {canManage ? (
+            <button type="button" className="min-h-11 font-medium text-primary" onClick={() => setEditing(true)} data-testid="edit-customer">
+              {t("edit")}
+            </button>
+          ) : null}
+        </div>
+      )}
       <CustomerCredit customerId={customer.id} credit={customer.credit} owingMinor={customer.owingMinor} onSaved={() => void load()} />
       {error ? (
         <p className="text-sm text-danger" role="alert">
@@ -332,9 +352,9 @@ function CustomerFullScreen() {
           ‹ {t("back")}
         </Link>
         {canManage ? (
-          <details className="text-sm">
-            <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-control px-3 text-muted" aria-label={t("moreActions")}>
-              ⋯ {t("moreActions")}
+          <details className="text-sm" onToggle={(event) => setMoreOpen((event.currentTarget as HTMLDetailsElement).open)}>
+            <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-control px-3 text-muted">
+              {moreOpen ? t("lessActions") : `⋯ ${t("moreActions")}`}
             </summary>
             <div className="mt-2 rounded-card border border-border bg-card p-3">
               {confirmRemove ? (

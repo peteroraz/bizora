@@ -51,11 +51,10 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await expect(page.getByRole("button", { name: "Log out other devices" })).toBeVisible();
   await expect(page.getByText("Password: Set")).toBeVisible();
 
-  const providers = page.waitForResponse((response) => response.url().includes("/api/v1/auth/providers"));
+  // Sign-in options come with the page (7f), so the login page makes no call of its own for them.
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(page.getByRole("heading", { name: "Sign in to Bizora" })).toBeVisible();
-  await providers;
   await expect(page.getByText("Continue with Google")).toHaveCount(0);
   await expect(page.getByText("Continue with Microsoft")).toHaveCount(0);
   await page.getByRole("link", { name: "Forgot password" }).click();
