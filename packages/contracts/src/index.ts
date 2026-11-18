@@ -7,10 +7,8 @@ export {
   PIN_LOCKOUT,
   PIN_MAX_LENGTH,
   PIN_MIN_LENGTH,
-  STAFF_ROLES,
   createStaffSchema,
   enrollDeviceSchema,
-  isWeakPin,
   pinLoginSchema,
   pinSchema,
   planFeatureSchema,
@@ -20,9 +18,25 @@ export {
   staffRoleSchema,
 } from "./staff.js";
 export type { PlanFeature, PlanLimit, PlanLimits, StaffRole } from "./staff.js";
+export { STAFF_ROLES, isWeakPin } from "./staff-roles.js";
 export { addressInputSchema, countryRule, formatAddressDisplay, optionalPhoneSchema, phoneE164Schema } from "./address.js";
 export type { AddressDisplay, AddressInput } from "./address.js";
-export { normalizePhoneToE164, whatsAppHref } from "./phone.js";
+export { checkPhone, normalizePhoneToE164, phoneProblemMessage, type PhoneCheck } from "./phone.js";
+export { whatsAppHref } from "./whatsapp.js";
+export {
+  amountText,
+  capitaliseFirst,
+  capitaliseWords,
+  caretAfterFormat,
+  currencyDigits,
+  parseAmount,
+  parseAmountDigits,
+  tidyEmail,
+  tidyName,
+  typeAmount,
+  typeDigits,
+  typeNumber,
+} from "./typing.js";
 export {
   CUSTOMER_IMPORT_MAX_ROWS,
   CUSTOMER_PAGE_SIZE,

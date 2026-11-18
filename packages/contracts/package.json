@@ -11,6 +11,10 @@
     "./password": {
       "types": "./dist/password.d.ts",
       "import": "./dist/password.js"
+    },
+    "./phone": {
+      "types": "./dist/phone.d.ts",
+      "import": "./dist/phone.js"
     }
   },
   "scripts": {

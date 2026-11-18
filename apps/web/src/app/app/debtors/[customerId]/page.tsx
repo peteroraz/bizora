@@ -1,16 +1,17 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, parseMoneyInput, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, amountText, parseAmount, uuidv7 } from "@bizora/contracts";
 import { Badge, Button, Card, EmptyState, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
+import { AmountInput, SentenceInput } from "../../../../components/typing";
 import { SendPdf } from "../../../../components/send-pdf";
 import { formatCurrency, formatDay, formatPhone, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
-import { useAccess } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
@@ -30,6 +31,7 @@ type Account = {
 
 function AccountScreen() {
   const t = useTranslations("debtors");
+  const place = usePlace();
   const methods = useTranslations("sales");
   const locale = useLocale();
   const access = useAccess();
@@ -72,7 +74,8 @@ function AccountScreen() {
   async function pay() {
     setError(null);
     setNotice(null);
-    const minor = parseMoneyInput(amount);
+    if (!account) return;
+    const minor = parseAmount(amount, account.currency);
     if (minor === null || minor <= 0n) {
       setError(t("badAmount"));
       return;
@@ -182,7 +185,7 @@ function AccountScreen() {
             <p className="text-sm font-medium">{t("recordTitle")}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="pay-amount" label={t("amount")}>
-                <Input id="pay-amount" inputMode="decimal" value={amount} placeholder={money(account.owingMinor)} onChange={(event) => setAmount(event.target.value)} />
+                <AmountInput currency={account.currency} id="pay-amount" value={amount} placeholder={amountText(BigInt(account.owingMinor), account.currency)} onChange={(event) => setAmount(event.target.value)} />
               </FormField>
               <FormField id="pay-method" label={t("method")}>
                 <Select id="pay-method" value={method} onChange={(event) => setMethod(event.target.value as typeof method)}>
@@ -240,7 +243,7 @@ function AccountScreen() {
                   {sale.invoiceNumber ?? sale.number}
                 </Link>
                 <span className="block text-muted">
-                  {formatWhen(sale.soldAt, locale, "Africa/Lagos")}
+                  {formatWhen(sale.soldAt, locale, place.timezone)}
                   {sale.dueDate ? ` · ${t("due", { date: formatDay(sale.dueDate, locale) })}` : ""}
                 </span>
               </span>
@@ -263,7 +266,7 @@ function AccountScreen() {
                 <span>
                   <span className="font-medium">{payment.number}</span>
                   <span className="block text-muted">
-                    {[formatWhen(payment.receivedAt, locale, "Africa/Lagos"), methods(`mode.${payment.method}`), payment.reference, payment.byName].filter(Boolean).join(" · ")}
+                    {[formatWhen(payment.receivedAt, locale, place.timezone), methods(`mode.${payment.method}`), payment.reference, payment.byName].filter(Boolean).join(" · ")}
                   </span>
                 </span>
                 <span className="flex flex-col items-end gap-1">
@@ -278,7 +281,7 @@ function AccountScreen() {
                     voidingId === payment.id ? (
                       <span className="flex flex-wrap items-end gap-2">
                         <FormField id={`void-${payment.id}`} label={t("cancelReason")}>
-                          <Input id={`void-${payment.id}`} value={voidReason} maxLength={200} onChange={(event) => setVoidReason(event.target.value)} />
+                          <SentenceInput id={`void-${payment.id}`} value={voidReason} maxLength={200} onChange={(event) => setVoidReason(event.target.value)} />
                         </FormField>
                         <Button type="button" size="sm" variant="secondary" disabled={!voidReason.trim()} onClick={() => void cancelPayment(payment.id)}>
                           {t("cancelConfirm")}

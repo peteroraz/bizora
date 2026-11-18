@@ -12,7 +12,10 @@ import {
   followupCreateSchema,
   followupUpdateSchema,
   formatAddressDisplay,
+  checkPhone,
   normalizePhoneToE164,
+  phoneProblemMessage,
+  tidyName,
   parseCustomerCsv,
   type PermissionCode,
 } from "@bizora/contracts";
@@ -45,6 +48,12 @@ type CustomerRow = typeof customers.$inferSelect;
 
 function like(value: string) {
   return `%${value.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+/** "ada okafor" or "ADA OKAFOR" → "Ada Okafor"; a name already written with capitals is kept as written. */
+function importedName(name: string) {
+  const spaced = name.replace(/\s+/g, " ").trim();
+  return spaced === spaced.toLocaleLowerCase() || spaced === spaced.toLocaleUpperCase() ? tidyName(spaced) : spaced;
 }
 
 @Injectable()
@@ -630,10 +639,11 @@ export class CustomerService {
       action: "create" | "update" | "error";
       errors: string[];
     }> = [];
+    // Names typed all in small letters or all in capitals are written normally, as the screens do (ADR-027).
     const normalized = parsed.rows.map((row) => ({
-      row,
-      phoneE164: row.phone ? normalizePhoneToE164(row.phone, country) : null,
-    }));
+      row: { ...row, name: importedName(row.name) },
+      phone: row.phone ? checkPhone(row.phone, country) : null,
+    })).map(({ row, phone }) => ({ row, phone, phoneE164: phone?.ok ? phone.e164 : null }));
     // One lookup for every phone in the file instead of one query per row.
     const existingByPhone = await this.findPhones(
       tenant.tenantId,
@@ -641,11 +651,11 @@ export class CustomerService {
       normalized.flatMap((item) => (item.phoneE164 ? [item.phoneE164] : [])),
     );
     const seenInFile = new Set<string>();
-    for (const { row, phoneE164 } of normalized) {
+    for (const { row, phone, phoneE164 } of normalized) {
       const errors: string[] = [];
       if (!row.name) errors.push("Name is required.");
       if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push("Email is not valid.");
-      if (!phoneE164) errors.push("Phone could not be read as a number for this country.");
+      if (!phoneE164) errors.push(phone && !phone.ok ? phoneProblemMessage(phone.problem, phone.country) : "Enter a phone number.");
       let action: "create" | "update" | "error" = errors.length > 0 ? "error" : "create";
       if (phoneE164 && errors.length === 0) {
         const existing = existingByPhone.get(phoneE164);
@@ -860,13 +870,13 @@ export class CustomerService {
 
   private async normalize(payload: { isWalkIn?: boolean | undefined; phone?: string | undefined }, business: BusinessRow) {
     if (payload.isWalkIn) return null;
-    const phone = normalizePhoneToE164(payload.phone ?? "", business.countryCode.trim());
-    if (!phone) {
-      throw new ApiError("VALIDATION_ERROR", "Enter a valid phone number.", 400, [
-        { field: "phone", message: "Enter a valid phone number." },
-      ]);
+    const result = checkPhone(payload.phone ?? "", business.countryCode.trim());
+    if (!result?.ok) {
+      // Says which country and how its numbers look: "This number is too short for Ghana. Numbers there look like…"
+      const message = result ? phoneProblemMessage(result.problem, result.country) : "Enter a phone number, or mark the customer as walk-in.";
+      throw new ApiError("VALIDATION_ERROR", message, 400, [{ field: "phone", message }]);
     }
-    return phone;
+    return result.e164;
   }
 
   private async assertPhoneAvailable(tenantId: string, businessId: string, phone: string, ignoreId: string | null) {

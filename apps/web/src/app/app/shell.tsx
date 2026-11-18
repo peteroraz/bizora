@@ -58,6 +58,9 @@ export type ShellBusiness = {
   visibleModules?: string[] | null;
   staffFeaturesEnabled?: boolean;
   salesFlow?: "simple" | "desk";
+  countryCode?: string;
+  baseCurrencyCode?: string;
+  timezone?: string;
 };
 export type ShellBranch = { id: string; name: string; businessId: string };
 
@@ -120,8 +123,21 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
       owner: tenantId && membershipId ? { tenantId, membershipId } : null,
       branchId: profile.tenant?.branchId ?? null,
       salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
+      ...(currentBusiness?.countryCode ? { country: currentBusiness.countryCode.trim() } : {}),
+      ...(currentBusiness?.baseCurrencyCode ? { currency: currentBusiness.baseCurrencyCode.trim() } : {}),
+      ...(currentBusiness?.timezone ? { timezone: currentBusiness.timezone } : {}),
     }),
-    [profile.tenant?.permissions, profile.tenant?.deviceId, tenantId, membershipId, profile.tenant?.branchId, currentBusiness?.salesFlow],
+    [
+      profile.tenant?.permissions,
+      profile.tenant?.deviceId,
+      tenantId,
+      membershipId,
+      profile.tenant?.branchId,
+      currentBusiness?.salesFlow,
+      currentBusiness?.countryCode,
+      currentBusiness?.baseCurrencyCode,
+      currentBusiness?.timezone,
+    ],
   );
   const [outbox, setOutbox] = useState<{ pending: number; rejected: { id: string; error: { message: string } | null }[] }>({
     pending: 0,

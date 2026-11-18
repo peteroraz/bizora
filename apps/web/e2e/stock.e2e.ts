@@ -28,13 +28,13 @@ test("owner adds a product, records stock in and damage, sees low stock, and cou
   await page.goto("/app/stock/new");
   await page.getByLabel("Product name").fill("Peak Milk Tin");
   await page.getByLabel("How you count it").selectOption("tin");
-  await page.getByLabel("Selling price per tin (₦)").fill("450");
+  await page.getByLabel("Selling price per tin").fill("450");
   await page.getByRole("button", { name: "Add a pack size" }).click();
   await page.getByLabel("Pack", { exact: true }).selectOption("carton");
   await page.getByLabel("How many tins in one").fill("48");
   await page.getByLabel("Warn me when stock falls to (in tins)").fill("30");
   await page.getByLabel("How many tins you have").fill("40");
-  await page.getByLabel("What they cost in total (₦)").fill("14,000");
+  await page.getByLabel("What they cost in total").fill("14,000");
   await page.getByRole("button", { name: "Save product" }).click();
   await expect(page.getByRole("heading", { name: "Peak Milk Tin" })).toBeVisible();
   await expect(page.getByText("40 tins").first()).toBeVisible();
@@ -42,7 +42,7 @@ test("owner adds a product, records stock in and damage, sees low stock, and cou
   // Two cartons arrive, paid from shop cash.
   await page.getByLabel("Quantity").first().fill("2");
   await page.locator("#receive-unit").selectOption("carton");
-  await page.getByLabel("Total cost (₦)").fill("33,600");
+  await page.getByLabel("Total cost").fill("33,600");
   await page.locator("#receive-paid").selectOption("cash");
   await page.getByRole("button", { name: "Record stock in" }).click();
   await expect(page.getByText("Stock in recorded.")).toBeVisible();

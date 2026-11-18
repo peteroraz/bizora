@@ -8,6 +8,9 @@ import { type ImportColumn, ImportReview } from "../../../../components/import-r
 import { RequireAccess } from "../../../../components/require-access";
 import { BackLink } from "../../../../components/action-link";
 
+/** What each column takes as it is edited (ADR-027). */
+const SALES_KINDS: Partial<Record<SalesImportField, ImportColumn<SalesImportField>["kind"]>> = { quantity: "quantity", price: "amount", total: "amount", customer: "name" };
+
 const EXAMPLE: Record<SalesImportField, string> = {
   date: "16/11/2026",
   product: "",
@@ -26,7 +29,7 @@ const FIELDS: SalesImportField[] = ["date", "product", "quantity", "unit", "pric
 function SalesImportScreen() {
   const t = useTranslations("imports");
   const [mode, setMode] = useState<(typeof SALE_IMPORT_MODES)[number]>("mixed");
-  const columns: ImportColumn<SalesImportField>[] = FIELDS.map((field) => ({ field, label: t(`salesColumns.${field}`), wide: field === "product" || field === "customer" }));
+  const columns: ImportColumn<SalesImportField>[] = FIELDS.map((field) => ({ field, label: t(`salesColumns.${field}`), wide: field === "product" || field === "customer", kind: SALES_KINDS[field], sum: field === "total" }));
   return (
     <div className="space-y-6">
       <PageHeader

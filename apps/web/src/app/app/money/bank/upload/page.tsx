@@ -28,7 +28,7 @@ function UploadScreen() {
     }
   }, []);
 
-  const columns: ImportColumn<StatementImportField>[] = FIELDS.map((field) => ({ field, label: t(`columns.${field}`), wide: field === "description" }));
+  const columns: ImportColumn<StatementImportField>[] = FIELDS.map((field) => ({ field, label: t(`columns.${field}`), wide: field === "description", kind: field === "moneyIn" || field === "moneyOut" ? "amount" : undefined, sum: field === "moneyIn" || field === "moneyOut" }));
   return (
     <div className="space-y-6">
       <PageHeader

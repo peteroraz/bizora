@@ -7,6 +7,9 @@ import { type ImportColumn, ImportReview } from "../../../../components/import-r
 import { RequireAccess } from "../../../../components/require-access";
 import { BackLink } from "../../../../components/action-link";
 
+/** What each column takes as it is edited (ADR-027). */
+const STOCK_IN_KINDS: Partial<Record<StockInImportField, ImportColumn<StockInImportField>["kind"]>> = { quantity: "quantity", cost: "amount", supplier: "name" };
+
 const FIELDS: StockInImportField[] = ["product", "quantity", "unit", "cost", "supplier", "paid", "ref"];
 
 const EXAMPLE: Record<StockInImportField, string> = {
@@ -25,7 +28,7 @@ const EXAMPLE: Record<StockInImportField, string> = {
  */
 function DeliveryScreen() {
   const t = useTranslations("imports");
-  const columns: ImportColumn<StockInImportField>[] = FIELDS.map((field) => ({ field, label: t(`stockInColumns.${field}`), wide: field === "product" || field === "supplier" }));
+  const columns: ImportColumn<StockInImportField>[] = FIELDS.map((field) => ({ field, label: t(`stockInColumns.${field}`), wide: field === "product" || field === "supplier", kind: STOCK_IN_KINDS[field], sum: field === "cost" }));
   return (
     <div className="space-y-6">
       <PageHeader

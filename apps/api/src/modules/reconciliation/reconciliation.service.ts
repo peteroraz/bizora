@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { businessTypeFromIndustry, IMPORT_MAX_ROWS, reconcileSchema, statementImportSchema, type ImportRowResult, type ReconcileTarget } from "@bizora/contracts";
+import { IMPORT_MAX_ROWS, businessTypeFromIndustry, currencyDigits, reconcileSchema, statementImportSchema, type ImportRowResult, type ReconcileTarget } from "@bizora/contracts";
 import { and, isNull, asc, desc, eq, gt, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
@@ -42,7 +42,8 @@ export class ReconciliationService {
       throw new ApiError("TOO_MANY_ROWS", `A statement can have at most ${IMPORT_MAX_ROWS} rows. Split the file by month.`, 400);
     }
     const business = await requireBusiness(this.db, tenant);
-    const parsed = payload.rows.map((row) => parseStatementRow(row));
+    const digits = currencyDigits(business.baseCurrencyCode.trim());
+    const parsed = payload.rows.map((row) => parseStatementRow(row, digits));
     const seen = new Map<string, number>();
     const prints = parsed.map((row) => {
       if (row.kind !== "in") return null;

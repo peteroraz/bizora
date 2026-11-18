@@ -39,7 +39,7 @@ test("a debtor pays part of what they owe, gets a receipt and a statement link, 
   await expect(page.getByRole("link", { name: "Send reminder on WhatsApp" })).toHaveAttribute("href", /^https:\/\/wa\.me\/2348031234567\?text=.*%2Fs%2F/);
 
   // A part payment by transfer.
-  await page.getByLabel("Amount received (₦)").fill("5000");
+  await page.getByLabel("Amount received").fill("5000");
   await page.getByLabel("Paid with").selectOption("transfer");
   await page.getByLabel("Reference").fill("GTB 0412");
   await page.getByRole("button", { name: "Record payment" }).click();

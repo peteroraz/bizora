@@ -60,6 +60,7 @@ export class ProductService {
       .limit(PRODUCT_PAGE_SIZE)
       .offset((page - 1) * PRODUCT_PAGE_SIZE);
     const units = await productUnitsFor(this.db, tenant.tenantId, rows.map((row) => row.product.id));
+    const totals = await this.totals(tenant, filters, branch.id);
     const categories = await this.db
       .selectDistinct({ category: products.category })
       .from(products)
@@ -73,6 +74,38 @@ export class ProductService {
       branchId: branch.id,
       currency: business.baseCurrencyCode.trim(),
       categories: categories.map((row) => row.category).filter((value): value is string => Boolean(value)),
+      totals,
+    };
+  }
+
+  /**
+   * Added up for every product the search or category matches, in this shop, not only the page shown: how many
+   * products, how many are in stock, what the stock cost (cost read only) and what it sells for at list prices.
+   * Stock below zero counts as none. Money stays whole minor units: numeric in SQL, never floating point.
+   */
+  private async totals(tenant: TenantContext, filters: SQL[], branchId: string) {
+    const held = sql`greatest(coalesce(${stockBalances.quantity}, 0), 0)`;
+    const [row] = await this.db
+      .select({
+        products: sql<number>`count(*)::int`,
+        inStock: sql<number>`count(*) filter (where ${products.trackStock} and coalesce(${stockBalances.quantity}, 0) > 0)::int`,
+        costValueMinor: sql<string>`coalesce(sum(case when ${products.trackStock} and coalesce(${stockBalances.quantity}, 0) > 0 then ${stockBalances.valueMinor} else 0 end), 0)::text`,
+        sellingValueMinor: sql<string>`coalesce(round(sum(case when ${products.trackStock} then ${held}::numeric * coalesce(${products.priceMinor}, 0) else 0 end) / 1000), 0)::bigint::text`,
+        withoutPrice: sql<number>`count(*) filter (where ${products.trackStock} and coalesce(${stockBalances.quantity}, 0) > 0 and ${products.priceMinor} is null)::int`,
+      })
+      .from(products)
+      .leftJoin(
+        stockBalances,
+        and(eq(stockBalances.tenantId, products.tenantId), eq(stockBalances.productId, products.id), eq(stockBalances.branchId, branchId)),
+      )
+      .where(and(...filters));
+    const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
+    return {
+      products: Number(row?.products ?? 0),
+      inStock: Number(row?.inStock ?? 0),
+      sellingValueMinor: row?.sellingValueMinor ?? "0",
+      withoutPrice: Number(row?.withoutPrice ?? 0),
+      ...(seeCost ? { costValueMinor: row?.costValueMinor ?? "0" } : {}),
     };
   }
 

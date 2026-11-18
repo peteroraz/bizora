@@ -9,6 +9,9 @@ import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { BackLink } from "../../../../components/action-link";
 
+/** What each column takes as it is edited (ADR-027). */
+const PRODUCT_KINDS: Partial<Record<ProductImportField, ImportColumn<ProductImportField>["kind"]>> = { name: "text", category: "text", price: "amount", cost: "amount", packPrice: "amount", quantity: "quantity", lowStock: "quantity", packSize: "quantity" };
+
 const EXAMPLE: Record<ProductImportField, string> = {
   name: "",
   category: "Provisions",
@@ -28,7 +31,7 @@ function ProductImportScreen() {
   const access = useAccess();
   const seeCost = can(access, Permission.PRICES_COST_READ);
   const fields: ProductImportField[] = ["name", "category", "unit", "price", ...(seeCost ? (["cost"] as const) : []), "quantity", "lowStock", "barcode", "packUnit", "packSize", "packPrice"];
-  const columns: ImportColumn<ProductImportField>[] = fields.map((field) => ({ field, label: t(`productColumns.${field}`), wide: field === "name" || field === "category" }));
+  const columns: ImportColumn<ProductImportField>[] = fields.map((field) => ({ field, label: t(`productColumns.${field}`), wide: field === "name" || field === "category", kind: PRODUCT_KINDS[field] }));
   return (
     <div className="space-y-6">
       <PageHeader

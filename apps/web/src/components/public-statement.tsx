@@ -53,7 +53,7 @@ export async function StatementView({ token, statement }: { token: string; state
                 <span>
                   <span className="block font-medium">{sale.number}</span>
                   <span className={sale.overdue ? "text-danger" : "text-muted"}>
-                    {formatWhen(sale.soldAt, locale, "Africa/Lagos")}
+                    {formatWhen(sale.soldAt, locale, Intl.DateTimeFormat().resolvedOptions().timeZone)}
                     {sale.dueDate ? ` · ${t("due", { date: formatDay(sale.dueDate, locale) })}` : ""}
                   </span>
                 </span>
@@ -72,7 +72,7 @@ export async function StatementView({ token, statement }: { token: string; state
             {statement.payments.map((payment) => (
               <li key={payment.number} className="flex justify-between gap-3">
                 <span>
-                  {payment.number} · {formatWhen(payment.receivedAt, locale, "Africa/Lagos")}
+                  {payment.number} · {formatWhen(payment.receivedAt, locale, Intl.DateTimeFormat().resolvedOptions().timeZone)}
                 </span>
                 <span className="tabular-nums">{money(payment.amountMinor)}</span>
               </li>

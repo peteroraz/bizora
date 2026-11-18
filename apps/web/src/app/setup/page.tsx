@@ -1,10 +1,11 @@
 "use client";
 
-import { Card, Combobox, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import { Card, Combobox, FormField, SafeForm, SubmitButton } from "@bizora/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { PublicFooter } from "../../components/public-footer";
+import { NameInput } from "../../components/typing";
 
 type Country = { code: string; name: string; defaultCurrencyCode: string; timezones: string[] };
 
@@ -77,7 +78,7 @@ export default function SetupPage() {
         <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <SafeForm className="mt-6 space-y-4" pending={pending} onSubmit={onSubmit}>
           <FormField id="organizationName" label={t("business")}>
-            <Input id="organizationName" name="organizationName" required />
+            <NameInput id="organizationName" name="organizationName" autoComplete="organization" required />
           </FormField>
           <FormField id="country" label={t("country")}>
             <Combobox

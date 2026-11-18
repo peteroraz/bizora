@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   IMPORT_MAX_ROWS,
+  currencyDigits,
   normalizePhoneToE164,
   parseMoneyInput,
   parseQuantity,
@@ -76,15 +77,15 @@ export class ImportService {
       seen.add(key);
       const unit = row.unit.trim() ? unitFromText(row.unit) : "piece";
       if (!unit) errors.push({ field: "unit", message: `Unknown unit "${row.unit}". Use piece, carton, bag, kg, litre…` });
-      const price = this.money(row.price, "price", errors);
-      const cost = this.money(row.cost, "cost", errors);
+      const price = this.money(row.price, "price", errors, business.baseCurrencyCode);
+      const cost = this.money(row.cost, "cost", errors, business.baseCurrencyCode);
       if (cost !== null && !seeCost) errors.push({ field: "cost", message: "Only someone who can see cost prices can import them. Leave cost empty." });
       const quantity = this.quantity(row.quantity, "quantity", errors);
       const lowStock = this.quantity(row.lowStock, "lowStock", errors);
       const packUnit = row.packUnit.trim() ? unitFromText(row.packUnit) : null;
       if (row.packUnit.trim() && !packUnit) errors.push({ field: "packUnit", message: `Unknown pack "${row.packUnit}".` });
       const packSize = this.quantity(row.packSize, "packSize", errors);
-      const packPrice = this.money(row.packPrice, "packPrice", errors);
+      const packPrice = this.money(row.packPrice, "packPrice", errors, business.baseCurrencyCode);
       if ((packUnit === null) !== (packSize === null)) errors.push({ field: "packSize", message: "Give both the pack and how many are in it." });
       const match = byName.get(key) ?? null;
       if (errors.length > 0) return { row: index + 1, status: "error", errors };
@@ -169,10 +170,10 @@ export class ImportService {
       if (product && unit && factor === null) errors.push({ field: "unit", message: `${product.name} is not sold in ${unit}.` });
       const entered = row.quantity.trim() ? parseQuantity(row.quantity) : 1000n;
       if (entered === null) errors.push({ field: "quantity", message: `Can't read the quantity "${row.quantity}".` });
-      const total = this.money(row.total, "total", errors);
+      const total = this.money(row.total, "total", errors, business.baseCurrencyCode);
       // A known product sold without a written price is taken at its list price (common in sales books and voice notes).
       const listed = product && unit && factor !== null && !row.price.trim() && total === null ? this.listPrice(product, productUnits, unit, factor) : null;
-      const price = listed ?? this.money(row.price, "price", errors);
+      const price = listed ?? this.money(row.price, "price", errors, business.baseCurrencyCode);
       if (price === null && total === null) errors.push({ field: "price", message: "Enter the price or the total." });
       const method = paymentFromText(row.payment);
       if (!method) errors.push({ field: "payment", message: `Can't read "${row.payment}". Use cash, transfer, POS or credit.` });
@@ -295,7 +296,7 @@ export class ImportService {
       if (product && unit && this.factor(product, units.get(product.id) ?? [], unit) === null) errors.push({ field: "unit", message: `${product.name} does not come in ${unit}.` });
       const quantity = row.quantity.trim() ? parseQuantity(row.quantity) : null;
       if (quantity === null || quantity <= 0n) errors.push({ field: "quantity", message: row.quantity.trim() ? `Can't read the quantity "${row.quantity}".` : "Enter how many were received." });
-      const cost = this.money(row.cost, "cost", errors);
+      const cost = this.money(row.cost, "cost", errors, business.baseCurrencyCode);
       const paidFrom = paidFromText(row.paid);
       if (!paidFrom) errors.push({ field: "paid", message: `Can't read "${row.paid}". Use owed, cash or bank.` });
       else if (paidFrom !== "credit" && !canPay) errors.push({ field: "paid", message: "Only a manager can record paying the supplier. Leave it as owed." });
@@ -366,10 +367,13 @@ export class ImportService {
     return units.find((item) => item.unitCode === unit)?.baseQuantity ?? null;
   }
 
-  private money(text: string, field: string, errors: { field: string; message: string }[]) {
+  /** Amounts follow the business's currency: two decimals for NGN, none for XOF (ADR-027). */
+  private money(text: string, field: string, errors: { field: string; message: string }[], currency: string) {
     if (!text.trim()) return null;
-    const value = parseMoneyInput(text);
-    if (value === null) errors.push({ field, message: `Can't read the amount "${text}". Write it like 1500 or 1,500.50.` });
+    const digits = currencyDigits(currency.trim());
+    const value = parseMoneyInput(text, digits);
+    const example = digits > 0 ? `1500 or 1,500.${"5".padEnd(digits, "0")}` : "1500 or 1,500";
+    if (value === null) errors.push({ field, message: `Can't read the amount "${text}". Write it like ${example}.` });
     return value;
   }
 

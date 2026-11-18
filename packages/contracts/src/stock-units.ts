@@ -1,3 +1,4 @@
+import { parseAmountDigits } from "./typing.js";
 
 /**
  * Products and stock helpers with no dependencies (ADR-014). Quantities travel as decimal strings ("2.5") and are stored as whole thousandths of
@@ -85,12 +86,9 @@ export function splitIntoPacks(quantity: bigint, baseUnit: string, packs: PackUn
   return negative ? parts.map((part) => ({ ...part, quantity: -part.quantity })) : parts;
 }
 
-/** "1,500.50" or "1500.5" → 150050n kobo. Null when not a valid amount. */
-export function parseMoneyInput(text: string): bigint | null {
-  const value = text.trim().replace(/[,₦\s]/g, "").replace(/^N/i, "");
-  const match = /^(\d{1,13})(?:\.(\d{1,2}))?$/.exec(value);
-  if (!match) return null;
-  return BigInt(match[1] ?? "0") * 100n + BigInt((match[2] ?? "").padEnd(2, "0") || "0");
+/** "1,500.50" or "1500.5" → 150050n with 2 decimals. Prefer parseAmount, which follows the currency (ADR-027). */
+export function parseMoneyInput(text: string, digits = 2): bigint | null {
+  return parseAmountDigits(text.replace(/^\s*N(?=[\d\s])/i, ""), digits);
 }
 
 export const PAID_FROM = ["cash", "bank", "credit"] as const;

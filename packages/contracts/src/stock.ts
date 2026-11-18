@@ -8,7 +8,7 @@ export const unitCodeSchema = z.enum(UNIT_CODES);
 
 const decimalQuantity = z.string().trim().refine((value) => parseQuantity(value) !== null, "Enter a quantity above zero, with up to 3 decimals.");
 const countQuantity = z.string().trim().refine((value) => parseCountQuantity(value) !== null, "Enter how many you counted.");
-const minorAmount = z.string().trim().regex(/^\d{1,15}$/, "Enter an amount in kobo.");
+const minorAmount = z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas).");
 const clientId = z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.");
 const note = z.string().trim().max(240).optional();
 

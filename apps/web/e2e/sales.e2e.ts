@@ -40,7 +40,7 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
   // Tapping + adds one more; the cash given shows the change.
   await page.getByRole("button", { name: "One more Peak Milk" }).click();
   await expect(page.getByTestId("sale-total")).toHaveText("₦900.00");
-  await page.getByLabel("Cash given (₦)").fill("1000");
+  await page.getByLabel("Cash given").fill("1000");
   await expect(page.getByTestId("sale-change")).toHaveText("Change: ₦100.00");
   await page.getByRole("button", { name: "Record sale" }).click();
   await expect(page.getByRole("heading", { name: "R-000001" })).toBeVisible();

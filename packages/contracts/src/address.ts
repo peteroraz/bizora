@@ -1,4 +1,4 @@
-import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { checkPhone, phoneProblemMessage } from "./phone.js";
 import { z } from "zod";
 import geographyRules from "./geography/rules.json" with { type: "json" };
 
@@ -16,12 +16,14 @@ export function countryRule(code: string): CountryRule | undefined {
   return countries[code.toUpperCase()];
 }
 
+/** A saved phone number: E.164 ("+2348031234567") and valid for its country (format and length, ADR-027). */
 export const phoneE164Schema = z.string().trim().superRefine((value, ctx) => {
-  const parsed = parsePhoneNumberFromString(value);
-  if (!parsed?.isValid() || parsed.number !== value) {
+  const result = value.startsWith("+") ? checkPhone(value, "") : null;
+  if (!result?.ok || result.e164 !== value) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Enter a valid phone number in international format.",
+      message:
+        result && !result.ok ? phoneProblemMessage(result.problem, result.country) : "Enter the number with its country code, like +234 803 123 4567.",
     });
   }
 });

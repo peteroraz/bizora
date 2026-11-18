@@ -563,7 +563,8 @@
       "simple": "For kiosks and small shops. Stock leaves when the sale is recorded.",
       "desk": "The sales person records the sale, the cashier takes the money or gives credit, and the store keeper gives out the goods. Stock leaves when the goods are given out."
     },
-    "deskNeedsStaff": "The sales desk flow needs 3 staff: a sales person, a cashier and a store keeper. Your {plan} plan allows {limit}. The Business plan allows more."
+    "deskNeedsStaff": "The sales desk flow needs 3 staff: a sales person, a cashier and a store keeper. Your {plan} plan allows {limit}. The Business plan allows more.",
+    "phoneCheck": "Check the phone number: it is not a valid number for the country."
   },
   "address": {
     "country": "Country",
@@ -652,7 +653,7 @@
     "creditNotAllowed": "Not approved for credit.",
     "creditOwing": "Owes {amount} now.",
     "creditAllowLabel": "Allowed to buy on credit",
-    "creditLimitLabel": "Credit limit (₦)",
+    "creditLimitLabel": "Credit limit",
     "creditLimitHint": "The most they may owe at once. Leave empty for no limit.",
     "creditLimitInvalid": "Check the credit limit.",
     "creditSaveFailed": "Could not save. Try again.",
@@ -669,7 +670,8 @@
     "removeConfirm": "Remove {name}? Their past sales and receipts stay. They will no longer show in lists or searches.",
     "removeYes": "Yes, remove",
     "removeKeep": "Keep",
-    "moreDetails": "+ Email, notes and address"
+    "moreDetails": "+ Email, notes and address",
+    "phoneCheck": "Check the phone number: it is not a valid number."
   },
   "followups": {
     "title": "Follow-ups",
@@ -765,7 +767,8 @@
     "exited": "Shop mode is off on this device.",
     "actionFailed": "That did not work. Try again.",
     "noPermission": "Only the owner or a manager can manage staff.",
-    "exitWaiting": "{count, plural, one {# change is} other {# changes are}} still waiting to sync on this device. Connect to the internet and wait for it to finish before turning off Shop mode."
+    "exitWaiting": "{count, plural, one {# change is} other {# changes are}} still waiting to sync on this device. Connect to the internet and wait for it to finish before turning off Shop mode.",
+    "phoneCheck": "Check the phone number, or leave it empty."
   },
   "shop": {
     "title": "Who is selling?",
@@ -850,22 +853,22 @@
     "name": "Product name",
     "categoryHint": "Optional, for example Drinks or Grains",
     "baseUnit": "How you count it",
-    "priceLabel": "Selling price per {unit} (₦)",
+    "priceLabel": "Selling price per {unit}",
     "optional": "Optional",
     "packsTitle": "Pack sizes",
     "packsHint": "Optional. For example, 1 carton = 24 pieces.",
     "packUnit": "Pack",
     "packSize": "How many {unit} in one",
-    "packPrice": "Price per pack (₦)",
+    "packPrice": "Price per pack",
     "addPack": "Add a pack size",
     "removePack": "Remove",
     "lowStock": "Warn me when stock falls to (in {unit})",
     "barcode": "Barcode",
-    "defaultCost": "Cost price per {unit} (₦)",
+    "defaultCost": "Cost price per {unit}",
     "trackStock": "Count stock for this product",
     "openingTitle": "Stock you have now",
     "openingQuantity": "How many {unit} you have",
-    "openingCost": "What they cost in total (₦)",
+    "openingCost": "What they cost in total",
     "openingHint": "Optional. Recorded as money you put into the business.",
     "save": "Save product",
     "saving": "Saving…",
@@ -905,7 +908,7 @@
     "receiveTitle": "Stock in",
     "quantity": "Quantity",
     "unit": "Unit",
-    "totalCost": "Total cost (₦)",
+    "totalCost": "Total cost",
     "totalCostHint": "Optional. Leave empty if you don't know.",
     "paidFrom": "Paid from",
     "paid": {
@@ -940,7 +943,19 @@
     "archived": "Product removed.",
     "updated": "Product updated.",
     "import": "Import or snap products",
-    "delivery": "Record a delivery"
+    "delivery": "Record a delivery",
+    "openingWorkedOut": "{quantity} × {cost} = {total}. Type a different total if you paid something else.",
+    "costEach": "Cost of one",
+    "costEachHint": "Optional. The total is worked out for you.",
+    "totals": {
+      "cost": "Stock value at cost",
+      "selling": "Worth at your selling prices",
+      "inStock": "Products in stock",
+      "inStockValue": "{inStock} of {products}",
+      "forShop": "For this shop, every product added up.",
+      "forSearch": "For the products this search finds, added up.",
+      "withoutPrice": "{count, plural, one {# product in stock has} other {# products in stock have}} no selling price, so {count, plural, one {it is} other {they are}} not in the selling value."
+    }
   },
   "sales": {
     "title": "Sales",
@@ -1134,7 +1149,7 @@
     "less": "One less {name}",
     "more": "One more {name}",
     "changePrice": "Change price",
-    "cashGiven": "Cash given (₦)",
+    "cashGiven": "Cash given",
     "shortBy": "Short by {amount}",
     "customerOptional": "Customer (optional)",
     "addDiscountOrNote": "+ Add a discount or note",
@@ -1147,7 +1162,8 @@
     "sendInvoiceLink": "Share invoice link on WhatsApp",
     "sendInvoiceLinkCustomer": "Send invoice link to customer on WhatsApp",
     "copyLinkPlain": "Copy link",
-    "viewAsCustomer": "See what the customer sees"
+    "viewAsCustomer": "See what the customer sees",
+    "newCustomerPhoneCheck": "Check the phone number, or leave it empty for a walk-in customer."
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -1235,7 +1251,8 @@
       "paid": "Paid",
       "ref": "Invoice or delivery no."
     },
-    "exampleSupplier": "Dangote Distributors"
+    "exampleSupplier": "Dangote Distributors",
+    "totalRow": "Total"
   },
   "receipt": {
     "number": "Receipt {number}",
@@ -1337,7 +1354,7 @@
     "newLink": "Make a new link",
     "linkReplaced": "New statement link made. The old link no longer works.",
     "recordTitle": "Record a payment",
-    "amount": "Amount received (₦)",
+    "amount": "Amount received",
     "method": "Paid with",
     "reference": "Reference",
     "optional": "Optional",
@@ -1489,5 +1506,12 @@
     "note": "Receipts, invoices and statements from {business} open on this site.",
     "footer": "Sent with Bizora.",
     "footerLink": "Run your business with Bizora"
+  },
+  "typing": {
+    "phoneTooShort": "This number is too short for {country}. Numbers there look like {example}.",
+    "phoneTooLong": "This number is too long for {country}. Numbers there look like {example}.",
+    "phoneInvalid": "This is not a {country} number. Numbers there look like {example}.",
+    "phoneUnknown": "Start a number from another country with + and its country code.",
+    "phoneOtherCountry": "A {country} number."
   }
 }

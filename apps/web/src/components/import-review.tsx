@@ -1,8 +1,23 @@
 "use client";
 
-import { type CaptureResult, type CaptureTarget, IDEMPOTENCY_HEADER, IMPORT_MAX_ROWS, type ImportRowResult, rowsFromCsv, uuidv7 } from "@bizora/contracts";
+import {
+  type CaptureResult,
+  type CaptureTarget,
+  IDEMPOTENCY_HEADER,
+  IMPORT_MAX_ROWS,
+  type ImportRowResult,
+  capitaliseFirst,
+  capitaliseWords,
+  parseAmount,
+  rowsFromCsv,
+  typeAmount,
+  typeNumber,
+  uuidv7,
+} from "@bizora/contracts";
 import { Badge, Button, Card } from "@bizora/ui";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { formatCurrency } from "../i18n/format";
+import { usePlace } from "../lib/access-context";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { CaptureBar } from "./capture-bar";
@@ -12,7 +27,25 @@ import { CaptureBar } from "./capture-bar";
  * of handwritten books and voice notes will fill the same table as drafts. Nothing is saved until the server has
  * checked every row (a dry run), there are no errors left, and a person presses Save.
  */
-export type ImportColumn<F extends string> = { field: F; label: string; wide?: boolean };
+/**
+ * `kind` decides what a cell takes as it is edited (ADR-027): amounts in the business's currency, quantities,
+ * names (first letters capitalised) or text (first letter). `sum` adds an amount column up under the table.
+ */
+export type ImportColumn<F extends string> = {
+  field: F;
+  label: string;
+  wide?: boolean;
+  kind?: "amount" | "quantity" | "name" | "text";
+  sum?: boolean;
+};
+
+function typeCell(kind: ImportColumn<string>["kind"], text: string, currency: string) {
+  if (kind === "amount") return typeAmount(text, currency);
+  if (kind === "quantity") return typeNumber(text, 3);
+  if (kind === "name") return capitaliseWords(text);
+  if (kind === "text") return capitaliseFirst(text);
+  return text;
+}
 
 type Props<F extends string> = {
   columns: ImportColumn<F>[];
@@ -31,7 +64,11 @@ type Result = { committed: boolean; results: ImportRowResult[]; totals: { create
 
 export function ImportReview<F extends string>({ columns, synonyms, endpoint, extra = {}, templateName, templateExample, onSaved, capture }: Props<F>) {
   const t = useTranslations("imports");
+  const locale = useLocale();
+  const { currency } = usePlace();
   const [rows, setRows] = useState<Record<F, string>[]>([]);
+  /** An amount column added up; cells that are not amounts yet count as nothing. */
+  const sumOf = (field: F) => rows.reduce((total, row) => total + (parseAmount(row[field] ?? "", currency) ?? 0n), 0n);
   const [fileName, setFileName] = useState("");
   const [missing, setMissing] = useState<string[]>([]);
   const [checked, setChecked] = useState<Result | null>(null);
@@ -201,8 +238,9 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
                           aria-label={t("cell", { column: column.label, row: index + 1 })}
                           aria-invalid={bad.has(column.field) || undefined}
                           className={`w-full rounded-control border bg-background px-2 py-1 ${column.wide ? "min-w-40" : "min-w-20"} ${bad.has(column.field) ? "border-danger" : "border-border"}`}
+                          inputMode={column.kind === "amount" || column.kind === "quantity" ? "decimal" : undefined}
                           value={row[column.field]}
-                          onChange={(event) => edit(index, column.field, event.target.value)}
+                          onChange={(event) => edit(index, column.field, typeCell(column.kind, event.target.value, currency))}
                         />
                       </td>
                     ))}
@@ -229,6 +267,19 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
                 );
               })}
             </tbody>
+            {columns.some((column) => column.sum) ? (
+              <tfoot>
+                <tr className="font-medium" data-testid="import-totals">
+                  <td className="px-2 py-2">{t("totalRow")}</td>
+                  {columns.map((column) => (
+                    <td key={column.field} className="px-2 py-2 tabular-nums">
+                      {column.sum ? formatCurrency(sumOf(column.field), currency, locale) : null}
+                    </td>
+                  ))}
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
         </div>
       ) : null}

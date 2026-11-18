@@ -11,6 +11,11 @@ export type Access = {
   branchId?: string | null;
   /** How the business sells (ADR-016): simple, or sales desk → cashier → store keeper. */
   salesFlow?: "simple" | "desk";
+  /** Where the business is: decides how phone numbers and amounts are typed (ADR-027). */
+  country?: string;
+  currency?: string;
+  /** The business's time zone, for showing when things happened. */
+  timezone?: string;
 };
 
 export const noAccess: Access = { permissions: [], staffSession: false };

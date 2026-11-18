@@ -12,7 +12,7 @@ export { EmptyState } from "./empty-state";
 export { FormField, Label, Textarea } from "./form";
 export { SafeForm, SubmitButton, useHydrated } from "./safe-form";
 export { IconButton } from "./icon-button";
-export { Input } from "./input";
+export { Input, type InputProps } from "./input";
 export { MoneyText } from "./money";
 export { PageHeader } from "./page-header";
 export { Select } from "./select";

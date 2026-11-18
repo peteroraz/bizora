@@ -17,7 +17,9 @@ import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { BrandSettings } from "../../../components/brand-settings";
 import { can, settingsTabs as tabs, visibleSettingsTabs } from "../../../lib/access";
-import { useAccess } from "../../../lib/access-context";
+import { useAccess, usePlace } from "../../../lib/access-context";
+import { checkTypedPhone, PhoneInput } from "../../../components/phone-input";
+import { EmailInput, NameInput, SentenceInput, WholeNumberInput } from "../../../components/typing";
 import { api } from "../../../lib/api";
 import { hasPlace, persistOwnerAddress } from "../../../lib/address-client";
 import { emptyAddress, type AddressValue, type CountryOption, type SubdivisionOption } from "../../../lib/reference";
@@ -64,6 +66,15 @@ function fromAddress(address: Partial<AddressValue> | null, countryCode: string)
 
 function SettingsScreen() {
   const t = useTranslations("settings");
+  const place = usePlace();
+
+  /** A typed phone as saved (E.164), checked against the country; empty stays empty. Throws the plain message. */
+  async function phoneForSave(text: string, country: string) {
+    if (!text.trim()) return null;
+    const checked = await checkTypedPhone(text, country);
+    if (!checked?.ok) throw new Error(t("phoneCheck"));
+    return checked.e164;
+  }
   const common = useTranslations("common");
   const nav = useTranslations("nav");
   const roleLabels = useTranslations("roles");
@@ -197,7 +208,7 @@ function SettingsScreen() {
       if (hasPlace(orgAddress)) await persistOwnerAddress({ kind: "organization" }, orgAddress);
       const response = await api("/api/v1/organizations/current", {
         method: "PATCH",
-        body: JSON.stringify({ name: orgName, phoneE164: orgPhone || null }),
+        body: JSON.stringify({ name: orgName, phoneE164: await phoneForSave(orgPhone, place.country) }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? t("saveFailed"));
@@ -224,7 +235,7 @@ function SettingsScreen() {
           countryCode: businessAddress.countryCode,
           baseCurrencyCode: business.baseCurrencyCode,
           timezone: business.timezone,
-          phoneE164: business.phoneE164 || null,
+          phoneE164: await phoneForSave(business.phoneE164 ?? "", businessAddress.countryCode || place.country),
         }),
       });
       const payload = await response.json();
@@ -283,7 +294,7 @@ function SettingsScreen() {
       if (hasPlace(draft.address)) await persistOwnerAddress({ kind: "branch", id: branchId }, draft.address);
       const response = await api(`/api/v1/branches/${branchId}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: draft.name, phoneE164: draft.phone || null }),
+        body: JSON.stringify({ name: draft.name, phoneE164: await phoneForSave(draft.phone, draft.address.countryCode || place.country) }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? t("branchFailed"));
@@ -401,7 +412,7 @@ function SettingsScreen() {
           <Card>
             <SafeForm className="space-y-4" pending={pending} onSubmit={saveOrganization}>
               <FormField id="org-name" label={t("businessName")}>
-                <Input id="org-name" value={orgName} onChange={(event) => setOrgName(event.target.value)} required />
+                <NameInput id="org-name" value={orgName} onChange={(event) => setOrgName(event.target.value)} required />
               </FormField>
               <AddressFields
                 idPrefix="org"
@@ -414,7 +425,7 @@ function SettingsScreen() {
                 }}
               />
               <FormField id="org-phone" label={common("phone")}>
-                <Input id="org-phone" value={orgPhone} onChange={(event) => setOrgPhone(event.target.value)} placeholder={t("phonePlaceholder")} />
+                <PhoneInput id="org-phone" country={place.country} value={orgPhone} onChange={(event) => setOrgPhone(event.target.value)} />
               </FormField>
               <SubmitButton pending={pending} pendingLabel={common("saving")}>
                 {t("saveBusiness")}
@@ -430,7 +441,7 @@ function SettingsScreen() {
             {business ? (
               <SafeForm className="space-y-4" pending={pending} onSubmit={saveBusiness}>
                 <FormField id="business-name" label={t("shopName")}>
-                  <Input id="business-name" value={business.name} onChange={(event) => setBusiness({ ...business, name: event.target.value })} required />
+                  <NameInput id="business-name" value={business.name} onChange={(event) => setBusiness({ ...business, name: event.target.value })} required />
                 </FormField>
                 <AddressFields
                   idPrefix="business"
@@ -455,7 +466,9 @@ function SettingsScreen() {
                     id="business-currency"
                     value={business.baseCurrencyCode}
                     maxLength={3}
-                    onChange={(event) => setBusiness({ ...business, baseCurrencyCode: event.target.value.toUpperCase() })}
+                    autoCapitalize="characters"
+                    format={(text) => text.replace(/[^a-z]/gi, "").toUpperCase().slice(0, 3)}
+                    onChange={(event) => setBusiness({ ...business, baseCurrencyCode: event.target.value })}
                   />
                 </FormField>
                 <FormField id="business-timezone" label={common("timezone")}>
@@ -468,11 +481,11 @@ function SettingsScreen() {
                   </Select>
                 </FormField>
                 <FormField id="business-phone" label={common("phone")}>
-                  <Input
+                  <PhoneInput
                     id="business-phone"
+                    country={businessAddress.countryCode || place.country}
                     value={business.phoneE164 ?? ""}
                     onChange={(event) => setBusiness({ ...business, phoneE164: event.target.value })}
-                    placeholder={t("phonePlaceholder")}
                   />
                 </FormField>
                 <SubmitButton pending={pending} pendingLabel={common("saving")}>
@@ -506,10 +519,10 @@ function SettingsScreen() {
                 ))}
               </fieldset>
               <FormField id="setup-shops" label={t("branchCount")}>
-                <Input id="setup-shops" inputMode="numeric" value={branchCount} onChange={(event) => setBranchCount(event.target.value)} />
+                <WholeNumberInput id="setup-shops" value={branchCount} onChange={(event) => setBranchCount(event.target.value)} />
               </FormField>
               <FormField id="setup-sell" label={t("whatYouSell")} hint={common("optional")}>
-                <Input id="setup-sell" value={whatYouSell} onChange={(event) => setWhatYouSell(event.target.value)} />
+                <SentenceInput id="setup-sell" value={whatYouSell} onChange={(event) => setWhatYouSell(event.target.value)} />
               </FormField>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={otherCurrencies} onChange={(event) => setOtherCurrencies(event.target.checked)} />
@@ -572,7 +585,7 @@ function SettingsScreen() {
                 <Card key={branch.id}>
                   <SafeForm className="space-y-4" pending={pending} onSubmit={() => saveBranch(branch.id)}>
                     <FormField id={`branch-name-${branch.id}`} label={t("branch")}>
-                      <Input
+                      <NameInput
                         id={`branch-name-${branch.id}`}
                         value={draft.name}
                         onChange={(event) => updateBranchDraft(branch.id, { name: event.target.value })}
@@ -594,8 +607,9 @@ function SettingsScreen() {
                       }}
                     />
                     <FormField id={`branch-phone-${branch.id}`} label={common("phone")}>
-                      <Input
+                      <PhoneInput
                         id={`branch-phone-${branch.id}`}
+                        country={draft.address.countryCode || place.country}
                         value={draft.phone}
                         onChange={(event) => updateBranchDraft(branch.id, { phone: event.target.value })}
                       />
@@ -610,7 +624,7 @@ function SettingsScreen() {
             <Card>
               <SafeForm className="flex flex-wrap items-end gap-3" pending={pending} onSubmit={createBranch}>
                 <FormField id="new-branch" label={t("newBranch")}>
-                  <Input id="new-branch" name="name" required />
+                  <NameInput id="new-branch" name="name" required />
                 </FormField>
                 <SubmitButton pending={pending} pendingLabel={common("saving")}>
                   {t("addBranch")}
@@ -631,7 +645,7 @@ function SettingsScreen() {
             </ul>
             {canInvite ? (
               <SafeForm className="grid gap-3 md:grid-cols-[1fr_180px_auto]" pending={pending} onSubmit={invite}>
-                <Input name="email" type="email" aria-label={t("inviteEmail")} placeholder={t("invitePlaceholder")} required />
+                <EmailInput name="email" aria-label={t("inviteEmail")} placeholder={t("invitePlaceholder")} required />
                 <Select name="role" aria-label={t("inviteRole")} defaultValue="SALES">
                   {roles.map((role) => (
                     <option key={role} value={role}>

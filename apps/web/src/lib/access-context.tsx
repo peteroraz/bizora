@@ -20,3 +20,16 @@ export function AccessProvider({
 export function useAccess() {
   return useContext(AccessContext);
 }
+
+/**
+ * The business's country, currency and time zone, for phone boxes, amount boxes and times. Falls back to Nigeria and naira only
+ * before the business is known (sign-up); every signed-in screen has its own.
+ */
+export function usePlace() {
+  const access = useContext(AccessContext);
+  return {
+    country: access.country ?? "NG",
+    currency: access.currency ?? "NGN",
+    timezone: access.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}

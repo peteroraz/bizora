@@ -1,13 +1,14 @@
 "use client";
 
 import { passwordRules } from "@bizora/contracts/password";
-import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import { Card, FormField, SafeForm, SubmitButton } from "@bizora/ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
 import { confirmPasswordError } from "../../lib/password";
+import { NameInput } from "../../components/typing";
 
 function InviteForm() {
   const t = useTranslations("invite");
@@ -82,7 +83,7 @@ function InviteForm() {
         <SafeForm className="mt-4 space-y-4" pending={pending} onSubmit={onSubmit}>
           <input type="hidden" name="token" value={token} />
           <FormField id="displayName" label={t("name")}>
-            <Input id="displayName" name="displayName" required />
+            <NameInput id="displayName" name="displayName" autoComplete="name" required />
           </FormField>
           <PasswordWithConfirmation
             passwordId="password"

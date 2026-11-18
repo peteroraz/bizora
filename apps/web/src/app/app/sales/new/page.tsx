@@ -1,6 +1,6 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, parseMoneyInput, parseQuantity, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, amountText, parseAmount, parseQuantity, typeNumber, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
@@ -9,7 +9,7 @@ import { RequireAccess } from "../../../../components/require-access";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
 import { dayKey, formatCurrency } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
-import { useAccess } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { type CachedProduct, readCatalog, searchCatalog } from "../../../../lib/offline/catalog";
 import { enqueue } from "../../../../lib/offline/outbox";
@@ -19,6 +19,7 @@ import { nextProvisionalNumber } from "../../../../lib/provisional";
 import { baseQuantity, lineTotal, listPrice, sellingUnits } from "../../../../lib/sales-client";
 import { refreshOfflineCatalog } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
+import { AmountInput, SentenceInput } from "../../../../components/typing";
 import { DueDatePicker } from "../../../../components/due-date-picker";
 
 type Line = { key: string; product: CachedProduct; unit: string; quantity: string; price: string };
@@ -50,8 +51,6 @@ function rememberRecent(key: string, productIds: string[]) {
   }
 }
 
-/** A kobo amount as typed naira ("4500" or "4500.50"), for showing the list price as a hint. */
-const naira = (minor: bigint) => (minor % 100n === 0n ? (minor / 100n).toString() : `${minor / 100n}.${(minor % 100n).toString().padStart(2, "0")}`);
 
 function QuickSaleScreen() {
   const t = useTranslations("sales");
@@ -100,7 +99,8 @@ function QuickSaleScreen() {
     warmOfflineCopy();
   }, [access.owner, access.branchId]);
 
-  const currency = catalog?.currency ?? "NGN";
+  const place = usePlace();
+  const currency = catalog?.currency ?? place.currency;
   const money = (minor: bigint) => formatCurrency(minor, currency, locale);
   const matches = useMemo(() => (catalog && query.trim() ? searchCatalog(catalog, query).slice(0, 8) : []), [catalog, query]);
   // Quick tiles: what this phone sold recently, then the rest of the list, 12 at most.
@@ -117,7 +117,7 @@ function QuickSaleScreen() {
   const priced = lines.map((line) => {
     const entered = parseQuantity(line.quantity);
     const list = listPrice(line.product, line.unit);
-    const typed = line.price.trim() ? parseMoneyInput(line.price) : null;
+    const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
     const unitPrice = canDiscount && typed !== null ? typed : list;
     const total = entered !== null && unitPrice !== null ? lineTotal(unitPrice, entered) : null;
     const onHand = BigInt(catalog?.quantities[line.product.id] ?? "0");
@@ -125,13 +125,13 @@ function QuickSaleScreen() {
     return { line, entered, list, unitPrice, total, short, onHand };
   });
   const subtotal = priced.reduce((sum, item) => sum + (item.total ?? 0n), 0n);
-  const discountMinor = canDiscount && discount.trim() ? (parseMoneyInput(discount) ?? 0n) : 0n;
+  const discountMinor = canDiscount && discount.trim() ? (parseAmount(discount, currency) ?? 0n) : 0n;
   const total = subtotal - discountMinor;
   const paidParts = desk
     ? []
     : mode === "split"
       ? (["cash", "transfer", "pos"] as const)
-          .map((method) => ({ method, amountMinor: split[method].trim() ? parseMoneyInput(split[method]) : 0n }))
+          .map((method) => ({ method, amountMinor: split[method].trim() ? parseAmount(split[method], currency) : 0n }))
           .filter((part) => part.amountMinor !== 0n)
       : mode === "credit"
         ? []
@@ -243,7 +243,7 @@ function QuickSaleScreen() {
   // At the sales desk any choice is only what the customer said; the cashier decides on credit.
   const modes: PayMode[] = ["cash", "transfer", "pos", "split", ...(canCredit || desk ? (["credit"] as const) : [])];
 
-  const givenMinor = given.trim() ? parseMoneyInput(given) : null;
+  const givenMinor = given.trim() ? parseAmount(given, currency) : null;
   const change = givenMinor !== null ? givenMinor - total : null;
   const itemCount = priced.length;
 
@@ -313,7 +313,7 @@ function QuickSaleScreen() {
                         inputMode="decimal"
                         className="h-11 w-16 border-y border-border bg-input text-center text-base tabular-nums outline-none"
                         value={line.quantity}
-                        onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
+                        onChange={(event) => updateLine(line.key, { quantity: typeNumber(event.target.value, 3) })}
                       />
                       <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-r-control border border-border text-lg" aria-label={t("more", { name: line.product.name })} onClick={() => step(line, 1000n)}>
                         +
@@ -344,12 +344,12 @@ function QuickSaleScreen() {
                   {canDiscount ? (
                     priceOpen === line.key || line.price.trim() ? (
                       <FormField id={`price-${index}`} label={t("price")}>
-                        <Input
+                        <AmountInput
+                          currency={currency}
                           id={`price-${index}`}
-                          inputMode="decimal"
                           className="max-w-40"
                           value={line.price}
-                          placeholder={list !== null ? naira(list) : ""}
+                          placeholder={list !== null ? amountText(list, currency) : ""}
                           onChange={(event) => updateLine(line.key, { price: event.target.value })}
                         />
                       </FormField>
@@ -379,7 +379,7 @@ function QuickSaleScreen() {
           {mode === "cash" && !desk && total > 0n ? (
             <div className="flex flex-wrap items-end gap-3">
               <FormField id="sale-given" label={t("cashGiven")} hint={t("optional")}>
-                <Input id="sale-given" inputMode="decimal" className="max-w-40" value={given} onChange={(event) => setGiven(event.target.value)} />
+                <AmountInput currency={currency} id="sale-given" className="max-w-40" value={given} onChange={(event) => setGiven(event.target.value)} />
               </FormField>
               {change !== null ? (
                 <p className={`pb-6 text-base font-semibold tabular-nums ${change < 0n ? "text-danger" : "text-success"}`} data-testid="sale-change" role="status">
@@ -392,7 +392,7 @@ function QuickSaleScreen() {
             <div className="grid gap-2 sm:grid-cols-3">
               {(["cash", "transfer", "pos"] as const).map((method) => (
                 <FormField key={method} id={`split-${method}`} label={t(`mode.${method}`)}>
-                  <Input id={`split-${method}`} inputMode="decimal" value={split[method]} onChange={(event) => setSplit({ ...split, [method]: event.target.value })} />
+                  <AmountInput currency={currency} id={`split-${method}`} value={split[method]} onChange={(event) => setSplit({ ...split, [method]: event.target.value })} />
                 </FormField>
               ))}
             </div>
@@ -414,24 +414,24 @@ function QuickSaleScreen() {
                 <DueDatePicker id="sale-due" value={dueDate} today={dayKey(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} onChange={setDueDate} />
               </FormField>
               <FormField id="sale-credit-comment" label={t("creditComment")}>
-                <Input id="sale-credit-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
+                <SentenceInput id="sale-credit-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
               </FormField>
             </div>
           </Card>
         ) : desk ? (
           <FormField id="sale-comment" label={t("deskComment")} hint={t("optional")}>
-            <Input id="sale-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
+            <SentenceInput id="sale-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
           </FormField>
         ) : null}
         {extras || discount.trim() || note.trim() ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {canDiscount ? (
               <FormField id="sale-discount" label={t("discount")} hint={t("optional")}>
-                <Input id="sale-discount" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value)} />
+                <AmountInput currency={currency} id="sale-discount" value={discount} onChange={(event) => setDiscount(event.target.value)} />
               </FormField>
             ) : null}
             <FormField id="sale-note" label={t("note")} hint={t("optional")}>
-              <Input id="sale-note" value={note} maxLength={240} onChange={(event) => setNote(event.target.value)} />
+              <SentenceInput id="sale-note" value={note} maxLength={240} onChange={(event) => setNote(event.target.value)} />
             </FormField>
           </div>
         ) : (

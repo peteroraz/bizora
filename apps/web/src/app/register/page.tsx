@@ -1,7 +1,7 @@
 "use client";
 
 import { passwordRules } from "@bizora/contracts/password";
-import { Card, Combobox, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import { Card, Combobox, FormField, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
 import { PublicFooter } from "../../components/public-footer";
 import { confirmPasswordError } from "../../lib/password";
+import { EmailInput, NameInput } from "../../components/typing";
 
 type Country = { code: string; name: string; defaultCurrencyCode: string; timezones: string[] };
 
@@ -102,13 +103,13 @@ export default function RegisterPage() {
         </div>
         <SafeForm className="mt-4 space-y-4" pending={pending} onSubmit={onSubmit}>
           <FormField id="displayName" label={t("name")}>
-            <Input id="displayName" name="displayName" required />
+            <NameInput id="displayName" name="displayName" autoComplete="name" required />
           </FormField>
           <FormField id="organizationName" label={t("business")}>
-            <Input id="organizationName" name="organizationName" required />
+            <NameInput id="organizationName" name="organizationName" autoComplete="organization" required />
           </FormField>
           <FormField id="email" label={t("email")}>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
+            <EmailInput id="email" name="email" autoComplete="email" required />
           </FormField>
           <PasswordWithConfirmation
             passwordId="password"

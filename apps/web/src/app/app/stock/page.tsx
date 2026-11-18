@@ -9,7 +9,7 @@ import { RequireAccess } from "../../../components/require-access";
 import { useStockText, useUnitName } from "../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../i18n/format";
 import { can } from "../../../lib/access";
-import { useAccess } from "../../../lib/access-context";
+import { useAccess, usePlace } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 import { readCatalog, searchCatalog } from "../../../lib/offline/catalog";
 import { isNetworkFailure } from "../../../lib/offline/sync";
@@ -27,6 +27,24 @@ type PendingCount = {
 };
 type BelowZero = { productId: string; name: string; baseUnit: string; branchName: string; quantity: string };
 
+/** Added up by the server for everything the search matches, in this shop (Sprint 7a). */
+type StockTotals = { products: number; inStock: number; sellingValueMinor: string; withoutPrice: number; costValueMinor?: string };
+
+/** The same sums from the copy kept on the phone, when there is no network. Cost is not kept on the phone. */
+function totalsOf(items: { quantity: string; priceMinor: string | null; trackStock: boolean }[]): StockTotals {
+  let selling = 0n;
+  let inStock = 0;
+  let withoutPrice = 0;
+  for (const item of items) {
+    const held = BigInt(item.quantity);
+    if (!item.trackStock || held <= 0n) continue;
+    inStock += 1;
+    if (item.priceMinor === null) withoutPrice += 1;
+    else selling += held * BigInt(item.priceMinor);
+  }
+  return { products: items.length, inStock, sellingValueMinor: ((selling + 500n) / 1000n).toString(), withoutPrice };
+}
+
 function StockScreen() {
   const t = useTranslations("stock");
   const common = useTranslations("common");
@@ -43,7 +61,9 @@ function StockScreen() {
   const [items, setItems] = useState<ProductView[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [currency, setCurrency] = useState("NGN");
+  const place = usePlace();
+  const [currency, setCurrency] = useState(place.currency);
+  const [totals, setTotals] = useState<StockTotals | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [pending, setPending] = useState(false);
   const [offlineSince, setOfflineSince] = useState<string | null | undefined>(undefined);
@@ -63,6 +83,7 @@ function StockScreen() {
       setCurrency(catalog.currency);
       setItems(found.map((item) => ({ ...item, stock: { quantity: item.quantity, belowZero: BigInt(item.quantity) < 0n } })));
       setTotal(found.length);
+      setTotals(totalsOf(found.map((item) => ({ quantity: item.quantity, priceMinor: item.priceMinor, trackStock: item.trackStock }))));
     },
     [access.owner, access.branchId, category],
   );
@@ -82,6 +103,7 @@ function StockScreen() {
         setPage(data.page);
         setCategories(data.categories);
         setCurrency(data.currency);
+        setTotals(data.totals ?? null);
         setOfflineSince(undefined);
         void refreshOfflineCatalog(access.owner?.tenantId, data.branchId);
       } catch (error) {
@@ -144,8 +166,36 @@ function StockScreen() {
       />
       {offlineSince !== undefined ? (
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
-          {offlineSince ? t("offline", { when: formatWhen(offlineSince, locale, "Africa/Lagos") }) : t("offlineNever")}
+          {offlineSince ? t("offline", { when: formatWhen(offlineSince, locale, Intl.DateTimeFormat().resolvedOptions().timeZone) }) : t("offlineNever")}
         </p>
+      ) : null}
+      {totals && totals.products > 0 ? (
+        <Card className="p-4" data-testid="stock-totals">
+          <dl className="grid gap-4 sm:grid-cols-3">
+            {totals.costValueMinor !== undefined ? (
+              <div>
+                <dt className="text-sm text-muted">{t("totals.cost")}</dt>
+                <dd className="text-xl font-semibold tabular-nums" data-testid="stock-cost-value">
+                  {formatCurrency(BigInt(totals.costValueMinor), currency, locale)}
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-sm text-muted">{t("totals.selling")}</dt>
+              <dd className="text-xl font-semibold tabular-nums" data-testid="stock-selling-value">
+                {formatCurrency(BigInt(totals.sellingValueMinor), currency, locale)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted">{t("totals.inStock")}</dt>
+              <dd className="text-xl font-semibold tabular-nums">{t("totals.inStockValue", { inStock: totals.inStock, products: totals.products })}</dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs text-muted">
+            {query.trim() || category ? t("totals.forSearch") : t("totals.forShop")}
+            {totals.withoutPrice > 0 ? ` ${t("totals.withoutPrice", { count: totals.withoutPrice })}` : ""}
+          </p>
+        </Card>
       ) : null}
       {counts.length > 0 ? (
         <Card>

@@ -5,7 +5,7 @@ import { parseMoneyInput, parseTraderDate } from "@bizora/contracts";
  * Reads one amount from a statement cell: "₦4,500.00", "4,500.00 CR", "(4,500.00)" or "-4500" (negative means the
  * other direction). Returns kobo, signed, or null when unreadable; 0n for an empty cell.
  */
-export function statementAmount(text: string): bigint | null {
+export function statementAmount(text: string, digits = 2): bigint | null {
   let value = text.trim().toUpperCase().replace(/NGN/g, "");
   if (!value || value === "-" || value === "0" || value === "0.00") return 0n;
   let sign = 1n;
@@ -22,7 +22,7 @@ export function statementAmount(text: string): bigint | null {
     value = value.slice(0, -2);
   }
   value = value.replace(/CR$/, "").trim();
-  const minor = parseMoneyInput(value);
+  const minor = parseMoneyInput(value, digits);
   return minor === null ? null : sign * minor;
 }
 
@@ -32,10 +32,10 @@ export type ParsedStatementRow =
   | { kind: "empty" }
   | { kind: "error"; errors: { field: string; message: string }[] };
 
-export function parseStatementRow(row: { date: string; description: string; reference: string; moneyIn: string; moneyOut: string }): ParsedStatementRow {
+export function parseStatementRow(row: { date: string; description: string; reference: string; moneyIn: string; moneyOut: string }, digits = 2): ParsedStatementRow {
   const errors: { field: string; message: string }[] = [];
-  const moneyIn = statementAmount(row.moneyIn);
-  const moneyOut = statementAmount(row.moneyOut);
+  const moneyIn = statementAmount(row.moneyIn, digits);
+  const moneyOut = statementAmount(row.moneyOut, digits);
   if (moneyIn === null) errors.push({ field: "moneyIn", message: `Can't read the amount "${row.moneyIn}".` });
   if (moneyOut === null) errors.push({ field: "moneyOut", message: `Can't read the amount "${row.moneyOut}".` });
   if (errors.length > 0) return { kind: "error", errors };

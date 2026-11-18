@@ -1,7 +1,7 @@
 "use client";
 
 import { IDEMPOTENCY_HEADER, Permission, quantityToString, uuidv7 } from "@bizora/contracts";
-import { Badge, Button, Card, EmptyState, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
+import { Badge, Button, Card, EmptyState, FormField, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -17,6 +17,7 @@ import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { type SaleDetail, type SaleReleaseDetail, whatsAppLink } from "../../../../lib/sales-client";
 import { ActionLink, BackLink } from "../../../../components/action-link";
+import { SentenceInput } from "../../../../components/typing";
 
 type Loaded = (SaleDetail & { view: "full" }) | (SaleReleaseDetail & { view: "release" });
 
@@ -196,7 +197,7 @@ function SaleScreen() {
             <p className="text-sm font-medium">{t("releaseTitle")}</p>
             <p className="text-sm text-muted">{t(sale.paymentState === "credit" ? "releaseCredit" : "releasePaid")}</p>
             <FormField id="release-comment" label={t("storeComment")} hint={t("optional")}>
-              <Input id="release-comment" value={releaseComment} maxLength={500} onChange={(event) => setReleaseComment(event.target.value)} />
+              <SentenceInput id="release-comment" value={releaseComment} maxLength={500} onChange={(event) => setReleaseComment(event.target.value)} />
             </FormField>
             <SubmitButton pending={pending} pendingLabel={t("saving")}>
               {t("releaseConfirm")}
@@ -259,7 +260,7 @@ function SaleScreen() {
             <SafeForm className="space-y-3" pending={pending} onSubmit={() => void act("void", { reason })}>
               <p className="text-sm">{sale.status === "awaiting_payment" ? t("voidExplainUnpaid") : t("voidExplain")}</p>
               <FormField id="void-reason" label={t("voidReason")}>
-                <Input id="void-reason" value={reason} required maxLength={200} onChange={(event) => setReason(event.target.value)} />
+                <SentenceInput id="void-reason" value={reason} required maxLength={200} onChange={(event) => setReason(event.target.value)} />
               </FormField>
               <div className="flex gap-3">
                 <SubmitButton pending={pending} pendingLabel={t("saving")}>

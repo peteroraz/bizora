@@ -1,10 +1,11 @@
 "use client";
 
-import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
+import { Card, FormField, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { PublicFooter } from "../../components/public-footer";
+import { EmailInput } from "../../components/typing";
 
 export default function ForgotPasswordPage() {
   const t = useTranslations("forgot");
@@ -38,7 +39,7 @@ export default function ForgotPasswordPage() {
         ) : (
           <SafeForm className="mt-6 space-y-4" pending={pending} onSubmit={onSubmit}>
             <FormField id="email" label={t("email")}>
-              <Input id="email" name="email" type="email" autoComplete="email" required />
+              <EmailInput id="email" name="email" autoComplete="email" required />
             </FormField>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
             <SubmitButton pending={pending} pendingLabel={t("pending")} className="w-full">
