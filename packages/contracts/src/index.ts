@@ -95,3 +95,16 @@ export {
   type MoneyMovementInput,
   type MoneyMovementKind,
 } from "./money.js";
+export {
+  SUPPLIER_ENTRY_KINDS,
+  SUPPLIER_PAID_FROM,
+  UNNAMED_SUPPLIER,
+  supplierOpeningSchema,
+  supplierPaymentSchema,
+  supplierSchema,
+  supplierUpdateSchema,
+  type SupplierEntryKind,
+  type SupplierInput,
+  type SupplierPaidFrom,
+  type SupplierPaymentInput,
+} from "./suppliers.js";

@@ -28,6 +28,8 @@ function MoneyScreen() {
   const [cash, setCash] = useState<CashPosition | null>(null);
   const [profit, setProfit] = useState<Profit | null>(null);
   const [waiting, setWaiting] = useState(0);
+  const seesSuppliers = can(access, Permission.PURCHASES_MANAGE, Permission.MONEY_READ);
+  const [suppliers, setSuppliers] = useState<{ currency: string; owedMinor: string; overdueMinor: string } | null>(null);
 
   useEffect(() => {
     const load = <T,>(path: string, set: (data: T) => void) =>
@@ -38,7 +40,8 @@ function MoneyScreen() {
     if (seesCash) load("/api/v1/money/cash", setCash);
     if (seesProfit) load("/api/v1/money/profit", setProfit);
     if (approves) load<{ count: number }>("/api/v1/money/expenses/waiting", (data) => setWaiting(data.count));
-  }, [reconciles, seesCash, seesProfit, approves]);
+    if (seesSuppliers) load("/api/v1/suppliers/owed", setSuppliers);
+  }, [reconciles, seesCash, seesProfit, approves, seesSuppliers]);
 
   const money = (minor: string, currency: string) => formatCurrency(BigInt(minor), currency, locale);
   const cashTotal = cash ? cash.shops.reduce((sum, shop) => sum + BigInt(shop.expectedMinor), 0n) : null;
@@ -101,6 +104,22 @@ function MoneyScreen() {
                 {t("seeExpenses")}
               </ActionLink>
             </div>
+          </Card>
+        ) : null}
+        {seesSuppliers ? (
+          <Card data-testid="money-suppliers">
+            <p className="text-sm font-medium">{t("suppliersTitle")}</p>
+            {suppliers ? (
+              <>
+                <p className="mt-1 text-xl font-semibold tabular-nums">{t("suppliersOwed", { amount: money(suppliers.owedMinor, suppliers.currency) })}</p>
+                {suppliers.overdueMinor !== "0" ? (
+                  <p className="text-sm font-medium text-danger">{t("suppliersLate", { amount: money(suppliers.overdueMinor, suppliers.currency) })}</p>
+                ) : null}
+              </>
+            ) : null}
+            <ActionLink href="/app/suppliers" size="sm" className="mt-3">
+              {t("seeSuppliers")}
+            </ActionLink>
           </Card>
         ) : null}
         {records ? (
