@@ -57,6 +57,10 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   await page.getByLabel("Device name").fill("Counter phone");
   await page.getByRole("button", { name: "Turn on Shop mode here" }).click();
   await expect(page).toHaveURL(/\/shop$/);
+  // The owner is signed out on the shop phone: its screens cannot be opened from the counter.
+  expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain("bizora_refresh");
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/shop$/);
 
   // Staff picks their name and types the PIN on the pad.
   await expect(page.getByRole("heading", { name: "Who is selling?" })).toBeVisible();
@@ -104,7 +108,13 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   for (const digit of ["4", "8", "2", "1"]) await page.getByRole("button", { name: `Digit ${digit}` }).click();
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await page.clock.fastForward("06:00");
+  // Scrolling a list counts as working; a warning shows 30 seconds before the lock.
+  await page.clock.fastForward("04:00");
+  await page.locator("main").dispatchEvent("scroll");
+  await page.clock.fastForward("04:40");
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByTestId("lock-warning")).toBeVisible();
+  await page.clock.fastForward("00:30");
   await expect(page).toHaveURL(/\/shop$/);
 
   // Staff signs in once more; the owner then removes the device from another phone.

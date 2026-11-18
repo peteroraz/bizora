@@ -25,10 +25,14 @@
   },
   "pnpm": {
     "overrides": {
-      "postcss": ">=8.5.23"
+      "postcss": ">=8.5.23",
+      "tinypool": ">=2.1.2"
     },
     "auditConfig": {
-      "ignoreGhsas": ["GHSA-mrhx-c7xc-m3w5", "GHSA-fc5q-39xc-vjpf"]
+      "ignoreGhsas": [
+        "GHSA-mrhx-c7xc-m3w5",
+        "GHSA-fc5q-39xc-vjpf"
+      ]
     }
   }
 }

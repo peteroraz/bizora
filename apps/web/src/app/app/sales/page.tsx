@@ -5,7 +5,7 @@ import { Badge, Card, EmptyState, PageHeader } from "@bizora/ui";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { DaySwitcher } from "../../../components/day-switcher";
+import { DaySwitcher, dayFromAddress } from "../../../components/day-switcher";
 import { RequireAccess } from "../../../components/require-access";
 import { formatCurrency, formatWhen } from "../../../i18n/format";
 import { can } from "../../../lib/access";
@@ -15,6 +15,14 @@ import type { SaleReleaseRow, SaleSummary, SaleView } from "../../../lib/sales-c
 import { ActionLink } from "../../../components/action-link";
 
 type Tab = "day" | "awaiting_payment" | "awaiting_release";
+
+/** Keeps the chosen day in the address, so a reload or a shared link opens the same day. */
+function showDayInAddress(day: string | null) {
+  const url = new URL(window.location.href);
+  if (day) url.searchParams.set("day", day);
+  else url.searchParams.delete("day");
+  window.history.replaceState(window.history.state, "", url);
+}
 
 function SalesScreen() {
   const t = useTranslations("sales");
@@ -42,7 +50,7 @@ function SalesScreen() {
   const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
 
-  const load = useCallback(async (day: string, nextPage: number, view: Tab) => {
+  const load = useCallback(async function load(day: string, nextPage: number, view: Tab): Promise<void> {
     const params = new URLSearchParams({ page: String(nextPage) });
     if (view !== "day") params.set("status", view);
     else if (day) params.set("date", day);
@@ -63,6 +71,12 @@ function SalesScreen() {
         if (!day) {
           setDate(data.date);
           setToday(data.date);
+          // A link or a reload that named a day (?day=2026-11-03) opens on that day.
+          const asked = dayFromAddress(new URLSearchParams(window.location.search).get("day"), data.date);
+          if (asked && asked !== data.date) {
+            setDate(asked);
+            void load(asked, 1, "day");
+          }
         }
       } else if (view !== "day") {
         setSummary(null);
@@ -129,6 +143,7 @@ function SalesScreen() {
           today={today}
           onChange={(next) => {
             setDate(next);
+            showDayInAddress(next === today ? null : next);
             void load(next, 1, "day");
           }}
         />

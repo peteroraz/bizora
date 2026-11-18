@@ -81,6 +81,8 @@
     "previousDay": "Day before",
     "nextDay": "Next day",
     "pickDay": "Pick a day",
+    "pickDayLabel": "Day to show",
+    "backToToday": "Back to today",
     "inWeek": "In 1 week",
     "inTwoWeeks": "In 2 weeks",
     "inMonth": "In 1 month",
@@ -365,7 +367,9 @@
     "syncDismiss": "Dismiss",
     "switchPlace": "Business and shop",
     "switchPlaceLabel": "Change business or shop (now {place})",
-    "hideForNow": "Hide for a week"
+    "hideForNow": "Hide for a week",
+    "lockSoon": "This screen locks in 30 seconds. Tap anywhere to keep working.",
+    "keepWorking": "Keep working"
   },
   "nav": {
     "home": "Home",

@@ -78,7 +78,7 @@ function StaffPageScreen() {
     void refresh();
   }, []);
 
-  async function run(action: () => Promise<Response>, success: string) {
+  async function run(action: () => Promise<Response>, success: string, options: { reload?: boolean } = {}) {
     setError(null);
     setNotice(null);
     setPending(true);
@@ -93,7 +93,7 @@ function StaffPageScreen() {
         return false;
       }
       setNotice(success);
-      await refresh();
+      if (options.reload !== false) await refresh();
       return true;
     } finally {
       setPending(false);
@@ -152,6 +152,8 @@ function StaffPageScreen() {
           body: JSON.stringify({ name: data.get("deviceName"), branchId: data.get("branchId") || undefined }),
         }),
       t("enable"),
+      // Turning on Shop mode signs the owner out on this phone (ADR-026): go straight to the staff list.
+      { reload: false },
     );
     if (ok) window.location.assign("/shop");
   }

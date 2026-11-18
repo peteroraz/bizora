@@ -412,7 +412,8 @@ Apply after the Resend key version and the Google client-secret version exist. C
 - Debtor payments, money in and out, and Ask Zora are not implemented. Sales are (ADR-015, ADR-016); AI capture from photos and voice is in ADR-018 (switched on per environment, see below).
 - There is no billing. Every organization starts on the `starter` plan (1 branch, 2 staff, 2 shop devices). To move one to `business`, run in Cloud SQL Studio: `UPDATE organization_plans SET plan_code = 'business' WHERE tenant_id = '<organization id>';`. `DEFAULT_PLAN_CODE` changes the plan given to new organizations only.
 - Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
-- Shop staff auto-lock after 5 minutes without input in the browser. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`).
+- Shop staff auto-lock after 5 minutes without input in the browser, with a warning 30 seconds before. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`), counted from the last use.
+- Sign-in passes are renewed automatically (ADR-026). `POST /auth/refresh` has no address rate limit, because renewals made by the web server share one address. A refresh token swapped less than 30 seconds earlier is accepted once more from the same live sign-in. Old session rows are not cleaned up yet.
 - Customer CSV import takes at most 2,000 rows and 1.5 MB per file.
 - A cashier's customer search (counter lookup) needs at least 3 letters or 7 digits and returns at most 10 results, but it has no rate limit of its own yet.
 - Roles are fixed (see `docs/security/roles.md`). There are no per-person permission toggles or custom roles yet.

@@ -598,7 +598,7 @@ export class IdentityService {
     const user = await this.findUserById(userId);
     if (!user) throw new ApiError("UNAUTHENTICATED", "User was not found.", 401);
     const identities = await this.db.select().from(userIdentities).where(eq(userIdentities.userId, userId));
-    const active = await this.sessions.listActive(userId);
+    const [active, currentFamily] = await Promise.all([this.sessions.listActive(userId), this.sessions.familyOf(sessionId, userId)]);
     return {
       hasPassword: Boolean(user.passwordHash),
       emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
@@ -616,7 +616,7 @@ export class IdentityService {
         lastUsedAt: item.lastUsedAt.toISOString(),
         userAgent: item.userAgent,
         ip: item.ip,
-        current: item.id === sessionId,
+        current: item.id === sessionId || item.familyId === currentFamily,
       })),
     };
   }
