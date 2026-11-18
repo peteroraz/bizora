@@ -190,19 +190,20 @@
     "termsTitle": "Terms",
     "privacy": [
       "This draft explains how Bizora handles personal information for shop owners and their customers. It is not legal advice and it has not been signed off by a lawyer.",
-      "Bizora is aimed at businesses in Nigeria. The Nigeria Data Protection Act 2023 applies to personal data we process about people in Nigeria, including names, phone numbers, and notes you type in.",
-      "We use that information to run your business account: sign-in, your shop setup, your customer list, and follow-ups. We do not sell personal data. This public site does not use advertising or tracking cookies.",
+      "Bizora is used by businesses in Nigeria and other countries. Data protection law applies where the people are, such as the Nigeria Data Protection Act 2023 for people in Nigeria.",
+      "We use that information to run your business account: sign-in, shops and staff, customers and what they owe, sales, stock, suppliers and money. We do not sell personal data. This public site does not use advertising or tracking cookies.",
       "Phone numbers are stored so you can call or open WhatsApp. A walk-in customer can be saved without a phone. You are responsible for telling your customers why you keep their details.",
+      "Some work is done for us by other companies: Google Cloud hosts the service and reads photos and voice notes you choose to send for capture (they come back as draft rows for you to check), and an email service sends sign-in and invitation emails.",
       "You can ask us to correct or delete your account data. Customer records you entered belong to your business and are removed when that business is deleted.",
       "This page will be replaced after counsel reviews it. Until then, do not treat it as a finished privacy notice."
     ],
     "terms": [
       "These draft terms are a plain-language starting point for using Bizora. They must be reviewed by counsel before anyone relies on them.",
-      "Bizora helps a business record customers and follow-ups. Sales, stock, debt, and payments are not switched on yet. Do not use Bizora as your only record of money.",
-      "You must be allowed to keep the customer details you enter. The Nigeria Data Protection Act 2023 still applies to personal data of people in Nigeria.",
+      "Bizora helps a business record sales, stock, customers who owe, suppliers, expenses and cash. Check the figures it shows against your money and stock regularly, and keep your own copies of important records.",
+      "You must be allowed to keep the customer and staff details you enter. Data protection law where your customers live still applies, such as the Nigeria Data Protection Act 2023 for people in Nigeria.",
       "Keep your password to yourself. You are responsible for what your staff do inside your business.",
       "The service is provided as it is today. We can suspend an account that is used to harm other people or to break the law.",
-      "This draft does not limit any right you have under Nigerian law that cannot be limited. A lawyer still needs to review this page."
+      "This draft does not limit any right you have under the law of your country that cannot be limited. A lawyer still needs to review this page."
     ]
   },
   "login": {
@@ -214,7 +215,7 @@
     "forgot": "Forgot password",
     "new": "New here?",
     "create": "Create your business",
-    "failed": "Unable to sign in.",
+    "failed": "Could not sign in. Check your email and password, then try again.",
     "session": "Your session expired or was revoked. Sign in again.",
     "link": "Sign in with your password, then link Google from Settings.",
     "oauth": "Sign-in could not be completed.",
@@ -233,7 +234,7 @@
     "submit": "Create your business",
     "pending": "Creating…",
     "passwordRules": "Choose a password that meets every rule.",
-    "failed": "Unable to create the business.",
+    "failed": "Could not create the business. Check the internet and try again.",
     "already": "Already registered?",
     "signIn": "Sign in"
   },
@@ -245,7 +246,7 @@
     "timezone": "Timezone",
     "submit": "Create your business",
     "pending": "Creating…",
-    "failed": "Unable to create the business."
+    "failed": "Could not create the business. Check the internet and try again."
   },
   "forgot": {
     "title": "Reset your password",
@@ -261,7 +262,7 @@
     "submit": "Update password",
     "pending": "Saving…",
     "rules": "Choose a password that meets every rule.",
-    "failed": "That reset link is invalid or has expired."
+    "failed": "That reset link has expired or was already used. Ask for a new one."
   },
   "invite": {
     "title": "Join a business",
@@ -276,7 +277,7 @@
     "submit": "Confirm email",
     "pending": "Verifying…",
     "done": "Your email is verified.",
-    "failed": "That verification link is invalid or has expired.",
+    "failed": "That link has expired or was already used. Send a new one from Settings.",
     "continue": "Continue to Bizora"
   },
   "password": {
@@ -331,8 +332,8 @@
     "title": "Choose a business",
     "lead": "Open the business you want to work in.",
     "loading": "Loading businesses",
-    "failed": "Unable to load your businesses.",
-    "openFailed": "Unable to open that business.",
+    "failed": "Your businesses did not load. Check the internet and try again.",
+    "openFailed": "That business did not open. Try again.",
     "emptyTitle": "No businesses yet",
     "emptyBody": "This account is not an active member of any business."
   },
@@ -350,7 +351,7 @@
     "switchBusiness": "Switch business",
     "currentSuffix": " · current",
     "logout": "Log out",
-    "switchFailed": "Unable to switch business.",
+    "switchFailed": "Could not switch business. Try again.",
     "comingSoon": "{label}, coming soon",
     "verify": "Verify your email to finish securing this account. You can keep using Bizora in the meantime.",
     "resend": "Resend email",
@@ -485,7 +486,7 @@
     "sellLabel": "Anything else?",
     "finish": "Finish setup",
     "saving": "Saving…",
-    "failed": "Unable to finish setup.",
+    "failed": "Could not finish setup. Check the internet and try again.",
     "placeRequired": "Add your city or town, and a market, plaza, shop number or street.",
     "typePharmacy": "Pharmacy or cosmetics",
     "typeFashion": "Fashion, fabrics or shoes",

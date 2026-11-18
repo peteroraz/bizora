@@ -36,6 +36,13 @@ export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
   app.use(json({ limit: DEFAULT_BODY_LIMIT }));
   app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
   app.use(cookieParser());
+  // API answers are never framed or type-guessed by browsers (review, 19 Nov).
+  app.use((_request: unknown, response: { setHeader(name: string, value: string): void }, next: () => void) => {
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("X-Frame-Options", "DENY");
+    response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
   app.use(correlationMiddleware);
   app.useGlobalFilters(new ErrorEnvelopeFilter());
   app.enableCors({

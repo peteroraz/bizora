@@ -2,6 +2,7 @@ import { customerPath, handleOf } from "../../common/handles.js";
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  quantityToString,
   businessTypeFromIndustry,
   formatAddressDisplay,
   parseQuantity,
@@ -24,7 +25,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, users } from "../../db/schema.js";
+import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, stockBalances, users } from "../../db/schema.js";
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
 import { DB } from "../../tokens.js";
@@ -115,6 +116,8 @@ export class SaleService {
       if (desk && payload.payments.length > 0) {
         throw new ApiError("PAY_AT_CASHIER", "In this shop the cashier takes payment. Send the sale to the cashier.", 400, [{ field: "payments", message: "Leave empty." }]);
       }
+      // In the desk flow the goods leave later; check now that they are on the shelf before anyone pays.
+      if (desk && source === "pos") await this.assertOnShelf(tx, tenant, branch, lines.map((line) => ({ product: line.product, quantity: line.quantity })));
 
       // Desk: the customer takes an invoice to the cashier; the receipt number comes with the payment (ADR-017).
       const receiptNumber = desk ? null : (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
@@ -179,7 +182,7 @@ export class SaleService {
       if (settled) {
         await this.insertPayments(tx, tenant, business.id, id, payload.payments, settled.transfersWait);
         if (settled.transfersWait) await this.askToCheckTransfer(tx, tenant, business.id, id);
-        await this.takeStock(tx, tenant, business, branch, id, receiptNumber ?? "", soldAt);
+        await this.takeStock(tx, tenant, business, branch, id, receiptNumber ?? "", soldAt, source);
       }
       if (payload.comment) await this.addComment(tx, tenant, business.id, id, payload.comment, settled && settled.balance > 0n ? "credit" : "comment");
       await this.audit.record(
@@ -209,6 +212,14 @@ export class SaleService {
       if (sale.status !== "awaiting_payment") throw new ApiError("NOT_AWAITING_PAYMENT", "This sale is not waiting for payment.", 409);
       const business = await requireBusiness(tx, tenant);
       const branch = await findBranch(tx, tenant, business.id, sale.branchId);
+      // Before taking money, check the goods are still on the shelf (someone may have sold them since).
+      if (sale.source === "pos") {
+        const saleItems = await tx.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id)));
+        const productIds = [...new Set(saleItems.map((line) => line.productId).filter((value): value is string => Boolean(value)))];
+        const productRows = productIds.length ? await tx.select().from(products).where(and(eq(products.tenantId, tenant.tenantId), inArray(products.id, productIds))) : [];
+        const byId = new Map(productRows.map((row) => [row.id, row]));
+        await this.assertOnShelf(tx, tenant, branch, saleItems.map((line) => ({ product: line.productId ? (byId.get(line.productId) ?? null) : null, quantity: line.quantity })));
+      }
       const customerId = payload.customerId ?? sale.customerId;
       const customer = customerId ? await this.requireCustomer(tx, tenant, business.id, customerId) : null;
       const now = new Date();
@@ -272,7 +283,7 @@ export class SaleService {
       const business = await requireBusiness(tx, tenant);
       const branch = await findBranch(tx, tenant, business.id, sale.branchId);
       const now = new Date();
-      await this.takeStock(tx, tenant, business, branch, sale.id, sale.saleNumber ?? sale.invoiceNumber ?? "", now);
+      await this.takeStock(tx, tenant, business, branch, sale.id, sale.saleNumber ?? sale.invoiceNumber ?? "", now, sale.source);
       await tx
         .update(sales)
         .set({ status: "completed", releasedAt: now, releasedBy: tenant.userId, releasedMembershipId: tenant.membershipId })
@@ -954,7 +965,36 @@ export class SaleService {
   }
 
   /** Takes the sale's goods out of stock (counted products only) and remembers each line's cost. */
-  private async takeStock(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, branch: BranchRow, saleId: string, number: string, occurredAt: Date) {
+  /** Refuses a sale that asks for more of a counted product than is on the shelf in this shop (review, 19 Nov). */
+  private async assertOnShelf(tx: DbExecutor, tenant: TenantContext, branch: BranchRow, items: { product: ProductRow | null | undefined; quantity: bigint }[]) {
+    const wanted = new Map<string, { product: ProductRow; quantity: bigint }>();
+    for (const item of items) {
+      if (!item.product?.trackStock) continue;
+      const current = wanted.get(item.product.id);
+      wanted.set(item.product.id, { product: item.product, quantity: (current?.quantity ?? 0n) + item.quantity });
+    }
+    if (wanted.size === 0) return;
+    const balances = await tx
+      .select({ productId: stockBalances.productId, quantity: stockBalances.quantity })
+      .from(stockBalances)
+      .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, branch.id), inArray(stockBalances.productId, [...wanted.keys()])));
+    const onHand = new Map(balances.map((row) => [row.productId, row.quantity]));
+    for (const { product, quantity } of wanted.values()) {
+      const have = onHand.get(product.id) ?? 0n;
+      if (quantity > have) {
+        const left = have > 0n ? have : 0n;
+        throw new ApiError("NOT_ENOUGH_STOCK", `Not enough ${product.name} in ${branch.name}: ${quantityToString(left)} ${product.baseUnit} left, ${quantityToString(quantity)} ${product.baseUnit} on this sale.`, 422, [
+          { field: "lines", message: `Only ${quantityToString(left)} left.` },
+        ]);
+      }
+    }
+  }
+
+  /**
+   * Takes the sale's goods out of stock. A sale made here and now cannot take more than is on the shelf; a sale that
+   * already happened elsewhere (no network, typed in from a book or a photo) is recorded as it was and flagged.
+   */
+  private async takeStock(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, branch: BranchRow, saleId: string, number: string, occurredAt: Date, source: string) {
     const lines = await tx.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, saleId))).orderBy(asc(saleLines.lineNo));
     const ids = [...new Set(lines.map((line) => line.productId).filter((value): value is string => Boolean(value)))];
     if (ids.length === 0) return;
@@ -970,6 +1010,7 @@ export class SaleService {
         enteredUnit: line.enteredUnit,
         note: number,
         occurredAt,
+        mayGoBelowZero: source !== "pos",
       });
       await tx
         .update(saleLines)
@@ -1085,6 +1126,10 @@ export class SaleService {
       const unitPrice = line.unitPriceMinor !== undefined ? BigInt(line.unitPriceMinor) : listPrice;
       if (unitPrice === null) {
         throw new ApiError("PRICE_REQUIRED", `Enter a price for ${product.name}.`, 400, [{ field: `lines.${index}.unitPriceMinor`, message: "Price needed." }]);
+      }
+      // Giving something away free is a manager's decision, priced or not (review, 19 Nov).
+      if (unitPrice === 0n && !canDiscount) {
+        throw new ApiError("FORBIDDEN", `Ask a manager to give ${product.name} away free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
       }
       if (listPrice !== null && unitPrice < listPrice && !canDiscount) {
         throw new ApiError("FORBIDDEN", `Ask a manager to sell ${product.name} below its price.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Below the price." }]);
