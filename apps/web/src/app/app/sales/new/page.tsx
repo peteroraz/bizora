@@ -86,6 +86,18 @@ function QuickSaleScreen() {
     if (recentStore) setRecent(readRecent(recentStore));
   }, [recentStore]);
 
+  // Swapping goods from an earlier sale (ADR-030): start with that customer and say what it replaces.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const customerId = params.get("customer");
+    const swap = params.get("swap");
+    if (customerId) setCustomer({ id: customerId, name: params.get("name") ?? "" });
+    if (swap) {
+      setNote(t("swapNote", { number: swap }));
+      setExtras(true);
+    }
+  }, [t]);
+
   useEffect(() => {
     const owner = access.owner;
     const branchId = access.branchId;

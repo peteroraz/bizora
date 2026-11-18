@@ -59,5 +59,6 @@ export const supplierOpeningSchema = z.object({
   note: z.string().trim().max(240).optional(),
 });
 
-export const SUPPLIER_ENTRY_KINDS = ["purchase", "opening", "payment"] as const;
+/** "return": goods sent back, taken off what is owed (ADR-030). */
+export const SUPPLIER_ENTRY_KINDS = ["purchase", "opening", "payment", "return"] as const;
 export type SupplierEntryKind = (typeof SUPPLIER_ENTRY_KINDS)[number];

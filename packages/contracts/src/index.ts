@@ -108,3 +108,13 @@ export {
   type SupplierPaidFrom,
   type SupplierPaymentInput,
 } from "./suppliers.js";
+export {
+  RETURN_REFUND_METHODS,
+  SUPPLIER_RETURN_SETTLEMENTS,
+  saleReturnSchema,
+  supplierReturnSchema,
+  type ReturnRefundMethod,
+  type SaleReturnInput,
+  type SupplierReturnInput,
+  type SupplierReturnSettlement,
+} from "./returns.js";

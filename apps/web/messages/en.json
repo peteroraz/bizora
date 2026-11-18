@@ -896,7 +896,8 @@
       "adjusted": "Removed or added",
       "counted": "Count difference",
       "transfer_out": "Moved out",
-      "transfer_in": "Moved in"
+      "transfer_in": "Moved in",
+      "supplier_return": "Sent back to supplier"
     },
     "reasons": {
       "damaged": "Damaged",
@@ -965,7 +966,18 @@
     },
     "supplierRequired": "Name the supplier you owe.",
     "payBy": "Pay by",
-    "payByHint": "Optional. When the supplier should be paid."
+    "payByHint": "Optional. When the supplier should be paid.",
+    "sendBackTitle": "Send back to supplier",
+    "sendBackLead": "For goods that came wrong, damaged or not wanted. They come off your stock.",
+    "pickSupplier": "Choose a supplier",
+    "sendBackSettle": "How it is settled",
+    "settle": {
+      "owed": "Take it off what I owe them",
+      "cash": "They gave me cash back",
+      "bank": "They paid back to the bank"
+    },
+    "sendBack": "Send back",
+    "sentBack": "Sent back. Your stock went down."
   },
   "sales": {
     "title": "Sales",
@@ -1173,7 +1185,45 @@
     "sendInvoiceLinkCustomer": "Send invoice link to customer on WhatsApp",
     "copyLinkPlain": "Copy link",
     "viewAsCustomer": "See what the customer sees",
-    "newCustomerPhoneCheck": "Check the phone number, or leave it empty for a walk-in customer."
+    "newCustomerPhoneCheck": "Check the phone number, or leave it empty for a walk-in customer.",
+    "returnedTotal": "Returned",
+    "lineReturned": "{quantity} brought back",
+    "swapNote": "Swap for goods returned from {number}",
+    "returns": {
+      "open": "Return goods",
+      "title": "Goods brought back",
+      "lead": "Enter how many of each item the customer brought back. Leave the rest empty.",
+      "canComeBack": "Up to {left} {unit} can come back",
+      "backToStock": "Put back on the shelf (leave unticked if damaged)",
+      "willOffAndBack": "Worth {worth}: {off} comes off what they owe, give back {back}.",
+      "willOffOnly": "Worth {worth}. It comes off what they owe; no money to give back.",
+      "willBackOnly": "Give back {worth}.",
+      "howBack": "How you give the money back",
+      "method": {
+        "cash": "Cash from the drawer",
+        "transfer": "Bank transfer"
+      },
+      "reason": "Why they brought it back",
+      "reasonHint": "For example: wrong size, damaged, changed their mind",
+      "confirm": "Take goods back",
+      "cancel": "Not now",
+      "saving": "Saving…",
+      "pickSomething": "Enter how many of at least one item came back.",
+      "tooMany": "Only {left} of {item} can still come back.",
+      "failed": "That did not save. Try again.",
+      "needsNetwork": "Returns need the internet. Connect and try again.",
+      "swapLead": "Swapping for something else?",
+      "swap": "Start a new sale for this customer",
+      "listTitle": "Returns",
+      "lineBack": "{quantity} {unit} of {item}",
+      "backOnShelf": "(back on the shelf)",
+      "notBackOnShelf": "(not back on the shelf)",
+      "offAndBack": "{off} off what they owed, {back} given back by {method}",
+      "offOnly": "{off} off what they owed",
+      "backOnly": "{back} given back by {method}",
+      "byLine": "{reason}. Recorded by {name}, {when}",
+      "someone": "someone"
+    }
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -1519,7 +1569,8 @@
       "countResultShort": "Count saved. The drawer is short by {amount}.",
       "countResultOver": "Count saved. The drawer has {amount} more than expected.",
       "countResultMatch": "Count saved. The drawer matches.",
-      "flow_suppliers": "Suppliers paid in cash"
+      "flow_suppliers": "Suppliers paid in cash",
+      "flow_refunds": "Money given back for returns"
     },
     "profit": {
       "title": "Profit",
@@ -1538,7 +1589,8 @@
       "waiting": "Includes {count, plural, one {# expense} other {# expenses}} still waiting for approval.",
       "byDay": "Day by day",
       "noActivity": "No sales or costs recorded.",
-      "costNote": "Goods are counted at what they cost you when sold. Rent and other running costs count on the day they are recorded."
+      "costNote": "Goods are counted at what they cost you when sold. Rent and other running costs count on the day they are recorded.",
+      "returns": "Goods returned by customers"
     },
     "suppliersTitle": "Suppliers",
     "suppliersOwed": "You owe {amount}",
@@ -1711,6 +1763,7 @@
     "whatsapp": "WhatsApp",
     "call": "Call",
     "updated": "Saved.",
-    "searchButton": "Search"
+    "searchButton": "Search",
+    "kind_return": "Goods sent back"
   }
 }

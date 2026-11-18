@@ -942,6 +942,8 @@ export const sales = pgTable(
     totalMinor: bigint("total_minor", { mode: "bigint" }).notNull(),
     paidMinor: bigint("paid_minor", { mode: "bigint" }).notNull(),
     balanceMinor: bigint("balance_minor", { mode: "bigint" }).notNull(),
+    returnedMinor: bigint("returned_minor", { mode: "bigint" }).notNull().default(0n),
+    returnedOffBalanceMinor: bigint("returned_off_balance_minor", { mode: "bigint" }).notNull().default(0n),
     note: varchar("note", { length: 240 }),
     receiptToken: varchar("receipt_token", { length: 64 }).notNull(),
     journalEntryId: uuid("journal_entry_id"),
@@ -1417,5 +1419,57 @@ export const supplierEntries = pgTable(
     index("supplier_entries_supplier_idx").on(table.tenantId, table.supplierId, table.entryDate),
     foreignKey({ name: "supplier_entries_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
     foreignKey({ name: "supplier_entries_supplier_fk", columns: [table.tenantId, table.supplierId], foreignColumns: [suppliers.tenantId, suppliers.id] }),
+  ],
+);
+
+/** Sprint 7d (ADR-030): goods a customer brought back from a sale. Append-only. */
+export const saleReturns = pgTable(
+  "sale_returns",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    customerId: uuid("customer_id"),
+    returnNumber: varchar("return_number", { length: 24 }).notNull(),
+    totalMinor: bigint("total_minor", { mode: "bigint" }).notNull(),
+    offBalanceMinor: bigint("off_balance_minor", { mode: "bigint" }).notNull().default(0n),
+    refundMinor: bigint("refund_minor", { mode: "bigint" }).notNull().default(0n),
+    refundMethod: varchar("refund_method", { length: 10 }),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    reason: varchar("reason", { length: 240 }).notNull(),
+    journalEntryId: uuid("journal_entry_id"),
+    createdBy: uuid("created_by").notNull(),
+    membershipId: uuid("membership_id"),
+    deviceId: uuid("device_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sale_returns_tenant_id_id_key").on(table.tenantId, table.id),
+    index("sale_returns_sale_idx").on(table.tenantId, table.saleId),
+    foreignKey({ name: "sale_returns_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "sale_returns_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+  ],
+);
+
+export const saleReturnLines = pgTable(
+  "sale_return_lines",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    returnId: uuid("return_id").notNull(),
+    saleLineId: uuid("sale_line_id").notNull(),
+    quantity: bigint("quantity", { mode: "bigint" }).notNull(),
+    enteredQuantity: bigint("entered_quantity", { mode: "bigint" }).notNull(),
+    enteredUnit: varchar("entered_unit", { length: 16 }).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    costMinor: bigint("cost_minor", { mode: "bigint" }).notNull().default(0n),
+    backToStock: boolean("back_to_stock").notNull(),
+    stockMovementId: uuid("stock_movement_id"),
+  },
+  (table) => [
+    index("sale_return_lines_line_idx").on(table.tenantId, table.saleLineId),
+    foreignKey({ name: "sale_return_lines_return_fk", columns: [table.tenantId, table.returnId], foreignColumns: [saleReturns.tenantId, saleReturns.id] }),
   ],
 );

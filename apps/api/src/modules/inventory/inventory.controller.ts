@@ -83,6 +83,14 @@ export class InventoryController {
     return success(await this.stock.receive(tenant, body), tenant.correlationId);
   }
 
+  /** Goods sent back to a supplier (ADR-030). Money back from them needs purchases.manage (checked in the service). */
+  @Post("stock/return-to-supplier")
+  @RequirePermissions(Permission.STOCK_RECEIVE)
+  @Idempotent()
+  async returnToSupplier(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success(await this.stock.returnToSupplier(tenant, body), tenant.correlationId);
+  }
+
   @Post("stock/adjust")
   @RequirePermissions(Permission.STOCK_ADJUST)
   @Idempotent()

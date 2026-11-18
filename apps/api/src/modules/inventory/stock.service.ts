@@ -6,6 +6,7 @@ import {
   stockAdjustSchema,
   stockCountSchema,
   stockReceiveSchema,
+  supplierReturnSchema,
   stockTransferSchema,
   type DocumentType,
 } from "@bizora/contracts";
@@ -20,7 +21,7 @@ import { branches, products, shopDevices, stockBalances, stockCounts, stockMovem
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
-import { addPurchase, findOrAddSupplier } from "../suppliers/supplier-ledger.js";
+import { addPurchase, addSupplierReturn, findOrAddSupplier, owedNow } from "../suppliers/supplier-ledger.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import {
   type BranchRow,
@@ -34,7 +35,7 @@ import {
   unitFactor,
 } from "./inventory-scope.js";
 
-export type MovementType = "opening" | "received" | "sold" | "returned" | "adjusted" | "counted" | "transfer_out" | "transfer_in";
+export type MovementType = "opening" | "received" | "sold" | "returned" | "adjusted" | "counted" | "transfer_out" | "transfer_in" | "supplier_return";
 
 export type MovementInput = {
   id?: string;
@@ -245,6 +246,76 @@ export class StockService {
     }
     await this.record(tx, tenant, "stock.received", result.id, context);
     return result;
+  }
+
+  /**
+   * Goods sent back to a supplier (ADR-030), at their average cost. The supplier settles by taking it off what is
+   * owed to them (refused when that is less than the goods are worth) or by paying money back, which only a manager
+   * may record. Only stock that is on the shelf can go back.
+   */
+  async returnToSupplier(tenant: TenantContext, raw: unknown) {
+    const payload = supplierReturnSchema.parse(raw);
+    if (payload.settle !== "owed" && !tenant.permissions.includes(Permission.PURCHASES_MANAGE)) {
+      throw new ApiError("FORBIDDEN", "Only a manager can record money back from a supplier. Take it off what you owe them.", 403, [
+        { field: "settle", message: "Choose 'Off what we owe'." },
+      ]);
+    }
+    if (payload.id) {
+      const [taken] = await this.db.select().from(stockMovements).where(eq(stockMovements.id, payload.id)).limit(1);
+      if (taken && taken.tenantId === tenant.tenantId) return this.presentResult(tenant, { id: taken.id, valueMinor: taken.valueMinor, documentNumber: taken.documentNumber, quantity: 0n, negative: false });
+      if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
+    }
+    return this.db.transaction(async (tx) => {
+      const context = await this.context(tx, tenant, payload.productId, payload.branchId);
+      const supplier = await findOrAddSupplier(tx, tenant, context.business.id, { supplierId: payload.supplierId });
+      if (!supplier) throw new ApiError("SUPPLIER_NOT_FOUND", "That supplier was not found.", 404);
+      const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
+      const entered = parseQuantity(payload.quantity) as bigint;
+      const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+      const result = await this.applyMovement(tx, context, {
+        ...(payload.id ? { id: payload.id } : {}),
+        type: "supplier_return",
+        quantity: -quantity,
+        enteredQuantity: entered,
+        enteredUnit: payload.unit,
+        supplier: supplier.name,
+        supplierId: supplier.id,
+        note: payload.note ?? null,
+        paidFrom: payload.settle === "owed" ? "credit" : payload.settle,
+        documentType: "supplier_return",
+      });
+      if (result.negative) {
+        throw new ApiError("NOT_ENOUGH_STOCK", "You do not have that much of this product here to send back.", 422, [{ field: "quantity", message: "More than you have." }]);
+      }
+      const value = -result.valueMinor;
+      const today = localDate(new Date(), context.business.timezone);
+      if (payload.settle === "owed") {
+        const owed = await owedNow(tx, tenant.tenantId, supplier.id, today);
+        if (value > owed) {
+          throw new ApiError("MORE_THAN_OWED", `These goods are worth more than you owe ${supplier.name}. Record the money they pay back instead.`, 400, [
+            { field: "settle", message: "More than you owe." },
+          ]);
+        }
+        const [movement] = await tx
+          .select({ journalEntryId: stockMovements.journalEntryId })
+          .from(stockMovements)
+          .where(and(eq(stockMovements.tenantId, tenant.tenantId), eq(stockMovements.id, result.id)))
+          .limit(1);
+        await addSupplierReturn(tx, tenant, {
+          businessId: context.business.id,
+          branchId: context.branch.id,
+          supplierId: supplier.id,
+          stockMovementId: result.id,
+          amountMinor: value,
+          currencyCode: context.business.baseCurrencyCode,
+          entryDate: today,
+          note: payload.note ?? null,
+          journalEntryId: movement?.journalEntryId ?? null,
+        });
+      }
+      await this.record(tx, tenant, "stock.returned_to_supplier", result.id, context);
+      return this.presentResult(tenant, result);
+    });
   }
 
   // Remove or correct -------------------------------------------------------------------------------------------
@@ -581,10 +652,19 @@ export class StockService {
       ];
     }
     // Goods back from a cancelled sale return at the cost they left with.
-    if (input.type === "returned" && input.reason === "sale_void") {
+    if (input.type === "returned" && (input.reason === "sale_void" || input.reason === "customer_return")) {
       return [
         { ...stock, debitMinor: amount },
         { account: { role: "cogs" }, creditMinor: amount },
+      ];
+    }
+    // Goods sent back to a supplier (ADR-030): off what is owed to them, or money back to the drawer or the bank.
+    if (input.type === "supplier_return") {
+      const debit: PostingLine["account"] =
+        input.paidFrom === "cash" ? { role: "cash", branchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
+      return [
+        { account: debit, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) },
+        { ...stock, creditMinor: amount },
       ];
     }
     if (input.type === "opening") {
@@ -625,7 +705,9 @@ export class StockService {
       case "sold":
         return "Sold";
       case "returned":
-        return "Returned from a cancelled sale";
+        return input.reason === "customer_return" ? "Returned by a customer" : "Returned from a cancelled sale";
+      case "supplier_return":
+        return "Sent back to the supplier";
       case "counted":
         return "Stock count difference";
       case "adjusted":
