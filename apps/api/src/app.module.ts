@@ -19,6 +19,7 @@ import { SalesModule } from "./modules/sales/sales.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { CaptureModule } from "./modules/capture/capture.module.js";
 import { DebtorsModule } from "./modules/debtors/debtors.module.js";
+import { MoneyModule } from "./modules/money/money.module.js";
 import { BrandingModule } from "./modules/branding/branding.module.js";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module.js";
 import { LedgerModule } from "./modules/ledger/ledger.module.js";
@@ -66,6 +67,7 @@ export class AppModule {
         NotificationsModule,
         CaptureModule,
         DebtorsModule,
+        MoneyModule,
         ReconciliationModule,
     BrandingModule,
       ],

@@ -86,7 +86,13 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   await page.getByLabel("Search customers").fill("ch");
   await page.getByRole("button", { name: "Search" }).click();
   await expect(page.getByText("Type at least 3 letters of the name, or 7 digits of the phone number.")).toBeVisible();
+  // Money opens for counting the drawer only: no expected cash, profit or expenses.
   await page.goto("/app/money");
+  await expect(page.getByRole("link", { name: "Count the cash" })).toBeVisible();
+  await expect(page.getByTestId("money-profit")).toHaveCount(0);
+  await expect(page.getByTestId("money-expenses")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "See cash by shop" })).toHaveCount(0);
+  await page.goto("/app/money/cash");
   await expect(page.getByText("This page is not for your role")).toBeVisible();
   await page.goto("/app/settings");
   await expect(page.getByRole("tab", { name: "Look" })).toBeVisible();
