@@ -53,7 +53,7 @@ describe("SessionService.refresh", () => {
       passwordHash: "x",
       displayName: "Rollback",
     });
-    await db.insert(organizations).values({ id: tenantId, name: "T", slug: `t-${tenantId.slice(0, 8)}` });
+    await db.insert(organizations).values({ id: tenantId, name: "T", slug: `t-${tenantId.slice(0, 8)}`, handle: `t-${tenantId.slice(0, 8)}` });
     await db.insert(memberships).values({
       id: membershipId,
       tenantId,

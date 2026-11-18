@@ -28,6 +28,7 @@ async function seedTenant(
     id: tenantId,
     name: input.orgName,
     slug: `${slugify(input.orgName)}-${tenantId.slice(0, 8)}`,
+    handle: `${slugify(input.orgName).slice(0, 30).replace(/-+$/, "") || "business"}-${tenantId.replace(/-/g, "").slice(0, 6)}`,
   });
   await db.insert(businesses).values({
     id: businessId,

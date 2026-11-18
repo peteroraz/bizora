@@ -126,7 +126,7 @@ describe("company branding on documents", () => {
       .send({ lines: [{ productId: milk.body.data.product.id, quantity: "2", unit: "tin" }], payments: [{ method: "cash", amountMinor: "90000" }] })
       .expect(201);
     saleId = sale.body.data.sale.id;
-    receiptToken = String(sale.body.data.sale.receiptPath).replace("/r/", "");
+    receiptToken = String(sale.body.data.sale.receiptPath).split("/").pop() ?? "";
   });
 
   afterAll(async () => {
@@ -136,7 +136,7 @@ describe("company branding on documents", () => {
 
   it("starts with the default colour, no logo and no messages", async () => {
     const response = await request(app.getHttpServer()).get("/api/v1/organizations/current/branding").set(auth(a.token)).expect(200);
-    expect(response.body.data.branding).toEqual({ primaryColor: "#1D4ED8", receiptMessage: null, invoiceMessage: null, documentTerms: null, logo: null });
+    expect(response.body.data.branding).toEqual({ handle: "shop-a", about: null, primaryColor: "#1D4ED8", receiptMessage: null, invoiceMessage: null, documentTerms: null, logo: null });
     const receipt = await binary(request(app.getHttpServer()).get(`/api/v1/sales/${saleId}/documents/receipt`).set(auth(a.token))).expect(200);
     expect(hasImage(pdfBody(receipt))).toBe(false);
   });

@@ -15,6 +15,7 @@ import {
 } from "@bizora/contracts";
 import { and, eq, isNull } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
+import { uniqueHandle } from "../../common/handles.js";
 import { newId, slugify } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
 import { branches, businesses, memberships, organizations, sessions, userIdentities, users } from "../../db/schema.js";
@@ -86,6 +87,7 @@ export class IdentityService {
         id: tenantId,
         name: payload.organizationName,
         slug,
+        handle: await uniqueHandle(tx, payload.organizationName, tenantId),
         createdBy: userId,
         updatedBy: userId,
       });
@@ -438,6 +440,7 @@ export class IdentityService {
         id: tenantId,
         name: payload.organizationName,
         slug,
+        handle: await uniqueHandle(tx, payload.organizationName, tenantId),
         createdBy: userId,
         updatedBy: userId,
       });

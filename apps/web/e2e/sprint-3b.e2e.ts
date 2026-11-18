@@ -12,7 +12,7 @@ async function shot(page: import("@playwright/test").Page, name: string) {
 
 test("public pages render for a logged-out visitor", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Know your money/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Every sale, every customer/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Privacy" })).toBeVisible();
   await shot(page, "public-home-360");
   await page.setViewportSize({ width: 1280, height: 800 });

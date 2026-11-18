@@ -193,7 +193,7 @@ describe("debtors and payments", () => {
   it("shares a statement by link, which a manager can replace", async () => {
     const http = app.getHttpServer();
     const account = await request(http).get(`/api/v1/debtors/${chikaId}`).set(auth(a.token)).expect(200);
-    const token = (account.body.data.account.statementPath as string).replace("/s/", "");
+    const token = (account.body.data.account.statementPath as string).split("/").pop() ?? "";
     const statement = await request(http).get(`/api/v1/public/statements/${token}`).expect(200);
     expect(statement.body.data.statement).toMatchObject({ customerName: "Mama Chika", owingMinor: "2400000", overdueMinor: "1000000" });
     // The shop's own contact is shown on purpose (6d); nothing about the customer's phone or the account is.

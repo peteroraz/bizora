@@ -2,13 +2,19 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { ThemeProvider, ToastProvider, themeBootScript, themeColor, themeColorDark } from "@bizora/ui";
+import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("public");
+  // Shared links need absolute addresses for their preview pictures; use the address the visitor came in on.
+  const incoming = await headers();
+  const host = incoming.get("x-forwarded-host") ?? incoming.get("host") ?? "localhost:3000";
+  const protocol = incoming.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   return {
+    metadataBase: new URL(`${protocol}://${host}`),
     title: "Bizora",
     description: t("lead"),
     manifest: "/manifest.webmanifest",

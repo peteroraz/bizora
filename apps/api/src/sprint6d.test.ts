@@ -140,7 +140,7 @@ describe("sprint 6d: screens that tell the truth", () => {
       .set(auth(a.token))
       .send({ lines: [{ productId: milkId, quantity: "2", unit: "tin" }], customerId: chikaId, payments: [{ method: "transfer", amountMinor: "50000" }, { method: "cash", amountMinor: "20000" }], dueDate: "2099-01-31", comment: "Pays Friday" })
       .expect(201);
-    saleToken = String(sale.body.data.sale.receiptPath).replace("/r/", "");
+    saleToken = String(sale.body.data.sale.receiptPath).split("/").pop() ?? "";
     await request(http).post("/api/v1/sales").set(auth(a.token)).send({ lines: [{ productId: milkId, quantity: "1", unit: "tin" }], payments: [{ method: "cash", amountMinor: "45000" }] }).expect(201);
     const hers = await request(http).get("/api/v1/sales").query({ customerId: chikaId }).set(auth(a.token)).expect(200);
     expect(hers.body.data.items).toHaveLength(1);
@@ -191,7 +191,7 @@ describe("sprint 6d: screens that tell the truth", () => {
     await request(http).get(`/api/v1/public/receipts/${"x".repeat(32)}/logo`).expect(404);
 
     const account = await request(http).get(`/api/v1/debtors/${chikaId}`).set(auth(a.token)).expect(200);
-    const statementToken = String(account.body.data.account.statementPath).replace("/s/", "");
+    const statementToken = String(account.body.data.account.statementPath).split("/").pop() ?? "";
     const statement = await request(http).get(`/api/v1/public/statements/${statementToken}`).expect(200);
     expect(statement.body.data.statement).toMatchObject({ message: "Pay to GTBank 0123456789", hasLogo: true });
     await request(http).get(`/api/v1/public/statements/${statementToken}/logo`).expect(200);

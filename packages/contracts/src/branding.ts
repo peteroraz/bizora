@@ -78,6 +78,9 @@ export const logoUploadSchema = z.object({
 export type LogoUploadInput = z.infer<typeof logoUploadSchema>;
 
 export type BrandingView = {
+  /** The business's link name (ADR-024) and its one line about itself. */
+  handle?: string;
+  about?: string | null;
   primaryColor: string;
   receiptMessage: string | null;
   invoiceMessage: string | null;

@@ -38,7 +38,19 @@
     "saved": "Saved. New documents use this straight away.",
     "sampleReceipt": "See a sample receipt",
     "sampleInvoice": "See a sample invoice",
-    "sampleHint": "Save first, then open a sample to check how it looks."
+    "sampleHint": "Save first, then open a sample to check how it looks.",
+    "linkTitle": "Your business link",
+    "linkLead": "Receipts, invoices and statements you send open at your own link, with your name, logo and colour, so customers know they come from you.",
+    "linkName": "Link name",
+    "linkHint": "3 to 40 letters, numbers or dashes.",
+    "linkFree": "This name is free.",
+    "linkOldWork": "Links you already sent keep working and move to the new name.",
+    "aboutLabel": "About your business",
+    "aboutHint": "One or two lines on your page, e.g. what you sell and when you open.",
+    "aboutPlaceholder": "Provisions and drinks, wholesale and retail. Open Monday to Saturday, 8am to 7pm.",
+    "linkSave": "Save link",
+    "linkSaved": "Saved. New links use this name.",
+    "linkView": "See your page"
   },
   "common": {
     "save": "Save",
@@ -82,57 +94,93 @@
     "register": "Create your business"
   },
   "public": {
-    "kicker": "For Nigerian shops, markets and wholesalers",
-    "title": "Know your money. Control your stock. Follow your customers.",
-    "lead": "Record sales in seconds, even with no network. See who owes you and remind them on WhatsApp. Know what is left on the shelf in every shop.",
+    "navLabel": "Bizora",
+    "title": "Every sale, every customer, every shelf. On your phone.",
+    "lead": "Bizora keeps the books while you serve customers: sales, stock, money owed and receipts that go out on WhatsApp. For any kind of business, in your own currency, even when the network drops.",
     "create": "Create your business",
     "signIn": "Sign in",
     "whatsapp": "Chat with us on WhatsApp",
     "whatsappText": "Hello Bizora, I want to know more.",
-    "works": "Works on any Android phone or laptop. No app to install.",
-    "featuresTitle": "What Bizora does for your business",
+    "works": "Works in the browser of any phone or laptop. Nothing to install.",
+    "receiptAlt": "A receipt printing for a hair studio in Accra, then a shop in Nairobi, a bakery in Lyon, a store in Lagos and a pharmacy in Pune, each stamped paid and sent from the business's own link.",
+    "receiptTotal": "Total",
+    "receiptPaid": {
+      "cash": "Paid in cash",
+      "transfer": "Paid by transfer",
+      "pos": "Paid by card"
+    },
+    "receiptSent": "Sent on WhatsApp from",
+    "paid": "PAID",
+    "featuresTitle": "What Bizora does",
     "feature": {
       "sell": {
-        "title": "Sell fast, even with no network",
-        "body": "Tap the product, take cash, transfer or POS, and send the receipt on WhatsApp. Sales wait on the phone when the network is down."
+        "title": "Sell in a few taps, network or not",
+        "body": "Tap what the customer is buying, take cash, transfer or card, and the change is worked out for you. Sales wait safely on the phone when the network drops, and send themselves when it is back.",
+        "alt": "The sale screen with product buttons and the total at the bottom"
       },
       "collect": {
-        "title": "Collect what you are owed",
-        "body": "Credit only for customers you approve, with a date to pay. Bizora shows who is late and sends the reminder for you."
-      },
-      "stock": {
-        "title": "Never run out by surprise",
-        "body": "Cartons, packs and pieces counted for you in every shop. Low stock shows on Home before the goods finish."
-      },
-      "staff": {
-        "title": "Stop leakage from staff",
-        "body": "Sales desk, cashier and store keeper each do their part. Every sale, discount and cancellation has a name on it."
-      },
-      "bank": {
-        "title": "Match your bank alerts",
-        "body": "Upload your bank statement. Transfers match your sales and debtors, and POS settlements are not counted twice."
-      },
-      "capture": {
-        "title": "Snap or speak instead of typing",
-        "body": "Photograph a supplier's invoice or record a voice note in English, Pidgin, Hausa, Igbo or Yoruba. Bizora fills the rows for you to check."
-      }
-    },
-    "screensTitle": "See it on a phone",
-    "screen": {
-      "sale": {
-        "alt": "The new sale screen with product buttons, quantity and the total at the bottom",
-        "caption": "Record a sale in a few taps, with change worked out."
-      },
-      "debtors": {
-        "alt": "The debtors list showing who owes and how many days late",
-        "caption": "See who owes you, most late first, and remind them."
+        "title": "Know who owes you, and get paid",
+        "body": "Give credit only to customers you trust, with a date to pay. Bizora lists who is late, sends the reminder on WhatsApp, and matches the money when it lands in your bank.",
+        "alt": "The list of customers who owe, most late first"
       },
       "home": {
-        "alt": "Home showing today's sales, top debtors and low stock",
-        "caption": "Today's sales, who owes you and what is running low."
+        "title": "Your whole day on one screen",
+        "body": "Today's sales, what customers owe, what is running low and what needs your approval. Staff see only what their job needs.",
+        "alt": "Home with today's sales, top debtors and low stock"
+      },
+      "link": {
+        "title": "Your name on every receipt",
+        "body": "Receipts, invoices and statements open at your own link, with your logo, your colours and your words. Customers see your business, not ours.",
+        "cardTitle": "Receipt from your business",
+        "cardBody": "Your logo, your message, a button to call or chat with you.",
+        "sampleName": "your-business",
+        "sampleRest": "/r/…"
       }
     },
-    "trust": "Your records are yours. Bizora has no ads and no tracking, keeps every business's data apart, and follows the Nigeria Data Protection Act 2023."
+    "kindsTitle": "Made for every kind of business",
+    "kinds": "Corner shops. Wholesalers. Pharmacies. Salons and barbers. Bakeries and restaurants. Tailors. Phone shops and repairers. Market stalls. Building supplies.",
+    "kindsNote": "Count in pieces, packs, cartons, crates, bags, yards or litres. Sell in naira, cedis, shillings, rand, rupees, euros, dollars or your own currency.",
+    "stepsTitle": "Ready before your next customer",
+    "step": {
+      "create": {
+        "title": "Create your business",
+        "body": "Your name, what you sell and where. It takes a couple of minutes."
+      },
+      "products": {
+        "title": "Add what you sell",
+        "body": "Type products in, import a list, or snap a photo of your price list and let Bizora fill it in."
+      },
+      "sell": {
+        "title": "Start selling",
+        "body": "Record sales, give credit to customers you trust, and send receipts from your own link."
+      }
+    },
+    "faqTitle": "Questions owners ask",
+    "faq": {
+      "internet": {
+        "q": "Do I need internet all the time?",
+        "a": "No. Sales, new customers and deliveries are saved on the phone when the network is down, and sent when it comes back."
+      },
+      "phones": {
+        "q": "Which phones does it work on?",
+        "a": "Any phone or laptop with a modern browser, including low-cost Android phones. There is no app to download."
+      },
+      "staff": {
+        "q": "Can my staff use it without seeing everything?",
+        "a": "Yes. Cashiers, sales people and store keepers each get their own role and see only what their job needs. Shop phones can use a staff PIN."
+      },
+      "currency": {
+        "q": "Does it work in my country and currency?",
+        "a": "Yes. You choose your country and currency when you start, and you can also record some sales and purchases in other currencies."
+      },
+      "data": {
+        "q": "Who can see my records?",
+        "a": "Only you and the staff you invite. Bizora shows no ads, does no tracking, and keeps every business's records apart."
+      }
+    },
+    "closing": "Spend less time on books and more time with customers.",
+    "trust": "Your records are yours. No ads, no tracking, and every business's data is kept apart.",
+    "brand": "Bizora"
   },
   "legal": {
     "draft": "Draft — to be reviewed by counsel",
@@ -1208,7 +1256,10 @@
     "downloadReceipt": "Download receipt (PDF)",
     "howToPay": "How to pay",
     "fromShop": "From the shop",
-    "footerLink": "Run your shop with Bizora"
+    "footerLink": "Run your shop with Bizora",
+    "shareTitleReceipt": "Receipt {number} from {business}",
+    "shareTitleInvoice": "Invoice {number} from {business}",
+    "shareDescription": "Open to see the items, what was paid, and download the PDF."
   },
   "notifications": {
     "bell": "Notifications",
@@ -1320,7 +1371,9 @@
     "download": "Download statement (PDF)",
     "footer": "Sent with Bizora.",
     "howToPay": "How to pay",
-    "footerLink": "Run your shop with Bizora"
+    "footerLink": "Run your shop with Bizora",
+    "shareTitle": "Your statement from {business}",
+    "shareDescription": "What you owe {business}, and how to pay."
   },
   "money": {
     "title": "Money",
@@ -1426,5 +1479,11 @@
   "publicShop": {
     "call": "Call {phone}",
     "whatsapp": "Chat on WhatsApp"
+  },
+  "profile": {
+    "defaultAbout": "{business} uses Bizora for receipts, invoices and statements.",
+    "note": "Receipts, invoices and statements from {business} open on this site.",
+    "footer": "Sent with Bizora.",
+    "footerLink": "Run your business with Bizora"
   }
 }

@@ -110,6 +110,7 @@ export function BrandSettings() {
 
   return (
     <div className="space-y-4">
+      <BusinessLink branding={branding} onSaved={(view) => setBranding(view)} />
       {notice ? (
         <p className="rounded-card border border-success bg-success-bg px-4 py-3 text-sm text-success" role="status">
           {notice}
@@ -184,5 +185,88 @@ export function BrandSettings() {
         </form>
       </Card>
     </div>
+  );
+}
+
+/** Settings → Your brand → Your business link (ADR-024): the name in every receipt, invoice and statement link. */
+function BusinessLink({ branding, onSaved }: { branding: BrandingView; onSaved: (view: BrandingView) => void }) {
+  const t = useTranslations("brand");
+  const [handle, setHandle] = useState(branding.handle ?? "");
+  const [about, setAbout] = useState(branding.about ?? "");
+  const [check, setCheck] = useState<{ handle: string; available: boolean; reason: string | null } | null>(null);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [host, setHost] = useState("");
+  const wanted = handle.trim().toLowerCase();
+  const changed = wanted !== (branding.handle ?? "");
+
+  useEffect(() => setHost(window.location.host), []);
+
+  // Checks the name a moment after typing stops.
+  useEffect(() => {
+    if (!changed || wanted.length < 3) {
+      setCheck(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void api(`/api/v1/organizations/current/handle-check?handle=${encodeURIComponent(wanted)}`)
+        .then(async (response) => (response.ok ? setCheck((await response.json()).data) : undefined))
+        .catch(() => undefined);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [wanted, changed]);
+
+  async function save() {
+    setPending(true);
+    setMessage(null);
+    const response = await api("/api/v1/organizations/current/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ ...(changed ? { handle: wanted } : {}), about: about.trim() || null }),
+    }).catch(() => null);
+    const payload = await response?.json().catch(() => null);
+    setPending(false);
+    if (!response?.ok) {
+      setMessage({ ok: false, text: payload?.error?.fieldErrors?.[0]?.message ?? payload?.error?.message ?? t("saveFailed") });
+      return;
+    }
+    onSaved(payload.data.branding);
+    setCheck(null);
+    setMessage({ ok: true, text: t("linkSaved") });
+  }
+
+  const blocked = changed && (check === null || !check.available || check.handle !== wanted);
+  return (
+    <Card data-testid="business-link">
+      <p className="text-sm font-medium">{t("linkTitle")}</p>
+      <p className="mt-1 text-sm text-muted">{t("linkLead")}</p>
+      <div className="mt-3 space-y-3">
+        <FormField id="brand-handle" label={t("linkName")} hint={t("linkHint")} error={changed && check && !check.available ? (check.reason ?? undefined) : undefined}>
+          <div className="flex items-center gap-1">
+            <span className="shrink-0 text-sm text-muted">{host}/</span>
+            <Input id="brand-handle" value={handle} maxLength={40} autoCapitalize="none" autoCorrect="off" spellCheck={false} onChange={(event) => setHandle(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} />
+          </div>
+        </FormField>
+        {changed && check?.available && check.handle === wanted ? <p className="text-sm text-success">{t("linkFree")}</p> : null}
+        {changed && branding.handle ? <p className="text-xs text-muted">{t("linkOldWork")}</p> : null}
+        <FormField id="brand-about" label={t("aboutLabel")} hint={t("aboutHint")}>
+          <Textarea id="brand-about" value={about} maxLength={280} placeholder={t("aboutPlaceholder")} onChange={(event) => setAbout(event.target.value)} className="min-h-20" />
+        </FormField>
+        {message ? (
+          <p className={`text-sm ${message.ok ? "text-success" : "text-danger"}`} role={message.ok ? "status" : "alert"}>
+            {message.text}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="button" disabled={pending || blocked} onClick={() => void save()}>
+            {t("linkSave")}
+          </Button>
+          {branding.handle ? (
+            <a href={`/${branding.handle}`} target="_blank" rel="noopener" className="text-sm font-medium text-primary" data-testid="business-page-link">
+              {t("linkView")}
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </Card>
   );
 }

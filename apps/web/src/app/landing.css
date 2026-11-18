@@ -1,0 +1,106 @@
+/*
+ * The public homepage's one moment of motion (ADR-025): a receipt prints, gets stamped PAID, and the next business's
+ * receipt follows. Five receipts, five seconds each. Colours come from the --landing-* tokens.
+ */
+.receipt-stage {
+  position: relative;
+  height: 27rem;
+}
+
+.receipt {
+  position: absolute;
+  inset: 0 0 auto 0;
+  margin-inline: auto;
+  width: min(100%, 19rem);
+  background: var(--landing-paper);
+  color: var(--landing-paper-ink);
+  padding: 1.25rem 1.25rem 1.5rem;
+  box-shadow: 0 1px 0 var(--landing-ink-soft), 0 24px 48px -24px rgb(0 0 0 / 0.55);
+  /* The torn bottom edge of a till roll. */
+  --tear: 8px;
+  mask:
+    linear-gradient(black, black) top / 100% calc(100% - var(--tear)) no-repeat,
+    conic-gradient(from -45deg at bottom, black 90deg, transparent 0) bottom / calc(var(--tear) * 2) var(--tear) repeat-x;
+  -webkit-mask:
+    linear-gradient(black, black) top / 100% calc(100% - var(--tear)) no-repeat,
+    conic-gradient(from -45deg at bottom, black 90deg, transparent 0) bottom / calc(var(--tear) * 2) var(--tear) repeat-x;
+  animation: receipt-print 25s infinite both;
+  animation-delay: calc(var(--slot) * 5s);
+}
+
+.receipt-stamp {
+  position: absolute;
+  right: 1rem;
+  bottom: 4.25rem;
+  border: 3px solid var(--landing-stamp);
+  color: var(--landing-stamp);
+  border-radius: 6px;
+  padding: 0.125rem 0.625rem;
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.08em;
+  transform: rotate(-9deg);
+  opacity: 0;
+  animation: receipt-stamp 25s infinite both;
+  animation-delay: calc(var(--slot) * 5s);
+}
+
+@keyframes receipt-print {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-1.5rem);
+    opacity: 1;
+  }
+  9% {
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+  19.5% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+  20%,
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0.5rem);
+  }
+}
+
+@keyframes receipt-stamp {
+  0%,
+  10% {
+    opacity: 0;
+    transform: rotate(-9deg) scale(1.6);
+  }
+  11.5% {
+    opacity: 1;
+    transform: rotate(-9deg) scale(1);
+  }
+  19.5% {
+    opacity: 1;
+    transform: rotate(-9deg) scale(1);
+  }
+  20%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* No motion wanted: one finished, stamped receipt. */
+@media (prefers-reduced-motion: reduce) {
+  .receipt,
+  .receipt-stamp {
+    animation: none;
+    opacity: 1;
+    clip-path: none;
+    transform: none;
+  }
+  .receipt-stamp {
+    transform: rotate(-9deg);
+  }
+  .receipt:not(:first-child) {
+    display: none;
+  }
+}

@@ -1,12 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { logoUploadSchema, updateBrandingSchema, type BrandingView, type LogoType } from "@bizora/contracts";
+import { BRAND_MIN_CONTRAST, contrastWithWhite, formatAddressDisplay, handleSchema, logoUploadSchema, updateBrandingSchema, updatePublicProfileSchema, type BrandingView, type LogoType } from "@bizora/contracts";
 import { formatMoney } from "@bizora/money/format";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { canManageOrganizationSettings } from "../../common/tenant-scope.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { branches, businesses, organizationLogos, organizations } from "../../db/schema.js";
+import { addresses, branches, businesses, organizationLogos, organizations } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { brandFor, renderPdf, type BrandedDocument, type CompanyBranding, type DocumentBrand, type DocumentModel } from "../sales/sale-document.js";
@@ -31,6 +31,8 @@ export class BrandingService {
   async view(tenant: TenantContext): Promise<BrandingView> {
     const [row] = await this.db
       .select({
+        handle: organizations.handle,
+        about: organizations.about,
         primaryColor: organizations.primaryColor,
         receiptMessage: organizations.receiptMessage,
         invoiceMessage: organizations.invoiceMessage,
@@ -47,6 +49,8 @@ export class BrandingService {
       .limit(1);
     if (!row) throw new ApiError("NOT_FOUND", "Organization not found.", 404);
     return {
+      handle: row.handle,
+      about: row.about,
       primaryColor: row.primaryColor,
       receiptMessage: row.receiptMessage,
       invoiceMessage: row.invoiceMessage,
@@ -124,15 +128,113 @@ export class BrandingService {
     return { contentType: row.contentType, data: row.data, etag: `"${row.sha256.slice(0, 16)}"` };
   }
 
-  /** What customer pages show (6d): the owner's message for this page and whether there is a logo. No picture bytes. */
-  async publicBrand(tenantId: string, kind: "receipt" | "invoice"): Promise<{ message: string | null; hasLogo: boolean }> {
+  /**
+   * What customer pages show: the owner's message for this page, whether there is a logo, the business's link name
+   * (so the page can sit at /<handle>/…) and its colour when readable. No picture bytes.
+   */
+  async publicBrand(tenantId: string, kind: "receipt" | "invoice"): Promise<{ message: string | null; hasLogo: boolean; handle: string | null; color: string | null }> {
     const [row] = await this.db
-      .select({ receiptMessage: organizations.receiptMessage, invoiceMessage: organizations.invoiceMessage, logo: organizationLogos.tenantId })
+      .select({
+        receiptMessage: organizations.receiptMessage,
+        invoiceMessage: organizations.invoiceMessage,
+        handle: organizations.handle,
+        color: organizations.primaryColor,
+        logo: organizationLogos.tenantId,
+      })
       .from(organizations)
       .leftJoin(organizationLogos, eq(organizationLogos.tenantId, organizations.id))
       .where(eq(organizations.id, tenantId))
       .limit(1);
-    return { message: (kind === "receipt" ? row?.receiptMessage : row?.invoiceMessage) ?? null, hasLogo: Boolean(row?.logo) };
+    return {
+      message: (kind === "receipt" ? row?.receiptMessage : row?.invoiceMessage) ?? null,
+      hasLogo: Boolean(row?.logo),
+      handle: row?.handle ?? null,
+      color: readable(row?.color ?? null),
+    };
+  }
+
+  /** The business's own link name and one line about it (6e). Changing the name keeps old links working. */
+  async updateProfile(tenant: TenantContext, raw: unknown) {
+    this.requireOrganizationWide(tenant);
+    const payload = updatePublicProfileSchema.parse(raw);
+    const [current] = await this.db.select({ handle: organizations.handle }).from(organizations).where(eq(organizations.id, tenant.tenantId)).limit(1);
+    if (payload.handle && payload.handle !== current?.handle) {
+      const [taken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.handle, payload.handle)).limit(1);
+      if (taken) throw new ApiError("HANDLE_TAKEN", "Another business already uses that name. Try another.", 409, [{ field: "handle", message: "Another business already uses that name." }]);
+    }
+    const changes = {
+      ...(payload.handle ? { handle: payload.handle } : {}),
+      ...(payload.about !== undefined ? { about: payload.about || null } : {}),
+    };
+    try {
+      await this.db.update(organizations).set({ ...changes, updatedBy: tenant.userId }).where(eq(organizations.id, tenant.tenantId));
+    } catch (error) {
+      // Two owners racing for the same name: the unique index decides.
+      if (String((error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code) === "23505") {
+        throw new ApiError("HANDLE_TAKEN", "Another business already uses that name. Try another.", 409, [{ field: "handle", message: "Another business already uses that name." }]);
+      }
+      throw error;
+    }
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "profile.updated",
+      entityType: "organization",
+      entityId: tenant.tenantId,
+      correlationId: tenant.correlationId,
+      metadata: { changed: Object.keys(changes), ...(payload.handle && payload.handle !== current?.handle ? { from: current?.handle, to: payload.handle } : {}) },
+    });
+    return this.view(tenant);
+  }
+
+  /** Whether a link name can be used: free, well formed and not kept for Bizora. */
+  async handleAvailable(tenant: TenantContext, raw: string) {
+    const parsed = handleSchema.safeParse(raw);
+    if (!parsed.success) return { handle: raw, available: false, reason: parsed.error.issues[0]?.message ?? "Not a valid name." };
+    const [taken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.handle, parsed.data)).limit(1);
+    if (taken && taken.id !== tenant.tenantId) return { handle: parsed.data, available: false, reason: "Another business already uses that name." };
+    return { handle: parsed.data, available: true, reason: null };
+  }
+
+  /** A business's public page: who they are and how to reach them. Nothing about sales, customers or money. */
+  async publicProfile(handle: string) {
+    const parsed = handleSchema.safeParse(handle);
+    if (!parsed.success) throw new ApiError("NOT_FOUND", "Business not found.", 404);
+    const [org] = await this.db
+      .select({ id: organizations.id, name: organizations.name, handle: organizations.handle, about: organizations.about, phone: organizations.phoneE164, color: organizations.primaryColor, addressId: organizations.addressId, logo: organizationLogos.tenantId })
+      .from(organizations)
+      .leftJoin(organizationLogos, eq(organizationLogos.tenantId, organizations.id))
+      .where(eq(organizations.handle, parsed.data))
+      .limit(1);
+    if (!org) throw new ApiError("NOT_FOUND", "Business not found.", 404);
+    // The company's own phone and address, or else its first shop's.
+    const [business] = await this.db
+      .select({ phone: businesses.phoneE164, addressId: businesses.addressId })
+      .from(businesses)
+      .where(eq(businesses.tenantId, org.id))
+      .orderBy(asc(businesses.createdAt))
+      .limit(1);
+    const addressId = org.addressId ?? business?.addressId ?? null;
+    const [address] = addressId ? await this.db.select().from(addresses).where(and(eq(addresses.tenantId, org.id), eq(addresses.id, addressId))).limit(1) : [];
+    return {
+      name: org.name,
+      handle: org.handle,
+      about: org.about,
+      phone: org.phone ?? business?.phone ?? null,
+      address: address
+        ? formatAddressDisplay({ shopNumber: address.shopNumber, lineOrBlock: address.lineOrBlock, marketOrPlaza: address.marketOrPlaza, line1: address.line1, city: address.city, subdivisionName: null })
+        : null,
+      color: readable(org.color),
+      hasLogo: Boolean(org.logo),
+    };
+  }
+
+  async publicLogo(handle: string) {
+    const parsed = handleSchema.safeParse(handle);
+    if (!parsed.success) throw new ApiError("NOT_FOUND", "Business not found.", 404);
+    const [org] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.handle, parsed.data)).limit(1);
+    if (!org) throw new ApiError("NOT_FOUND", "Business not found.", 404);
+    return this.logoForTenant(org.id);
   }
 
   /** The logo for a customer page, found from that page's own token by the caller. */
@@ -209,4 +311,9 @@ export class BrandingService {
   private requireOrganizationWide(tenant: TenantContext) {
     if (!canManageOrganizationSettings(tenant)) throw new ApiError("FORBIDDEN", "Company branding needs organization-wide access.", 403);
   }
+}
+
+/** Brand colours too light for white backgrounds are not used on customer pages. */
+function readable(hex: string | null) {
+  return hex && /^#[0-9A-Fa-f]{6}$/.test(hex) && contrastWithWhite(hex) >= BRAND_MIN_CONTRAST ? hex : null;
 }

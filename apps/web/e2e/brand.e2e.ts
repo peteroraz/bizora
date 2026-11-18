@@ -53,12 +53,12 @@ test("the owner adds a logo, colour and messages, and receipts carry them with t
   // Too light for paper: refused before saving.
   await page.getByLabel("Brand colour").fill("#FFFF66");
   await expect(page.getByText("This colour is too light to read on white paper. Choose a darker one.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   await page.getByLabel("Brand colour").fill("#0B6E4F");
   await page.getByLabel("Message on receipts").fill("Thank you for buying from Ada Brand. Come again!");
   await page.getByLabel("Message on invoices and statements").fill("Pay to GTBank 0123456789, Ada Brand.");
   await page.getByLabel("Terms").fill("Goods sold in good condition are not returnable.");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved. New documents use this straight away.")).toBeVisible();
 
   const branding = (await (await request.get("/api/v1/organizations/current/branding", { headers })).json()).data.branding;

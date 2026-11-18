@@ -61,3 +61,4 @@ export * from "./capture.js";
 export * from "./debtors.js";
 export * from "./reconciliation.js";
 export * from "./branding.js";
+export * from "./handles.js";

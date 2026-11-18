@@ -75,6 +75,9 @@ export const organizations = pgTable(
     id: uuid("id").primaryKey(),
     name: varchar("name", { length: 160 }).notNull(),
     slug: varchar("slug", { length: 160 }).notNull().unique(),
+    /** The business's own link name (migration 0024, ADR-024): bizora.app/<handle>. */
+    handle: varchar("handle", { length: 40 }).notNull().unique(),
+    about: varchar("about", { length: 280 }),
     logoUrl: varchar("logo_url", { length: 2048 }),
     primaryColor: varchar("primary_color", { length: 7 }).notNull().default("#1D4ED8"),
     accentColor: varchar("accent_color", { length: 7 }).notNull().default("#0F172A"),

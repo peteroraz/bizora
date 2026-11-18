@@ -67,7 +67,7 @@ function AccountScreen() {
   const canManage = can(access, Permission.DEBTORS_MANAGE);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const reminderHref = `${account.reminder.hrefPrefix}?text=${encodeURIComponent(`${account.reminder.text}${origin}${account.statementPath}`)}`;
-  const token = account.statementPath.replace("/s/", "");
+  const token = account.statementPath.split("/").pop() ?? "";
 
   async function pay() {
     setError(null);
