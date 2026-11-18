@@ -13,6 +13,22 @@ const nextConfig: NextConfig = {
     // Import only the components and contracts a page uses, not whole packages (Spec §8 JavaScript budget).
     optimizePackageImports: ["@bizora/ui", "@bizora/contracts", "@bizora/money"],
   },
+  // Basic protection on every page (review, 19 Nov): no framing by other sites, no type guessing, HTTPS only, and
+  // camera and microphone for this site alone (photo and voice capture).
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${apiOrigin}/api/:path*` },

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  quantityToString,
   Permission,
   parseCountQuantity,
   parseQuantity,
@@ -37,6 +38,9 @@ import {
   unitFactor,
 } from "./inventory-scope.js";
 
+/** "1 bag", "2 bags", "1.5 kg": for messages to people. */
+const unitWord = (unit: string, quantity: bigint) => (quantity === 1000n || ["kg", "g", "ml", "l", "dozen"].includes(unit) ? unit : `${unit}s`);
+
 export type MovementType = "opening" | "received" | "sold" | "returned" | "adjusted" | "counted" | "transfer_out" | "transfer_in" | "supplier_return";
 
 export type MovementInput = {
@@ -58,6 +62,12 @@ export type MovementInput = {
   valueMinor?: bigint;
   transferId?: string | null;
   countId?: string | null;
+  /**
+   * Stock never goes below zero by something done here and now: you cannot sell, remove or move 2 bags when 1 is on
+   * the shelf (review, 19 Nov). Only what already happened elsewhere may take it below zero, and is flagged: sales
+   * made on a phone with no network, sales typed in from a book or photo, and count corrections.
+   */
+  mayGoBelowZero?: boolean;
   documentType?: DocumentType | null;
   occurredAt?: Date;
 };
@@ -113,6 +123,15 @@ export class StockService {
       value = input.valueMinor ?? -issueStock(position, -input.quantity, fallbackUnitCost).costMinor;
     }
     const next = { quantity: position.quantity + input.quantity, valueMinor: position.valueMinor + value };
+    if (input.quantity < 0n && next.quantity < 0n && !input.mayGoBelowZero) {
+      const have = position.quantity > 0n ? position.quantity : 0n;
+      throw new ApiError(
+        "NOT_ENOUGH_STOCK",
+        `Not enough ${product.name} in ${branch.name}: ${quantityToString(have)} ${unitWord(product.baseUnit, have)} left, ${quantityToString(-input.quantity)} ${unitWord(product.baseUnit, -input.quantity)} needed. Record the stock that came in first, or count it.`,
+        422,
+        [{ field: "quantity", message: `Only ${quantityToString(have)} left.` }],
+      );
+    }
 
     const documentNumber = input.documentType
       ? (await this.numbers.next(tx, tenant.tenantId, business.id, input.documentType)).number
@@ -519,6 +538,7 @@ export class StockService {
       const movement = await this.applyMovement(tx, context, {
         type: "counted",
         // The difference found when counting is applied, even if sales happened since.
+        mayGoBelowZero: true,
         quantity: count.difference,
         enteredQuantity: count.countedQuantity,
         enteredUnit: product.baseUnit,

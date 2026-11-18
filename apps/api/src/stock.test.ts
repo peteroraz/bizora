@@ -256,7 +256,15 @@ describe("products and stock", () => {
 
   it("flags products below zero instead of correcting them, and lists low stock", async () => {
     const http = app.getHttpServer();
-    await request(http).post("/api/v1/stock/adjust").set(auth(a.token)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "15", unit: "bag", note: "Not on the shelf" }).expect(201);
+    // Removing more than is on the shelf is refused (review, 19 Nov).
+    const refused = await request(http).post("/api/v1/stock/adjust").set(auth(a.token)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "15", unit: "bag", note: "Not on the shelf" }).expect(422);
+    expect(refused.body.error).toMatchObject({ code: "NOT_ENOUGH_STOCK", message: expect.stringContaining("Not enough Rice 50kg in") });
+    // So is selling more than there is, at the counter.
+    await request(http).post("/api/v1/sales").set(auth(a.token)).send({ lines: [{ productId: riceId, quantity: "15", unit: "bag" }], payments: [{ method: "cash", amountMinor: "127500000" }] }).expect(422);
+    // A sale made on a phone with no network already happened: it is recorded and flagged below zero.
+    const offline = { id: uuidv7(), type: "sale.create", occurredAt: new Date().toISOString(), payload: { id: uuidv7(), provisionalNumber: "DEV9-000001", soldAt: new Date(Date.now() - 600_000).toISOString(), lines: [{ productId: riceId, quantity: "15", unit: "bag" }], payments: [{ method: "cash", amountMinor: "127500000" }] } };
+    const pushed = await request(http).post("/api/v1/sync/push").set(auth(a.token)).send({ operations: [offline] }).expect(200);
+    expect(pushed.body.data.results[0].status).toBe("applied");
     const product = await request(http).get(`/api/v1/products/${riceId}`).set(auth(a.token)).expect(200);
     expect(product.body.data.product.stock).toMatchObject({ quantity: "-3000", belowZero: true, low: true });
     const flagged = await request(http).get("/api/v1/stock/below-zero").set(auth(a.token)).expect(200);
