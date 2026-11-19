@@ -10,6 +10,7 @@ import type { SaleDetail, SaleReturn } from "../lib/sales-client";
 import { ActionLink } from "./action-link";
 import { useUnitName } from "./stock-quantity";
 import { SentenceInput } from "./typing";
+import { usePlace } from "../lib/access-context";
 
 type Choice = { quantity: string; backToStock: boolean };
 
@@ -25,6 +26,7 @@ const toThousandths = (text: string) => {
 export function SaleReturnsList({ sale }: { sale: SaleDetail }) {
   const t = useTranslations("sales.returns");
   const locale = useLocale();
+  const { timezone: timeZone } = usePlace();
   const unitName = useUnitName();
   if (sale.returns.length === 0) return null;
   const money = (minor: string) => formatCurrency(BigInt(minor), sale.currency, locale);
@@ -52,7 +54,7 @@ export function SaleReturnsList({ sale }: { sale: SaleDetail }) {
               ))}
             </ul>
             <p className="text-muted">{moneyLine(item, money, t)}</p>
-            <p className="text-muted">{t("byLine", { reason: item.reason, name: item.byName ?? t("someone"), when: formatWhen(item.createdAt, locale, "Africa/Lagos") })}</p>
+            <p className="text-muted">{t("byLine", { reason: item.reason, name: item.byName ?? t("someone"), when: formatWhen(item.createdAt, locale, timeZone) })}</p>
           </li>
         ))}
       </ul>

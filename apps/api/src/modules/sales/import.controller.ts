@@ -3,7 +3,7 @@ import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
-import { RequirePermissions } from "../rbac/permissions.js";
+import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
 import { ImportService } from "./import.service.js";
 
@@ -50,7 +50,8 @@ export class ImportController {
 
   @Post("stock-change")
   @HttpCode(200)
-  @RequirePermissions(Permission.STOCK_ADJUST)
+  // A store keeper's list waits for a manager or owner (ADR-034).
+  @RequireAnyPermission(Permission.STOCK_ADJUST, Permission.STOCK_COUNT)
   @Idempotent()
   async stockChange(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     return success(await this.imports.stockChange(tenant, body), tenant.correlationId);

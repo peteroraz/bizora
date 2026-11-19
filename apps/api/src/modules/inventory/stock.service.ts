@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   quantityToString,
+  ROLE_PERMISSIONS,
   Permission,
   parseCountQuantity,
   parseQuantity,
@@ -14,15 +15,16 @@ import {
   stockCountRejectSchema,
 } from "@bizora/contracts";
 import { averageUnitCost, issueStock, QUANTITY_SCALE } from "@bizora/money";
-import { and, desc, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { branches, products, shopDevices, stockBalances, stockCounts, stockMovements, users } from "../../db/schema.js";
+import { branches, memberships, products, shopDevices, stockBalances, stockCounts, stockMovements, stockRequests, users } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
+import { NotificationService } from "../notifications/notification.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { addPurchase, addSupplierReturn, findOrAddSupplier, owedNow } from "../suppliers/supplier-ledger.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
@@ -93,6 +95,7 @@ export class StockService {
     @Inject(LedgerPostingService) private readonly ledger: LedgerPostingService,
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(NotificationService) private readonly notifications: NotificationService,
   ) {}
 
   async applyMovement(tx: DbExecutor, context: Context, input: MovementInput) {
@@ -215,6 +218,7 @@ export class StockService {
       const existing = await this.findMovement(tenant, payload.id);
       if (existing) return existing;
     }
+    if (this.needsApproval(tenant)) return this.db.transaction(async (tx) => ({ waiting: true, request: await this.ask(tx, tenant, "receive", payload) }));
     return this.db.transaction(async (tx) => this.presentResult(tenant, await this.receiveIn(tx, tenant, payload)));
   }
 
@@ -286,7 +290,13 @@ export class StockService {
       if (taken && taken.tenantId === tenant.tenantId) return this.presentResult(tenant, { id: taken.id, valueMinor: taken.valueMinor, documentNumber: taken.documentNumber, quantity: 0n, negative: false });
       if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
     }
-    return this.db.transaction(async (tx) => {
+    if (this.needsApproval(tenant)) return this.db.transaction(async (tx) => ({ waiting: true, request: await this.ask(tx, tenant, "supplier_return", payload) }));
+    return this.db.transaction(async (tx) => this.returnToSupplierIn(tx, tenant, payload));
+  }
+
+  /** Goods back to a supplier, inside the caller's transaction (an approved request, ADR-034). */
+  async returnToSupplierIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof supplierReturnSchema.parse>) {
+    {
       const context = await this.context(tx, tenant, payload.productId, payload.branchId);
       const supplier = await findOrAddSupplier(tx, tenant, context.business.id, { supplierId: payload.supplierId });
       if (!supplier) throw new ApiError("SUPPLIER_NOT_FOUND", "That supplier was not found.", 404);
@@ -336,13 +346,14 @@ export class StockService {
       }
       await this.record(tx, tenant, "stock.returned_to_supplier", result.id, context, { note: payload.note ?? null, settle: payload.settle });
       return this.presentResult(tenant, result);
-    });
+    }
   }
 
   // Remove or correct -------------------------------------------------------------------------------------------
 
   async adjust(tenant: TenantContext, raw: unknown) {
     const payload = stockAdjustSchema.parse(raw);
+    if (this.needsApproval(tenant)) return this.db.transaction(async (tx) => ({ waiting: true, request: await this.ask(tx, tenant, "adjust", payload) }));
     return this.db.transaction(async (tx) => this.adjustIn(tx, tenant, payload));
   }
 
@@ -368,6 +379,7 @@ export class StockService {
 
   async transfer(tenant: TenantContext, raw: unknown) {
     const payload = stockTransferSchema.parse(raw);
+    if (this.needsApproval(tenant)) return this.db.transaction(async (tx) => ({ waiting: true, request: await this.ask(tx, tenant, "transfer", payload) }));
     return this.db.transaction(async (tx) => this.transferIn(tx, tenant, payload));
   }
 
@@ -440,6 +452,145 @@ export class StockService {
       await this.record(tx, tenant, "stock.transferred", out.id, from, { note, toBranchId, quantity: row.quantity.toString(), unit: from.product.baseUnit, shopClosed: true });
     }
     return rows.length;
+  }
+
+  // Changes that wait for a manager or owner (ADR-034) ---------------------------------------------------------
+
+  /** Anyone who cannot adjust stock themselves (the store keeper) has stock in, changes and moves approved first. */
+  needsApproval(tenant: TenantContext) {
+    return !tenant.permissions.includes(Permission.STOCK_ADJUST);
+  }
+
+  /**
+   * Records a stock change as a request. Everything is checked now (the product, the shops, what is on the shelf),
+   * so the person hears about a problem at once; it is checked again when a manager or owner approves it.
+   */
+  async ask(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    kind: "receive" | "adjust" | "transfer" | "supplier_return",
+    payload:
+      | ReturnType<typeof stockReceiveSchema.parse>
+      | ReturnType<typeof stockAdjustSchema.parse>
+      | ReturnType<typeof stockTransferSchema.parse>
+      | ReturnType<typeof supplierReturnSchema.parse>,
+  ) {
+    const id = ("id" in payload && payload.id) || newId();
+    const [existing] = await tx.select().from(stockRequests).where(eq(stockRequests.id, id)).limit(1);
+    if (existing) {
+      if (existing.tenantId !== tenant.tenantId) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
+      return this.presentRequest(existing, null, null);
+    }
+    const shopId = "fromBranchId" in payload ? payload.fromBranchId : "branchId" in payload ? payload.branchId : undefined;
+    const context = await this.context(tx, tenant, payload.productId, shopId);
+    const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
+    const entered = parseQuantity(payload.quantity) as bigint;
+    const amount = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+    const what = `${payload.quantity} ${payload.unit} of ${context.product.name}`;
+    let summary: string;
+    let stored: Record<string, unknown>;
+    if (kind === "transfer") {
+      const move = payload as ReturnType<typeof stockTransferSchema.parse>;
+      if (move.toBranchId === context.branch.id) throw new ApiError("SAME_SHOP", "Choose a different shop to move the stock to.", 422, [{ field: "toBranchId", message: "Choose another shop." }]);
+      const to = await findBranch(tx, tenant, context.business.id, move.toBranchId);
+      if (to.closedAt) throw new ApiError("SHOP_CLOSED", "That shop is closed. Choose another shop.", 409, [{ field: "toBranchId", message: "Choose an open shop." }]);
+      await this.assertOnShelf(tx, context, amount);
+      summary = `Move ${what} from ${context.branch.name} to ${to.name}`;
+      stored = { ...move, fromBranchId: context.branch.id };
+    } else if (kind === "supplier_return") {
+      const back = payload as ReturnType<typeof supplierReturnSchema.parse>;
+      const supplier = await findOrAddSupplier(tx, tenant, context.business.id, { supplierId: back.supplierId });
+      if (!supplier) throw new ApiError("SUPPLIER_NOT_FOUND", "That supplier was not found.", 404);
+      await this.assertOnShelf(tx, context, amount);
+      summary = `Send ${what} back to ${supplier.name}, off what we owe${back.note ? `: ${back.note}` : ""}`;
+      stored = { ...back, branchId: context.branch.id };
+    } else if (kind === "adjust") {
+      const change = payload as ReturnType<typeof stockAdjustSchema.parse>;
+      if (change.direction === "remove") await this.assertOnShelf(tx, context, amount);
+      summary = `${change.direction === "remove" ? "Take off" : "Add"} ${what} (${change.reason.replace("_", " ")}): ${change.note}`;
+      stored = { ...change, branchId: context.branch.id };
+    } else {
+      const delivery = payload as ReturnType<typeof stockReceiveSchema.parse>;
+      summary = `Receive ${what}${delivery.supplier ? ` from ${delivery.supplier}` : ""}${delivery.paidFrom === "credit" ? " (owed)" : ""}`;
+      stored = { ...delivery, branchId: context.branch.id };
+    }
+    const [row] = await tx
+      .insert(stockRequests)
+      .values({
+        id,
+        tenantId: tenant.tenantId,
+        businessId: context.business.id,
+        branchId: context.branch.id,
+        productId: context.product.id,
+        kind,
+        payload: stored,
+        summary: summary.slice(0, 400),
+        requestedBy: tenant.userId,
+        requestedMembershipId: tenant.membershipId,
+      })
+      .returning();
+    await this.record(tx, tenant, "stock.requested", id, context, { kind, summary });
+    const [me] = await tx.select({ name: users.displayName }).from(users).where(eq(users.id, tenant.userId)).limit(1);
+    await this.notifications.notify(tx, tenant.tenantId, await this.approvers(tx, tenant.tenantId, context.business.id, context.branch.id), {
+      kind: "stock.request",
+      saleId: null,
+      actorName: me?.name ?? null,
+      data: { summary: summary.slice(0, 160) },
+      except: tenant.membershipId,
+    });
+    return this.presentRequest(row as typeof stockRequests.$inferSelect, me?.name ?? null, context.branch.name);
+  }
+
+  /** Managers and owners who can approve stock changes in this shop. */
+  async approvers(tx: DbExecutor, tenantId: string, businessId: string, branchId: string) {
+    const roles = Object.entries(ROLE_PERMISSIONS)
+      .filter(([, codes]) => codes.includes(Permission.STOCK_ADJUST))
+      .map(([role]) => role);
+    const rows = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.tenantId, tenantId),
+          eq(memberships.status, "ACTIVE"),
+          inArray(memberships.role, roles),
+          or(isNull(memberships.businessId), eq(memberships.businessId, businessId)),
+          or(isNull(memberships.branchId), eq(memberships.branchId, branchId)),
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
+
+  presentRequest(row: typeof stockRequests.$inferSelect, requestedByName: string | null, shopName: string | null, decidedByName: string | null = null) {
+    return {
+      id: row.id,
+      kind: row.kind,
+      status: row.status,
+      summary: row.summary,
+      productId: row.productId,
+      shop: shopName,
+      requestedBy: requestedByName,
+      requestedAt: row.requestedAt.toISOString(),
+      decidedBy: decidedByName,
+      decidedAt: row.decidedAt?.toISOString() ?? null,
+      decisionNote: row.decisionNote,
+    };
+  }
+
+  private async assertOnShelf(tx: DbExecutor, context: Context, amount: bigint) {
+    if (!context.product.trackStock) return;
+    const [balance] = await tx
+      .select({ quantity: stockBalances.quantity })
+      .from(stockBalances)
+      .where(and(eq(stockBalances.tenantId, context.tenant.tenantId), eq(stockBalances.branchId, context.branch.id), eq(stockBalances.productId, context.product.id)))
+      .limit(1);
+    const have = balance?.quantity ?? 0n;
+    if (amount > have) {
+      const left = have > 0n ? have : 0n;
+      throw new ApiError("NOT_ENOUGH_STOCK", `Not enough ${context.product.name} in ${context.branch.name}: ${quantityToString(left)} ${context.product.baseUnit} left.`, 422, [
+        { field: "quantity", message: `Only ${quantityToString(left)} left.` },
+      ]);
+    }
   }
 
   // Counts --------------------------------------------------------------------------------------------------------

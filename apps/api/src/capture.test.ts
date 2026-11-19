@@ -152,7 +152,10 @@ describe("AI capture of photos, scans and voice notes", () => {
       .expect(200);
     expect(paidCash.body.data.results[0].errors[0].field).toBe("paid");
     const saved = await request(http).post("/api/v1/imports/stock-in").set(auth(storeToken)).send({ source: "capture", rows: captured.body.data.rows, dryRun: false }).expect(200);
-    expect(saved.body.data).toMatchObject({ committed: true, totals: { create: 1 } });
+    // The store keeper's delivery waits for a manager or owner (ADR-034), who approves it.
+    expect(saved.body.data).toMatchObject({ committed: true, waiting: true, totals: { create: 1 } });
+    const waiting = await request(http).get("/api/v1/stock/requests").set(auth(a.token)).expect(200);
+    await request(http).post(`/api/v1/stock/requests/${waiting.body.data.waiting[0].id}/approve`).set(auth(a.token)).send({}).expect(200);
     const product = await request(http).get("/api/v1/products").query({ q: "peak" }).set(auth(a.token)).expect(200);
     // 10 opening + 2 received - 2 sold from the captured sale.
     expect(product.body.data.items[0].stock.quantity).toBe("10000");

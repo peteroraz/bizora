@@ -16,6 +16,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { CloseShop } from "../../../components/close-shop";
 import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
+import { WorkRulesSettings } from "../../../components/work-rules-settings";
 import { BrandSettings } from "../../../components/brand-settings";
 import { can, settingsTabs as tabs, visibleSettingsTabs } from "../../../lib/access";
 import { useAccess, usePlace } from "../../../lib/access-context";
@@ -728,6 +729,9 @@ function SettingsScreen() {
               ))}
             </ul>
           </Card>
+        </TabPanel>
+        <TabPanel value="hours">
+          <WorkRulesSettings />
         </TabPanel>
         <TabPanel value="appearance">
           <Card className="space-y-3">

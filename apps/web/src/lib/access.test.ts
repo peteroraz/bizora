@@ -4,6 +4,7 @@ import { customerMode, homeCards, navAllowed, visibleSettingsTabs, type Access }
 
 const owner: Access = {
   staffSession: false,
+  role: "OWNER",
   permissions: [
     "tenant.read",
     "customers.read",
@@ -38,6 +39,7 @@ describe("settings tabs", () => {
       "shop",
       "branches",
       "team",
+      "hours",
       "appearance",
       "security",
     ]);

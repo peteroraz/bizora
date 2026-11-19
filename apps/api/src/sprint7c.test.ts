@@ -49,6 +49,11 @@ describe("sprint 7c: suppliers and what is owed to them", () => {
   const shift = (days: number) => new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
   const receive = (token: string, body: Record<string, unknown>) =>
     request(http).post("/api/v1/stock/receive").set(auth(token)).send({ productId: riceId, quantity: "1", unit: "piece", ...body });
+  /** A storekeeper's delivery waits for a manager (ADR-034), who approves it here. */
+  const approved = async (asked: request.Response) => {
+    expect(asked.body.data.waiting).toBe(true);
+    await request(http).post(`/api/v1/stock/requests/${asked.body.data.request.id}/approve`).set(auth(manager)).send({}).expect(200);
+  };
   const supplier = async (id: string) => (await request(http).get(`/api/v1/suppliers/${id}`).set(auth(owner)).expect(200)).body.data;
   const owedInBooks = async () => {
     const balance = await request(http).get("/api/v1/ledger/trial-balance").set(auth(owner)).expect(200);
@@ -96,7 +101,7 @@ describe("sprint 7c: suppliers and what is owed to them", () => {
   });
 
   it("a storekeeper receives stock owed to a supplier named on the spot; they see names, not money", async () => {
-    await receive(storekeeper, { quantity: "10", totalCostMinor: "50000000", paidFrom: "credit", supplier: "  dangote   distributors ", payBy: shift(-1) }).expect(201);
+    await approved(await receive(storekeeper, { quantity: "10", totalCostMinor: "50000000", paidFrom: "credit", supplier: "  dangote   distributors ", payBy: shift(-1) }).expect(201));
     const names = await request(http).get("/api/v1/suppliers/names?q=dang").set(auth(storekeeper)).expect(200);
     expect(names.body.data.items).toHaveLength(1);
     dangoteId = names.body.data.items[0].id;
@@ -111,7 +116,7 @@ describe("sprint 7c: suppliers and what is owed to them", () => {
     await receive(manager, { quantity: "6", totalCostMinor: "30000000", paidFrom: "credit", supplierId: dangoteId, payBy: shift(14) }).expect(201);
     // Paid in cash, the name in other capitals: the same supplier, nothing more owed.
     await receive(manager, { quantity: "2", totalCostMinor: "10000000", paidFrom: "cash", supplier: "DANGOTE DISTRIBUTORS" }).expect(201);
-    await receive(storekeeper, { quantity: "1", totalCostMinor: "5000000" }).expect(201);
+    await approved(await receive(storekeeper, { quantity: "1", totalCostMinor: "5000000" }).expect(201));
     const dangote = await supplier(dangoteId);
     expect(dangote).toMatchObject({ owedMinor: "80000000", overdueMinor: "50000000", nextPayBy: shift(14) });
     expect(dangote.entries).toHaveLength(2);

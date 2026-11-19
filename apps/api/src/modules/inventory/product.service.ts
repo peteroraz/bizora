@@ -238,7 +238,7 @@ export class ProductService {
           eq(auditEvents.tenantId, tenant.tenantId),
           eq(auditEvents.entityType, "product"),
           eq(auditEvents.entityId, id),
-          inArray(auditEvents.action, ["product.updated", "product.archived", "stock.count_rejected", "product.photo_added", "product.photo_removed"]),
+          inArray(auditEvents.action, ["product.updated", "product.archived", "stock.count_rejected", "product.photo_added", "product.photo_removed", "stock.requested", "stock.request_approved", "stock.request_rejected"]),
           ...(tenant.membershipBranchId ? [or(isNull(auditEvents.branchId), eq(auditEvents.branchId, tenant.membershipBranchId)) as SQL] : []),
         ),
       )
@@ -266,6 +266,7 @@ export class ProductService {
           reason: (metadata.reason as string | null | undefined) ?? (metadata.note as string | null | undefined) ?? null,
           changes,
           onlyHidden,
+          ...(event.action.startsWith("stock.request") ? { summary: (metadata.summary as string | undefined) ?? null } : {}),
           ...(event.action === "stock.count_rejected"
             ? { countedQuantity: (metadata.countedQuantity as string | undefined) ?? null, countNote: (metadata.countNote as string | null | undefined) ?? null }
             : {}),

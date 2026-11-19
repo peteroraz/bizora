@@ -323,12 +323,16 @@ export class ImportService {
       return { row: index + 1, status: "create", message: `${decimal(quantity)} ${unit} of ${product.name} received${paidFrom === "credit" ? ", owed to the supplier" : ""}.` };
     });
 
-    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false, this.stock.needsApproval(tenant));
     await this.db.transaction(async (tx) => {
-      for (const plan of plans) await this.stock.receiveIn(tx, tenant, stockReceiveSchema.parse(plan));
+      for (const plan of plans) {
+        const delivery = stockReceiveSchema.parse(plan);
+        if (this.stock.needsApproval(tenant)) await this.stock.ask(tx, tenant, "receive", delivery);
+        else await this.stock.receiveIn(tx, tenant, delivery);
+      }
     });
     await this.recordImport(tenant, business.id, "stock_in", payload.source, results.length);
-    return this.outcome(results, true);
+    return this.outcome(results, true, this.stock.needsApproval(tenant));
   }
 
   // Spoken, photographed or file lists of stock counts, changes and moves (ADR-033) ---------------------------------
@@ -349,12 +353,12 @@ export class ImportService {
       plans.push(stockCountSchema.parse({ productId: product.id, branchId: branch.id, countedQuantity: decimal(counted), unit, ...(row.note.trim() ? { note: row.note.trim().slice(0, 240) } : {}) }));
       return { row: index + 1, status: "create", message: `${decimal(counted)} ${unit} of ${product.name} counted in ${branch.name}.` };
     });
-    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false, this.stock.needsApproval(tenant));
     await this.db.transaction(async (tx) => {
       for (const plan of plans) await this.stock.countIn(tx, tenant, plan);
     });
     await this.recordImport(tenant, business.id, "stock_count", payload.source, results.length);
-    return this.outcome(results, true);
+    return this.outcome(results, true, this.stock.needsApproval(tenant));
   }
 
   /** Goods taken off or added by hand. Every row says what happened; nothing may take a shelf below zero. */
@@ -390,12 +394,15 @@ export class ImportService {
       plans.push(stockAdjustSchema.parse({ productId: product.id, branchId: branch.id, direction, reason: chosen, quantity: decimal(quantity), unit, note: note.slice(0, 240) }));
       return { row: index + 1, status: "create", message: `${direction === "remove" ? "Take off" : "Add"} ${decimal(quantity)} ${unit} of ${product.name} (${chosen.replace("_", " ")}).` };
     });
-    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false, this.stock.needsApproval(tenant));
     await this.db.transaction(async (tx) => {
-      for (const plan of plans) await this.stock.adjustIn(tx, tenant, plan);
+      for (const plan of plans) {
+        if (this.stock.needsApproval(tenant)) await this.stock.ask(tx, tenant, "adjust", plan);
+        else await this.stock.adjustIn(tx, tenant, plan);
+      }
     });
     await this.recordImport(tenant, business.id, "stock_change", payload.source, results.length);
-    return this.outcome(results, true);
+    return this.outcome(results, true, this.stock.needsApproval(tenant));
   }
 
   /** Goods moved from the shop being worked in to another open shop, by its name. */
@@ -429,12 +436,15 @@ export class ImportService {
       plans.push(stockTransferSchema.parse({ productId: product.id, fromBranchId: branch.id, toBranchId: to.id, quantity: decimal(quantity), unit, ...(row.note.trim() ? { note: row.note.trim().slice(0, 240) } : {}) }));
       return { row: index + 1, status: "create", message: `Move ${decimal(quantity)} ${unit} of ${product.name} to ${to.name}.` };
     });
-    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false, this.stock.needsApproval(tenant));
     await this.db.transaction(async (tx) => {
-      for (const plan of plans) await this.stock.transferIn(tx, tenant, plan);
+      for (const plan of plans) {
+        if (this.stock.needsApproval(tenant)) await this.stock.ask(tx, tenant, "transfer", plan);
+        else await this.stock.transferIn(tx, tenant, plan);
+      }
     });
     await this.recordImport(tenant, business.id, "stock_move", payload.source, results.length);
-    return this.outcome(results, true);
+    return this.outcome(results, true, this.stock.needsApproval(tenant));
   }
 
   /** The shop being worked in, its products by name, their packs and what is on hand. */
@@ -543,9 +553,11 @@ export class ImportService {
     }
   }
 
-  private outcome(results: ImportRowResult[], committed: boolean) {
+  /** `waiting`: the rows go to a manager or owner to approve instead of changing stock at once (ADR-034). */
+  private outcome(results: ImportRowResult[], committed: boolean, waiting = false) {
     const count = (status: ImportRowResult["status"]) => results.filter((result) => result.status === status).length;
-    return { committed, results, totals: { create: count("create"), update: count("update"), error: count("error") } };
+    const shown = waiting ? results.map((result) => (result.status === "error" || !result.message ? result : { ...result, message: `Waits for a manager or owner: ${result.message}` })) : results;
+    return { committed, waiting, results: shown, totals: { create: count("create"), update: count("update"), error: count("error") } };
   }
 }
 

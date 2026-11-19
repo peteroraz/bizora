@@ -222,13 +222,18 @@ describe("products and stock", () => {
 
     await request(http).post("/api/v1/stock/receive").set(auth(salesToken)).send({ productId: riceId, quantity: "1", unit: "bag" }).expect(403);
     await request(http).post("/api/v1/products").set(auth(salesToken)).send({ name: "Sneaky", baseUnit: "piece" }).expect(403);
-    await request(http).post("/api/v1/stock/adjust").set(auth(storekeeperToken)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "1", unit: "bag", note: "Cannot find it" }).expect(403);
+    // The storekeeper's changes wait for a manager (ADR-034); this one is turned down.
+    const asked = await request(http).post("/api/v1/stock/adjust").set(auth(storekeeperToken)).send({ productId: riceId, direction: "remove", reason: "missing", quantity: "1", unit: "bag", note: "Cannot find it" }).expect(201);
+    expect(asked.body.data.waiting).toBe(true);
+    await request(http).post(`/api/v1/stock/requests/${asked.body.data.request.id}/reject`).set(auth(managerToken)).send({ note: "Found it in the back" }).expect(200);
 
     // The storekeeper receives goods owed to the supplier, but cannot record paying cash.
     const paid = await request(http).post("/api/v1/stock/receive").set(auth(storekeeperToken)).send({ productId: riceId, quantity: "1", unit: "bag", paidFrom: "cash" }).expect(403);
     expect(paid.body.error.fieldErrors[0].field).toBe("paidFrom");
     const owed = await request(http).post("/api/v1/stock/receive").set(auth(storekeeperToken)).send({ productId: riceId, quantity: "2", unit: "bag" }).expect(201);
-    expect(owed.body.data).not.toHaveProperty("valueMinor");
+    expect(owed.body.data).toMatchObject({ waiting: true });
+    expect(JSON.stringify(owed.body.data)).not.toContain("valueMinor");
+    await request(http).post(`/api/v1/stock/requests/${owed.body.data.request.id}/approve`).set(auth(managerToken)).send({}).expect(200);
     const trial = await ledger.trialBalance(a.tenantId, a.businessId);
     expect(balance(trial.accounts, "2000")).toBe(-155_000_00n);
   });
@@ -293,7 +298,11 @@ describe("products and stock", () => {
     ];
     const pushed = await request(http).post("/api/v1/sync/push").set(auth(storekeeperToken)).send({ operations: ops }).expect(200);
     expect(pushed.body.data.results.map((result: { status: string }) => result.status)).toEqual(["applied", "applied"]);
-    expect(pushed.body.data.results[0].result.movementId).toBe(receiveId);
+    // The storekeeper's delivery waits for a manager (ADR-034); approving it keeps the device's ID.
+    expect(pushed.body.data.results[0].result).toMatchObject({ waiting: true, request: { id: receiveId } });
+    const approved = await request(http).post(`/api/v1/stock/requests/${receiveId}/approve`).set(auth(managerToken)).send({}).expect(200);
+    expect(approved.body.data.request.status).toBe("approved");
+    expect((await client.query("SELECT 1 FROM stock_movements WHERE id = $1", [receiveId])).rows).toHaveLength(1);
     const again = await request(http).post("/api/v1/sync/push").set(auth(storekeeperToken)).send({ operations: ops }).expect(200);
     expect(again.body.data.results.map((result: { status: string }) => result.status)).toEqual(["duplicate", "duplicate"]);
     const sales = await request(http).post("/api/v1/sync/push").set(auth(salesToken)).send({ operations: [{ ...ops[0], id: uuidv7(), payload: { ...ops[0]?.payload, id: uuidv7() } }] }).expect(200);

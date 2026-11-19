@@ -14,7 +14,7 @@ import { SaleReturnPanel, SaleReturnsList } from "../../../../components/sale-re
 import { useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatDay, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
-import { useAccess } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { type SaleDetail, type SaleReleaseDetail, whatsAppLink } from "../../../../lib/sales-client";
 import { ActionLink, BackLink } from "../../../../components/action-link";
@@ -28,6 +28,7 @@ const STAGE_TONE = { awaiting_payment: "warning", awaiting_release: "info", comp
 function SaleScreen() {
   const t = useTranslations("sales");
   const locale = useLocale();
+  const { timezone: timeZone } = usePlace();
   const access = useAccess();
   const unitName = useUnitName();
   const { id } = useParams<{ id: string }>();
@@ -76,7 +77,7 @@ function SaleScreen() {
 
   const full = sale.view === "full" ? sale : null;
   const money = (minor: string) => formatCurrency(BigInt(minor), full?.currency ?? "NGN", locale);
-  const when = (value: string) => formatWhen(value, locale, "Africa/Lagos");
+  const when = (value: string) => formatWhen(value, locale, timeZone);
   const ownUnpaid = sale.status === "awaiting_payment" && sale.mine;
   const canVoid = sale.status !== "voided" && !sale.historyOnly && !(full && BigInt(full.returnedMinor) > 0n) && (can(access, Permission.SALES_VOID) || (ownUnpaid && can(access, Permission.SALES_CREATE)));
   const canCollect = full !== null && sale.status === "awaiting_payment" && can(access, Permission.SALES_COLLECT);

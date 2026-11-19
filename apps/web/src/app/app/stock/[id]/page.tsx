@@ -20,7 +20,7 @@ import { RequireAccess } from "../../../../components/require-access";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
-import { useAccess } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
@@ -89,6 +89,7 @@ function ProductScreen() {
   const t = useTranslations("stock");
   const common = useTranslations("common");
   const locale = useLocale();
+  const { timezone: timeZone } = usePlace();
   const access = useAccess();
   const stockText = useStockText();
   const unitName = useUnitName();
@@ -152,7 +153,8 @@ function ProductScreen() {
         return false;
       }
       const status = payload?.data?.count?.status;
-      setMessage({ tone: "success", text: status === "pending" ? t("countPending") : success });
+      // A store keeper's change waits for a manager or owner (ADR-034).
+      setMessage({ tone: "success", text: payload?.data?.waiting ? t("sentForApproval") : status === "pending" ? t("countPending") : success });
       await load();
       return true;
     } catch (error) {
@@ -209,7 +211,7 @@ function ProductScreen() {
                 </span>
               </div>
               <p className="text-muted">
-                {t("byLine", { who: movement.byName ?? "", shop: movement.branchName, when: formatWhen(movement.createdAt, locale, "Africa/Lagos") })}
+                {t("byLine", { who: movement.byName ?? "", shop: movement.branchName, when: formatWhen(movement.createdAt, locale, timeZone) })}
                 {movement.deviceName ? ` ${t("onDevice", { device: movement.deviceName })}` : ""}
                 {movement.supplier ? ` · ${movement.supplier}` : ""}
                 {seeCost && movement.valueMinor ? ` · ${money(movement.valueMinor.replace("-", ""))}` : ""}
@@ -438,7 +440,7 @@ function ProductScreen() {
         </Card>
       ) : null}
 
-      {product.trackStock && can(access, Permission.STOCK_ADJUST) ? (
+      {product.trackStock && can(access, Permission.STOCK_ADJUST, Permission.STOCK_COUNT) ? (
         <Card>
           <p className="text-sm font-medium">{t("adjustTitle")}</p>
           <SafeForm
@@ -595,7 +597,7 @@ function ProductScreen() {
                   <p className="text-muted">{t("rejectedCount", { counted: stockText(entry.change.countedQuantity, product.baseUnit, product.packs) })}</p>
                 ) : null}
                 {entry.change.reason ? <p>{t("reasonLine", { reason: entry.change.reason })}</p> : null}
-                <p className="text-muted">{t("changedBy", { who: entry.change.byName ?? "", when: formatWhen(entry.change.at, locale, "Africa/Lagos") })}</p>
+                <p className="text-muted">{t("changedBy", { who: entry.change.byName ?? "", when: formatWhen(entry.change.at, locale, timeZone) })}</p>
               </li>
             ) : (
               movementRow(entry.movement)

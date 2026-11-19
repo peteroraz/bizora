@@ -60,7 +60,7 @@ type Props<F extends string> = {
   capture?: CaptureTarget;
 };
 
-type Result = { committed: boolean; results: ImportRowResult[]; totals: { create: number; update: number; error: number } };
+type Result = { committed: boolean; waiting?: boolean; results: ImportRowResult[]; totals: { create: number; update: number; error: number } };
 
 export function ImportReview<F extends string>({ columns, synonyms, endpoint, extra = {}, templateName, templateExample, onSaved, capture }: Props<F>) {
   const t = useTranslations("imports");
@@ -166,7 +166,7 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
     <div className="space-y-4">
       {saved ? (
         <p className="rounded-card border border-success bg-success-bg px-4 py-3 text-sm text-success" role="status">
-          {t("saved", { create: saved.totals.create, update: saved.totals.update })}
+          {saved.waiting ? t("sentForApproval", { count: saved.totals.create }) : t("saved", { create: saved.totals.create, update: saved.totals.update })}
         </p>
       ) : null}
       {capture ? <CaptureBar target={capture} onRows={addCaptured} /> : null}

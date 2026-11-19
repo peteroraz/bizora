@@ -9,7 +9,7 @@ import { DaySwitcher, dayFromAddress } from "../../../components/day-switcher";
 import { RequireAccess } from "../../../components/require-access";
 import { formatCurrency, formatWhen } from "../../../i18n/format";
 import { can } from "../../../lib/access";
-import { useAccess } from "../../../lib/access-context";
+import { useAccess, usePlace } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 import type { SaleReleaseRow, SaleSummary, SaleView } from "../../../lib/sales-client";
 import { ActionLink } from "../../../components/action-link";
@@ -27,6 +27,7 @@ function showDayInAddress(day: string | null) {
 function SalesScreen() {
   const t = useTranslations("sales");
   const locale = useLocale();
+  const { timezone: timeZone } = usePlace();
   const access = useAccess();
   const canSell = can(access, Permission.SALES_CREATE);
   const desk = access.salesFlow === "desk";
@@ -191,7 +192,7 @@ function SalesScreen() {
                   <span className="block truncate text-sm text-muted">
                     {[
                       sale.view === "full" && sale.customerName ? (sale.number ?? sale.invoiceNumber) : null,
-                      formatWhen(sale.soldAt, locale, "Africa/Lagos"),
+                      formatWhen(sale.soldAt, locale, timeZone),
                       sale.view === "full" && sale.methods?.length ? sale.methods.map((method) => t(`mode.${method}`)).join(" + ") : null,
                       sale.byName,
                       sale.view === "release" && sale.itemCount ? t("itemCount", { count: sale.itemCount }) : null,

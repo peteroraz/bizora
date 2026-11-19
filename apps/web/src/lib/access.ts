@@ -109,6 +109,7 @@ export const settingsTabs = [
   "shop",
   "branches",
   "team",
+  "hours",
   "appearance",
   "security",
 ] as const;
@@ -136,6 +137,9 @@ export function visibleSettingsTabs(
         );
       case "team":
         return staffFeatures && can(access, Permission.USERS_READ);
+      case "hours":
+        // Opening hours, shop locks and permission to work late are the owner's alone (ADR-034).
+        return access.role === "OWNER" && !access.staffSession;
       case "appearance":
         return true;
       case "security":

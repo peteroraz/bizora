@@ -523,7 +523,8 @@
       "branches": "Shops",
       "team": "Staff",
       "appearance": "Look",
-      "security": "Sign-in"
+      "security": "Sign-in",
+      "hours": "Hours and locks"
     },
     "businessName": "Business name",
     "shopName": "Shop name",
@@ -1069,7 +1070,8 @@
       "failed": "That did not work. Try again.",
       "needsNetwork": "Adding photos needs the internet. Connect and try again."
     },
-    "lists": "Say or snap stock"
+    "lists": "Say or snap stock",
+    "sentForApproval": "Sent to a manager or the owner. Stock changes when they approve it."
   },
   "sales": {
     "title": "Sales",
@@ -1416,7 +1418,8 @@
       "ref": "Invoice or delivery no."
     },
     "exampleSupplier": "Dangote Distributors",
-    "totalRow": "Total"
+    "totalRow": "Total",
+    "sentForApproval": "{count, plural, one {# row was sent to a manager or the owner to approve.} other {# rows were sent to a manager or the owner to approve.}} Stock changes when they approve."
   },
   "receipt": {
     "number": "Receipt {number}",
@@ -1461,7 +1464,12 @@
       "comment": "{name} commented on {number}.",
       "voided": "{number} was cancelled by {name}.",
       "transfer_waiting": "{name} recorded a transfer for {number}. Check your bank and confirm it.",
-      "transfer_not_received": "The transfer for {number} never came ({name} checked). Talk to the customer."
+      "transfer_not_received": "The transfer for {number} never came ({name} checked). Talk to the customer.",
+      "stock_request": "{name} asked to change stock: {summary}. Approve or reject it under Stock.",
+      "stock_request_approved": "{name} approved: {summary}.",
+      "stock_request_rejected": "{name} rejected: {summary}.",
+      "work_locked_offline": "{name} recorded work offline while their shop was locked. It was kept; check it in the activity log.",
+      "work_after_hours_offline": "{name} recorded work offline outside opening hours. It was kept; check it in the activity log."
     }
   },
   "capture": {
@@ -1987,5 +1995,75 @@
     "exampleProduct": "Indomie Chicken 70g",
     "exampleNote": "Got wet in the store",
     "exampleShop": "Market shop"
+  },
+  "workRules": {
+    "failed": "That did not work. Try again.",
+    "hoursTitle": "Opening hours",
+    "hoursLead": "Outside these hours only you, the owner, can record sales, stock or money. Staff can still look things up. Times are in {zone}.",
+    "useHours": "Set opening hours",
+    "anyTime": "No opening hours: staff can work at any time.",
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "openOn": "Open on {day}",
+    "opensAt": "{day} opens at",
+    "closesAt": "{day} closes at",
+    "to": "to",
+    "closedDay": "Closed",
+    "copyMonday": "Use Monday's hours Monday to Saturday",
+    "overnight": "A closing time earlier than the opening time runs past midnight, for example 18:00 to 02:00.",
+    "saveHours": "Save opening hours",
+    "hoursSaved": "Opening hours saved.",
+    "hoursOff": "Opening hours turned off. Staff can work at any time.",
+    "locksTitle": "Lock a shop",
+    "locksLead": "A locked shop takes no sales, stock or money changes from staff until you unlock it. You can still work in it.",
+    "lockedBadge": "Locked",
+    "lockedSince": "Locked since {when}",
+    "lockNote": "Why (staff will see this)",
+    "lock": "Lock {shop}",
+    "unlock": "Unlock {shop}",
+    "locked": "{shop} is locked.",
+    "unlocked": "{shop} is unlocked.",
+    "permitsTitle": "Let someone work outside opening hours",
+    "permitsLead": "They can work from now until the time you choose. You can stop it early.",
+    "noPermits": "Nobody has permission to work outside opening hours right now.",
+    "permitLine": "{name} can work until {until}",
+    "stopPermit": "Stop now",
+    "permitStopped": "{name} can no longer work outside opening hours.",
+    "person": "Who",
+    "choosePerson": "Choose a person",
+    "howLong": "For how long",
+    "forHours": "{count, plural, one {# hour} other {# hours}}",
+    "why": "Why",
+    "letWork": "Let them work",
+    "permitted": "{name} can work outside opening hours now.",
+    "banner": {
+      "locked": "The owner has locked {shop}. You can look things up, but only the owner can make changes until it is unlocked.",
+      "lockedWithNote": "The owner has locked {shop}: {note}. You can look things up, but only the owner can make changes until it is unlocked.",
+      "closedNow": "The business is closed now (open {open}–{close} today). You can look things up, but only the owner can make changes. Ask the owner if you need to work late.",
+      "closedToday": "The business is closed today. You can look things up, but only the owner can make changes. Ask the owner if you need to work.",
+      "permitted": "The owner has let you work outside opening hours until {until}."
+    }
+  },
+  "stockRequests": {
+    "approveTitle": "{count, plural, one {# stock change waits for you} other {# stock changes wait for you}}",
+    "mineTitle": "Your stock changes",
+    "askedBy": "Asked by {name} in {shop}, {when}",
+    "note": "Note",
+    "noteHint": "Needed to reject: say why.",
+    "sayWhy": "Say why you are rejecting it.",
+    "approve": "Approve and complete",
+    "reject": "Reject",
+    "waiting": "Waiting for a manager or owner",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "decisionLine": "{name}: {note}",
+    "failed": "That did not work. Try again."
   }
 }
