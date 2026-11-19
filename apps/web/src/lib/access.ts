@@ -34,6 +34,7 @@ const moduleRules: Record<string, readonly string[] | null> = {
   home: null,
   settings: null,
   sales: [Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL, Permission.SALES_COLLECT, Permission.SALES_RELEASE],
+  jobs: [Permission.SALES_CREATE, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL],
   stock: [Permission.STOCK_READ],
   customers: [Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP],
   debtors: [Permission.DEBTORS_READ],

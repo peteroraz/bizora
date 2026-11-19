@@ -33,6 +33,7 @@ export type LedgerRole =
   | "cash_over_short"
   | "transfers_waiting"
   | "transfers_lost"
+  | "jobs_in_progress"
   | "fx";
 
 export type AccountTemplate = { code: string; name: string; type: LedgerAccountType; role: LedgerRole };
@@ -52,6 +53,8 @@ const base: AccountTemplate[] = [
   { code: "1160", name: "Transfers waiting for confirmation", type: "asset", role: "transfers_waiting" },
   { code: "1190", name: "Money moving between own accounts", type: "asset", role: "transfer_clearing" },
   { code: "1200", name: "Customers who owe", type: "asset", role: "debtors" },
+  // Parts and helpers' pay on jobs not yet finished (ADR-035); moved to cost of sales when the job is billed.
+  { code: "1350", name: "Jobs in progress", type: "asset", role: "jobs_in_progress" },
   { code: "2000", name: "Suppliers we owe", type: "liability", role: "payable" },
   { code: "2100", name: "Customer advance payments", type: "liability", role: "customer_deposits" },
   { code: "3000", name: "Owner's money put in", type: "equity", role: "capital" },
@@ -79,6 +82,8 @@ const base: AccountTemplate[] = [
 const goods: AccountTemplate[] = [
   { code: "1300", name: "Stock", type: "asset", role: "stock" },
   { code: "4000", name: "Sales", type: "income", role: "sales" },
+  // Work done and things not in the products (ADR-035).
+  { code: "4050", name: "Service income", type: "income", role: "service_income" },
   { code: "5000", name: "Cost of goods sold", type: "expense", role: "cogs" },
   { code: "5100", name: "Stock lost or damaged", type: "expense", role: "stock_loss" },
   { code: "6800", name: "Packaging", type: "expense", role: "expense" },
@@ -96,6 +101,10 @@ const extras: Record<BusinessType, AccountTemplate[]> = {
   services: [
     { code: "4000", name: "Service income", type: "income", role: "service_income" },
     { code: "5050", name: "Materials used", type: "expense", role: "materials" },
+    // Parts kept for jobs (ADR-035).
+    { code: "1300", name: "Parts and materials in stock", type: "asset", role: "stock" },
+    { code: "5000", name: "Cost of parts and materials", type: "expense", role: "cogs" },
+    { code: "5100", name: "Stock lost or damaged", type: "expense", role: "stock_loss" },
   ],
   other: [],
 };

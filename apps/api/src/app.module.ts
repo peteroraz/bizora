@@ -22,6 +22,7 @@ import { DebtorsModule } from "./modules/debtors/debtors.module.js";
 import { MoneyModule } from "./modules/money/money.module.js";
 import { ShopsModule } from "./modules/shops/shops.module.js";
 import { WorkRulesModule } from "./modules/work-rules/work-rules.module.js";
+import { JobsModule } from "./modules/jobs/jobs.module.js";
 import { SupplierModule } from "./modules/suppliers/supplier.module.js";
 import { BrandingModule } from "./modules/branding/branding.module.js";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module.js";
@@ -73,6 +74,7 @@ export class AppModule {
         MoneyModule,
         ShopsModule,
         WorkRulesModule,
+        JobsModule,
         SupplierModule,
         ReconciliationModule,
     BrandingModule,

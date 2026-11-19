@@ -1,6 +1,8 @@
 export const primaryNav = [
   { id: "home", href: "/app", icon: "home", enabled: true },
   { id: "sales", href: "/app/sales", icon: "sales", enabled: true },
+  // Work done for customers (ADR-035): shown when the business uses jobs.
+  { id: "jobs", href: "/app/jobs", icon: "jobs", enabled: true },
   { id: "stock", href: "/app/stock", icon: "stock", enabled: true },
   { id: "customers", href: "/app/customers", icon: "customers", enabled: true },
   { id: "debtors", href: "/app/debtors", icon: "debtors", enabled: true },
@@ -19,16 +21,16 @@ export const bottomNav = ["home", "sales", "stock", "debtors"] as const;
  * Store keepers get Stock, cashiers get Debtors, accountants get Money.
  */
 const BOTTOM_BY_ROLE: Record<string, readonly NavId[]> = {
-  OWNER: ["home", "sales", "stock", "debtors", "customers"],
-  ADMINISTRATOR: ["home", "sales", "stock", "debtors", "customers"],
-  MANAGER: ["home", "sales", "stock", "debtors", "customers"],
-  CASHIER: ["home", "sales", "debtors", "customers", "stock"],
+  OWNER: ["home", "jobs", "sales", "stock", "debtors", "customers"],
+  ADMINISTRATOR: ["home", "jobs", "sales", "stock", "debtors", "customers"],
+  MANAGER: ["home", "jobs", "sales", "stock", "debtors", "customers"],
+  CASHIER: ["home", "jobs", "sales", "debtors", "customers", "stock"],
   INVENTORY: ["home", "stock", "sales", "customers"],
-  SALES: ["home", "sales", "customers", "stock"],
+  SALES: ["home", "jobs", "sales", "customers", "stock"],
   ACCOUNTANT: ["home", "money", "debtors", "sales", "stock"],
   AUDITOR: ["home", "sales", "money", "stock"],
 };
-const BOTTOM_DEFAULT: readonly NavId[] = ["home", "sales", "stock", "debtors", "customers"];
+const BOTTOM_DEFAULT: readonly NavId[] = ["home", "jobs", "sales", "stock", "debtors", "customers"];
 
 export function bottomItemsFor<T extends { id: NavId }>(role: string | null | undefined, items: readonly T[]) {
   const order = BOTTOM_BY_ROLE[role ?? ""] ?? BOTTOM_DEFAULT;

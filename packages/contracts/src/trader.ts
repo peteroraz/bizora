@@ -21,6 +21,7 @@ export type StaffCountBand = z.infer<typeof staffCountBandSchema>;
 export const traderModuleSchema = z.enum([
   "home",
   "sales",
+  "jobs",
   "stock",
   "customers",
   "debtors",
@@ -34,6 +35,7 @@ export type TraderModule = z.infer<typeof traderModuleSchema>;
 export const TRADER_MODULES: TraderModule[] = [
   "home",
   "sales",
+  "jobs",
   "stock",
   "customers",
   "debtors",
@@ -88,6 +90,8 @@ export function deriveTraderSetup(input: {
     if (ALWAYS_VISIBLE_MODULES.includes(module)) return true;
     if (requested) return requested.has(module);
     if (module === "stock" && input.businessType === "services") return false;
+    // Jobs (ADR-035) are for work done for customers; other businesses can turn them on in settings.
+    if (module === "jobs" && input.businessType !== "services") return false;
     if (module === "staff" && !staffFeatures) return false;
     return true;
   });

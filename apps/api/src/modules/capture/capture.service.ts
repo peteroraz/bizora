@@ -23,6 +23,7 @@ const TARGET_PERMISSION: Record<CaptureTarget, string> = {
   stock_count: Permission.STOCK_COUNT,
   stock_change: Permission.STOCK_COUNT,
   stock_move: Permission.STOCK_TRANSFER,
+  job: Permission.SALES_CREATE,
 };
 
 const TIMEOUT_MS = 90_000;

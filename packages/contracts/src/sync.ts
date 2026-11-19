@@ -47,6 +47,7 @@ export const DOCUMENT_PREFIXES = {
   expense: "EXP",
   sale_return: "RET",
   supplier_return: "SR",
+  job: "JOB",
 } as const;
 export type DocumentType = keyof typeof DOCUMENT_PREFIXES;
 

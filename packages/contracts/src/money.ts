@@ -83,6 +83,9 @@ export const CASH_FLOW_KINDS = [
   "stock_bought",
   "suppliers",
   "counts",
+  // Jobs (ADR-035): deposits taken before a job is finished, and helpers paid for a job.
+  "deposits",
+  "job_costs",
   "other",
 ] as const;
 export type CashFlowKind = (typeof CASH_FLOW_KINDS)[number];

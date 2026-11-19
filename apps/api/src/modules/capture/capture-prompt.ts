@@ -67,6 +67,24 @@ const FIELD_GUIDE: Record<CaptureTarget, Record<string, string>> = {
     unit: "Unit (carton, bag, piece, …), if said.",
     note: "What happened, in the speaker's words, short (for example: 'rain entered the store'). Always fill this.",
   },
+  job: {
+    kind: "One of: work (the service done: labour, workmanship, sewing, wiring, servicing, a call-out fee), part (taken from the shop's own stock), bought (bought outside for this job, said with what it cost), helper (money paid to someone who helped, not charged to the customer), payment (money the customer paid or deposited).",
+    description: "What was done, used, bought or paid, in short plain words (for example 'Brake pad replacement', 'Engine oil 4 litres', 'Vulcaniser'). Use the exact name from the product list when it is clearly the same product. For a payment: 'Deposit' or 'Payment'.",
+    quantity: "How many, if said (default 1).",
+    unit: "Unit for parts (piece, litre, set, pair, metre, yard, kg, …), if said. For a gallon, jerrycan or other container, use piece and keep the container in the description (for example 'Engine oil (1 gallon)').",
+    price: "What the CUSTOMER is charged for this line in total, digits only. For a payment row: the amount paid. Empty for helper rows. For bought parts with no charge said, leave empty.",
+    cost: "What the BUSINESS paid, digits only: for bought parts the total paid for them, for helpers what they were paid. Empty otherwise.",
+    paidFrom: "For bought parts and helpers: cash, bank or owed ('on credit', 'we will pay him later' mean owed). For payment rows: cash, transfer or pos.",
+    supplier: "Where a part was bought or who the helper is, if said.",
+    customer: "First row only: the customer's name (for example 'Mr Okeke').",
+    phone: "First row only: the customer's phone number, if said.",
+    title: "First row only: what is being worked on, short (for example 'Toyota Camry, LND 123 AB', 'Wedding agbada', 'Kitchen sink').",
+    problem: "First row only: the problem or what the customer asked for, short.",
+    day: "First row only: the day the work came in or was done, as DD/MM/YYYY. Turn 'today', 'yesterday', 'Monday' into a date using today's date. Empty if not said.",
+    promised: "First row only: when the customer was told it would be ready, as DD/MM/YYYY, if said.",
+    finished: "First row only: yes if the job is finished and handed over, no if it is still going on. Empty if not said.",
+    summary: "First row only: two or three plain sentences in your own words saying what was done for whom, what it comes to and what was paid or is still owed.",
+  },
   stock_move: {
     product: "Product moved (use the exact name from the product list when it is clearly the same product).",
     quantity: "How many.",
@@ -85,6 +103,7 @@ const PURPOSE: Record<CaptureTarget, string> = {
   stock_count: "a stock count (a count sheet or a spoken list of how many of each product are in the shop)",
   stock_change: "goods taken off or added to stock by hand (damaged, expired, missing, used in the shop, found), spoken or written",
   stock_move: "goods moved from this shop to another shop of the same business, spoken or written",
+  job: "ONE job done or being done for a customer (a mechanic, tailor, electrician, plumber or any service), usually spoken: the customer, the work, parts used or bought, helpers paid and money paid by the customer (one row per item)",
 };
 
 /**
