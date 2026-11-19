@@ -94,7 +94,7 @@ function isActive(href: string, pathname: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppShell({ profile, children }: { profile: ShellProfile; children: React.ReactNode }) {
+export function AppShell({ profile, children, banner }: { profile: ShellProfile; children: React.ReactNode; banner?: React.ReactNode }) {
   const t = useTranslations("shell");
   const nav = useTranslations("nav");
   const roles = useTranslations("roles");
@@ -511,6 +511,7 @@ export function AppShell({ profile, children }: { profile: ShellProfile; childre
           </div>
         ) : null}
         {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email && pathname === "/app" ? <EmailVerificationBanner /> : null}
+        {banner}
         <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">
           <AccessProvider value={access}>{children}</AccessProvider>
         </main>

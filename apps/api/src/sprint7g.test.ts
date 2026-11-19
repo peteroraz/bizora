@@ -143,9 +143,9 @@ describe("sprint 7g: no plan limits, AI reads per shop, product photos, voice fo
     expect((await client.query("SELECT 1 FROM sales WHERE tenant_id = $1", [organizationId])).rows).toHaveLength(0);
     expect((await request(http).get("/api/v1/captures/status").set(auth(sales)).expect(200)).body.data.targets).toContain("cart");
     const storeTargets = (await request(http).get("/api/v1/captures/status").set(auth(store)).expect(200)).body.data.targets as string[];
-    expect(storeTargets).toEqual(expect.arrayContaining(["stock_in", "stock_count", "stock_move"]));
+    // The store keeper's stock changes are read too; they wait for a manager (ADR-034).
+    expect(storeTargets).toEqual(expect.arrayContaining(["stock_in", "stock_count", "stock_change", "stock_move"]));
     expect(storeTargets).not.toContain("cart");
-    expect(storeTargets).not.toContain("stock_change");
     await request(http).post("/api/v1/captures").set(auth(store)).send({ target: "cart", files: [{ mimeType: "audio/webm", data: VOICE }] }).expect(403);
     owner = await inShop(inMarket, mainId);
   });
@@ -225,9 +225,10 @@ describe("sprint 7g: no plan limits, AI reads per shop, product photos, voice fo
     expect(movements.body.data.items.slice(0, 2)).toEqual(
       expect.arrayContaining([expect.objectContaining({ reason: "damaged", note: "Rain came in" }), expect.objectContaining({ reason: "found", note: "Behind the fridge" })]),
     );
-    // The store keeper cannot take goods off by list either.
+    // The store keeper's list is checked the same way, and waits for a manager or owner (ADR-034).
     const store = (await request(http).post("/api/v1/auth/login").send({ email: "inventory@voice.test", password }).expect(201)).body.data.accessToken as string;
-    await request(http).post("/api/v1/imports/stock-change").set(auth(store)).send({ rows }).expect(403);
+    const asked = await request(http).post("/api/v1/imports/stock-change").set(auth(store)).send({ rows }).expect(200);
+    expect(asked.body.data).toMatchObject({ waiting: true, totals: { create: 2, error: 0 } });
   });
 
   it("saves a spoken count: the owner's applies at once, the store keeper's waits for approval", async () => {

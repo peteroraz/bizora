@@ -167,21 +167,31 @@ describe("sprint 7d: returns from customers and to suppliers", () => {
   });
 
   it("sends goods back to a supplier, off what is owed or for money back", async () => {
-    await request(http)
-      .post("/api/v1/stock/receive")
-      .set(auth(storekeeper))
-      .send({ productId: riceId, quantity: "4", unit: "piece", totalCostMinor: "1200000", paidFrom: "credit", supplier: "Olam Rice" })
-      .expect(201);
+    // A storekeeper's delivery and return wait for a manager to approve them (ADR-034).
+    const approve = async (asked: request.Response) => {
+      expect(asked.body.data.waiting).toBe(true);
+      return request(http).post(`/api/v1/stock/requests/${asked.body.data.request.id}/approve`).set(auth(manager)).send({}).expect(200);
+    };
+    await approve(
+      await request(http)
+        .post("/api/v1/stock/receive")
+        .set(auth(storekeeper))
+        .send({ productId: riceId, quantity: "4", unit: "piece", totalCostMinor: "1200000", paidFrom: "credit", supplier: "Olam Rice" })
+        .expect(201),
+    );
     const names = await request(http).get("/api/v1/suppliers/names").set(auth(storekeeper)).expect(200);
     const olamId = names.body.data.items[0].id as string;
     // A storekeeper may only take it off what is owed.
     await request(http).post("/api/v1/stock/return-to-supplier").set(auth(storekeeper)).send({ productId: riceId, supplierId: olamId, quantity: "1", unit: "piece", settle: "cash" }).expect(403);
-    const sent = await request(http)
+    const asked = await request(http)
       .post("/api/v1/stock/return-to-supplier")
       .set(auth(storekeeper))
       .send({ id: uuidv7(), productId: riceId, supplierId: olamId, quantity: "1", unit: "piece", note: "Wet bag" })
       .expect(201);
-    expect(sent.body.data.documentNumber).toBe("SR-000001");
+    expect(asked.body.data.request.summary).toBe("Send 1 piece of Rice 5kg back to Olam Rice, off what we owe: Wet bag");
+    await approve(asked);
+    const document = await client.query<{ document_number: string }>("SELECT document_number FROM stock_movements WHERE id = $1", [asked.body.data.request.id]);
+    expect(document.rows[0]?.document_number).toBe("SR-000001");
     const olam = await request(http).get(`/api/v1/suppliers/${olamId}`).set(auth(owner)).expect(200);
     expect(olam.body.data.owedMinor).toBe("900000");
     expect(olam.body.data.entries[0]).toMatchObject({ kind: "return", amountMinor: "300000", product: "Rice 5kg", canCancel: false });

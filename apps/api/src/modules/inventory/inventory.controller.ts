@@ -4,10 +4,11 @@ import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
-import { RequirePermissions } from "../rbac/permissions.js";
+import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
+import { StockRequestService } from "./stock-request.service.js";
 import { StockService } from "./stock.service.js";
 
 @Controller("api/v1")
@@ -17,7 +18,30 @@ export class InventoryController {
     @Inject(ProductService) private readonly products: ProductService,
     @Inject(StockService) private readonly stock: StockService,
     @Inject(ProductPhotoService) private readonly photos: ProductPhotoService,
+    @Inject(StockRequestService) private readonly requests: StockRequestService,
   ) {}
+
+  /** Stock changes waiting for a manager or owner (ADR-034). */
+  @Get("stock/requests")
+  @RequireAnyPermission(Permission.STOCK_ADJUST, Permission.STOCK_RECEIVE, Permission.STOCK_COUNT, Permission.STOCK_TRANSFER)
+  async listRequests(@CurrentTenant() tenant: TenantContext) {
+    return success(await this.requests.list(tenant), tenant.correlationId);
+  }
+
+  @Post("stock/requests/:id/approve")
+  @HttpCode(200)
+  @RequirePermissions(Permission.STOCK_ADJUST)
+  @Idempotent()
+  async approveRequest(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success({ request: await this.requests.approve(tenant, id, body) }, tenant.correlationId);
+  }
+
+  @Post("stock/requests/:id/reject")
+  @HttpCode(200)
+  @RequirePermissions(Permission.STOCK_ADJUST)
+  async rejectRequest(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success({ request: await this.requests.reject(tenant, id, body) }, tenant.correlationId);
+  }
 
   /** Product photos (ADR-033): up to 5 a product. */
   @Get("products/:id/photos")
@@ -144,7 +168,8 @@ export class InventoryController {
   }
 
   @Post("stock/adjust")
-  @RequirePermissions(Permission.STOCK_ADJUST)
+  // A store keeper (stock.count) asks; it waits for a manager or owner (ADR-034).
+  @RequireAnyPermission(Permission.STOCK_ADJUST, Permission.STOCK_COUNT)
   @Idempotent()
   async adjust(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     return success(await this.stock.adjust(tenant, body), tenant.correlationId);

@@ -129,3 +129,18 @@ export {
   type TransferKind,
   type TransferNotReceivedInput,
 } from "./transfers.js";
+export {
+  STOCK_REQUEST_KINDS,
+  WEEKDAYS,
+  WORK_PERMIT_MAX_HOURS,
+  dayHoursSchema,
+  hoursToday,
+  isOpenAt,
+  openingHoursSchema,
+  setOpeningHoursSchema,
+  shopLockSchema,
+  stockRequestDecisionSchema,
+  stockRequestRejectSchema,
+  workPermitSchema,
+} from "./work-rules.js";
+export type { DayHours, OpeningHours, StockRequestKind, Weekday } from "./work-rules.js";

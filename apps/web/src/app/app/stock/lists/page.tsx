@@ -32,7 +32,7 @@ function ListsScreen() {
   const t = useTranslations("stockLists");
   const access = useAccess();
   const kinds = (["count", "change", "move"] as const).filter((kind) =>
-    kind === "count" ? can(access, Permission.STOCK_COUNT) : kind === "change" ? can(access, Permission.STOCK_ADJUST) : can(access, Permission.STOCK_TRANSFER),
+    kind === "count" ? can(access, Permission.STOCK_COUNT) : kind === "change" ? can(access, Permission.STOCK_ADJUST, Permission.STOCK_COUNT) : can(access, Permission.STOCK_TRANSFER),
   );
   const [kind, setKind] = useState<Kind>(kinds[0] ?? "count");
   const label = (field: string) => t(`columns.${field}`);

@@ -21,7 +21,7 @@ const TARGET_PERMISSION: Record<CaptureTarget, string> = {
   statement: Permission.BANK_RECONCILE,
   cart: Permission.SALES_CREATE,
   stock_count: Permission.STOCK_COUNT,
-  stock_change: Permission.STOCK_ADJUST,
+  stock_change: Permission.STOCK_COUNT,
   stock_move: Permission.STOCK_TRANSFER,
 };
 

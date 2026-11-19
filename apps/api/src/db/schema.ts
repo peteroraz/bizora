@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { OpeningHours } from "@bizora/contracts";
 import { bigint, boolean, char, check, customType, date, foreignKey, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
@@ -176,6 +177,8 @@ export const businesses = pgTable(
       .array()
       .notNull()
       .default(sql`ARRAY['home','sales','stock','customers','debtors','money','staff','reports','settings']::text[]`),
+    /** Opening hours per weekday (ADR-034); null means staff can work at any time. */
+    openingHours: jsonb("opening_hours").$type<OpeningHours | null>(),
     ...timestamps,
   },
   (table) => [
@@ -203,6 +206,10 @@ export const branches = pgTable(
     closedBy: uuid("closed_by"),
     closedReason: varchar("closed_reason", { length: 240 }),
     movedIntoBranchId: uuid("moved_into_branch_id"),
+    // The owner's lock (ADR-034): staff cannot change anything in this shop until it is unlocked.
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedBy: uuid("locked_by"),
+    lockNote: varchar("lock_note", { length: 240 }),
     ...timestamps,
   },
   (table) => [
@@ -1518,4 +1525,47 @@ export const saleReturnLines = pgTable(
     index("sale_return_lines_line_idx").on(table.tenantId, table.saleLineId),
     foreignKey({ name: "sale_return_lines_return_fk", columns: [table.tenantId, table.returnId], foreignColumns: [saleReturns.tenantId, saleReturns.id] }),
   ],
+);
+
+/** Owner's permission for one person to work outside the opening hours until a set time (ADR-034). */
+export const workPermits = pgTable(
+  "work_permits",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    note: varchar("note", { length: 240 }),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by"),
+  },
+  (table) => [index("work_permits_membership_idx").on(table.tenantId, table.membershipId, table.endsAt)],
+);
+
+/** A store keeper's stock change waiting for a manager or owner to approve and complete it (ADR-034). */
+export const stockRequests = pgTable(
+  "stock_requests",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    kind: varchar("kind", { length: 16 }).$type<"receive" | "adjust" | "transfer" | "supplier_return">().notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    summary: varchar("summary", { length: 400 }).notNull(),
+    status: varchar("status", { length: 16 }).$type<"pending" | "approved" | "rejected">().notNull().default("pending"),
+    requestedBy: uuid("requested_by").notNull(),
+    requestedMembershipId: uuid("requested_membership_id").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedBy: uuid("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNote: varchar("decision_note", { length: 240 }),
+    resultMovementId: uuid("result_movement_id"),
+  },
+  (table) => [index("stock_requests_status_idx").on(table.tenantId, table.businessId, table.status, table.requestedAt)],
 );

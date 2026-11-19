@@ -15,6 +15,7 @@ import { readCatalog, searchCatalog } from "../../../lib/offline/catalog";
 import { isNetworkFailure } from "../../../lib/offline/sync";
 import { type ProductView, refreshOfflineCatalog } from "../../../lib/stock-client";
 import { ActionLink } from "../../../components/action-link";
+import { StockRequests } from "../../../components/stock-requests";
 
 type PendingCount = {
   id: string;
@@ -215,6 +216,7 @@ function StockScreen() {
           </p>
         </Card>
       ) : null}
+      <StockRequests onDecided={() => void load(query, page)} />
       {counts.length > 0 ? (
         <Card>
           <p className="text-sm font-medium">{t("pendingTitle")}</p>
