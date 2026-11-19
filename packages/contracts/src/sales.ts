@@ -183,3 +183,18 @@ export const stockInImportSchema = z.object({
     .min(1)
     .max(5000),
 });
+
+const stockRows = <F extends string>(fields: readonly F[]) =>
+  z.object({
+    dryRun: z.boolean().default(true),
+    source: z.enum(IMPORT_SOURCES).default("file"),
+    rows: z
+      .array(z.object(Object.fromEntries(fields.map((field) => [field, importCell])) as Record<F, typeof importCell>))
+      .min(1)
+      .max(5000),
+  });
+
+/** Spoken, photographed or file lists of stock counts, changes and moves (ADR-033). */
+export const stockCountImportSchema = stockRows(["product", "counted", "unit", "note"] as const);
+export const stockChangeImportSchema = stockRows(["product", "change", "reason", "quantity", "unit", "note"] as const);
+export const stockMoveImportSchema = stockRows(["product", "quantity", "unit", "toShop", "note"] as const);

@@ -27,6 +27,13 @@ export class FakeCaptureModel implements CaptureModel {
         { date: today, description: "POS SETTLEMENT MONIEPOINT", reference: "S0002", moneyIn: "25000", moneyOut: "" },
       ],
       stock_in: [{ product: first, quantity: "2", unit: "", cost: "", supplier: "Dangote Distributors", paid: "owed", ref: "DN-114" }],
+      cart: [
+        { product: first, quantity: "2", unit: "", price: "", payment: "cash", paid: "", customer: "" },
+        { product: echo || "Unknown thing", quantity: "1" },
+      ],
+      stock_count: [{ product: first, counted: "9", unit: "", note: "Shelf count" }],
+      stock_change: [{ product: first, change: "remove", reason: "damaged", quantity: "1", unit: "", note: echo || "Tin was dented" }],
+      stock_move: [{ product: first, quantity: "1", unit: "", toShop: "Market shop", note: "" }],
     };
     return {
       rows: rows[request.target],

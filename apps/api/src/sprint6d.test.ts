@@ -200,15 +200,16 @@ describe("sprint 6d: screens that tell the truth", () => {
     expect(plain.status).toBe(400);
   });
 
-  it("gives Starter shops a small daily taste of photo and voice reading", async () => {
+  it("gives every shop the same daily photo and voice reads while limits are off", async () => {
     const http = app.getHttpServer();
     await client.query("UPDATE organization_plans SET plan_code = 'starter' WHERE tenant_id = $1", [b.tenantId]);
+    // Every plan reads 100 a shop a day for now (ADR-033), never above the server's own limit (50 in this test).
     const starter = await request(http).get("/api/v1/captures/status").set(auth(b.token)).expect(200);
-    expect(starter.body.data).toMatchObject({ enabled: true, limit: 10, remainingToday: 10 });
+    expect(starter.body.data).toMatchObject({ enabled: true, limit: 50, remainingToday: 50 });
     const business = await request(http).get("/api/v1/captures/status").set(auth(a.token)).expect(200);
     expect(business.body.data.limit).toBe(50);
     const plan = await request(http).get("/api/v1/plan").set(auth(b.token)).expect(200);
-    expect(plan.body.data.limits).toMatchObject({ max_staff: 2, ai_daily_reads: 10, features: { ai: true } });
+    expect(plan.body.data.limits).toMatchObject({ max_staff: 10000, ai_daily_reads: 100, features: { ai: true } });
   });
 });
 

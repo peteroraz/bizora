@@ -56,6 +56,7 @@ function StockScreen() {
   const canAdd = can(access, Permission.PRODUCTS_MANAGE);
   const canReceive = can(access, Permission.STOCK_RECEIVE);
   const canApprove = can(access, Permission.STOCK_ADJUST);
+  const canLists = can(access, Permission.STOCK_COUNT, Permission.STOCK_ADJUST, Permission.STOCK_TRANSFER);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -161,8 +162,9 @@ function StockScreen() {
         title={t("title")}
         intro={t("description")}
         actions={
-          canAdd || canReceive ? (
+          canAdd || canReceive || canLists ? (
             <>
+              {canLists ? <ActionLink href="/app/stock/lists">{t("lists")}</ActionLink> : null}
               {canReceive ? (
                 <ActionLink href="/app/stock/receive" variant={canAdd ? "outline" : "primary"}>
                   {t("delivery")}
@@ -297,7 +299,8 @@ function StockScreen() {
           {items.map((product) => (
             <li key={product.id}>
               <Link href={`/app/stock/${product.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="min-w-0">
+                {product.photoUrl ? <img src={product.photoUrl} alt="" className="h-11 w-11 shrink-0 rounded-md border border-border object-cover" loading="lazy" /> : null}
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{product.name}</span>
                   <span className="block text-sm text-muted">
                     {product.priceMinor

@@ -35,7 +35,7 @@ test("a delivery photo and a spoken sales list become rows to check, and are sav
   await page.goto("/app/stock");
   await page.getByRole("link", { name: "Record a delivery" }).click();
   await expect(page.getByText("Snap the invoice or say what arrived")).toBeVisible();
-  await page.locator('input[accept="image/*,application/pdf"]').setInputFiles({ name: "delivery.png", mimeType: "image/png", buffer: PNG });
+  await page.locator('input[accept="image/*,application/pdf,audio/*"]').setInputFiles({ name: "delivery.png", mimeType: "image/png", buffer: PNG });
   await expect(page.getByText("1 row was read from your photo or voice note.")).toBeVisible();
   await expect(page.getByLabel("Supplier, row 1")).toHaveValue("Dangote Distributors");
   expect(await stock()).toBe("96000");

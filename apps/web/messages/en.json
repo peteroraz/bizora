@@ -1030,7 +1030,9 @@
     "changeKinds": {
       "product_updated": "Product changed",
       "product_archived": "Removed from the list",
-      "stock_count_rejected": "Count rejected"
+      "stock_count_rejected": "Count rejected",
+      "product_photo_added": "Photo added",
+      "product_photo_removed": "Photo removed"
     },
     "changeFields": {
       "name": "Name",
@@ -1050,7 +1052,24 @@
     "rejectNeedsReason": "Say why you are rejecting this count.",
     "countNoteLine": "Their note: {note}",
     "decisionNote": "Your note",
-    "decisionNoteHint": "Optional to approve; needed to reject."
+    "decisionNoteHint": "Optional to approve; needed to reject.",
+    "photos": {
+      "title": "Photos",
+      "count": "{count} of {max}",
+      "add": "Add photo",
+      "adding": "Adding…",
+      "main": "Main",
+      "open": "Open photo {number} of {name}",
+      "alt": "{name}, photo {number}",
+      "makeMain": "Make this the main photo",
+      "remove": "Remove photo",
+      "close": "Close",
+      "full": "This product has {max} photos. Remove one to add another.",
+      "unreadable": "That picture could not be read. Try a JPEG or PNG photo.",
+      "failed": "That did not work. Try again.",
+      "needsNetwork": "Adding photos needs the internet. Connect and try again."
+    },
+    "lists": "Say or snap stock"
   },
   "sales": {
     "title": "Sales",
@@ -1302,7 +1321,13 @@
       "lost": "Never came: written off",
       "owed": "Never came: customer owes it"
     },
-    "copyFailed": "Could not copy here. Open View as customer and copy the page address."
+    "copyFailed": "Could not copy here. Open View as customer and copy the page address.",
+    "voice": {
+      "open": "Say it",
+      "heard": "Heard: “{words}”",
+      "unmatched": "Not found in your products: {names}. Add them by searching.",
+      "customer": "Customer said: {name}. Choose them under More if needed."
+    }
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -1443,14 +1468,18 @@
     "title": {
       "products": "Snap your price list or stock book",
       "sales": "Snap your sales book or say your sales",
-      "stock_in": "Snap the invoice or say what arrived"
+      "stock_in": "Snap the invoice or say what arrived",
+      "cart": "Say the sale, or snap a written order",
+      "stock_count": "Snap the count sheet or say what you counted",
+      "stock_change": "Say what was damaged, missing, used or found",
+      "stock_move": "Say what you moved to another shop"
     },
-    "lead": "Take a clear photo, choose a scan or PDF, or record a voice note in English, Pidgin, Yoruba, Igbo or Hausa. The rows appear in the table below for you to check.",
-    "photo": "Photo or scan",
+    "lead": "Take a clear photo, choose a scan, PDF or a voice note from WhatsApp, or record one now in English or your own language. The rows appear below for you to check.",
+    "photo": "Photo, scan or voice note",
     "voice": "Record voice note",
     "stop": "Stop ({seconds}s)",
     "remaining": "{count, plural, one {# read left today} other {# reads left today}}",
-    "noteLabel": "Anything to add? (optional, e.g. \"these are yesterday's sales\")",
+    "noteLabel": "Anything to add? (optional, for example “this was yesterday”)",
     "reading": "Reading… this can take up to a minute.",
     "failed": "That could not be read. Try a clearer photo, or type the rows.",
     "nothingRead": "No rows could be read. Try a clearer, closer photo in good light.",
@@ -1929,5 +1958,34 @@
     "updated": "Saved.",
     "searchButton": "Search",
     "kind_return": "Goods sent back"
+  },
+  "stockLists": {
+    "title": "Say or snap stock",
+    "lead": "Count, take off, add or move many goods at once. Say it, forward a voice note, snap a sheet or upload a file, then check the rows before saving.",
+    "back": "Back to stock",
+    "which": "What are you recording?",
+    "kinds": {
+      "count": "Count",
+      "change": "Damaged, missing or found",
+      "move": "Move to another shop"
+    },
+    "explain": {
+      "count": "Say what is on the shelf, for example “Indomie twelve cartons, rice four bags”. Differences are sent for approval if you cannot approve them yourself.",
+      "change": "Say what happened, for example “two cartons of Indomie got wet”. Every row needs a short note, and nothing can take a shelf below zero.",
+      "move": "Say what you moved and to which shop, for example “five bags of rice to the market shop”. Goods leave this shop now and arrive in the other."
+    },
+    "columns": {
+      "product": "Product",
+      "counted": "Counted",
+      "unit": "Unit",
+      "note": "Note",
+      "change": "Take off or add",
+      "reason": "Why",
+      "quantity": "How many",
+      "toShop": "To shop"
+    },
+    "exampleProduct": "Indomie Chicken 70g",
+    "exampleNote": "Got wet in the store",
+    "exampleShop": "Market shop"
   }
 }

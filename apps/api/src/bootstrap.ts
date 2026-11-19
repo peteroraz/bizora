@@ -18,6 +18,7 @@ export const CAPTURE_BODY_LIMIT = "24mb";
 // A logo is at most 512 KB, sent as base64 (ADR-021).
 export const LOGO_PATH = "/api/v1/organizations/current/logo";
 export const LOGO_BODY_LIMIT = "800kb";
+export const PRODUCT_PHOTO_PATH = /^\/api\/v1\/products\/[^/]+\/photos$/;
 
 export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
   const app = await NestFactory.create(AppModule.register({ env, db, logger }), {
@@ -33,6 +34,8 @@ export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
   app.use(IMPORTS_PATH, json({ limit: CUSTOMER_IMPORT_BODY_LIMIT }));
   app.use(CAPTURES_PATH, json({ limit: CAPTURE_BODY_LIMIT }));
   app.use(LOGO_PATH, json({ limit: LOGO_BODY_LIMIT }));
+  // Product photos (ADR-033) are shrunk on the phone; at most 600 KB each.
+  app.use(PRODUCT_PHOTO_PATH, json({ limit: LOGO_BODY_LIMIT }));
   app.use(json({ limit: DEFAULT_BODY_LIMIT }));
   app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
   app.use(cookieParser());

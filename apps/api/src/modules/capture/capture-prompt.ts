@@ -44,6 +44,36 @@ const FIELD_GUIDE: Record<CaptureTarget, Record<string, string>> = {
     paid: "One of: owed, cash, bank. Empty or 'credit' means owed to the supplier.",
     ref: "Supplier invoice, delivery note or waybill number, if written.",
   },
+  cart: {
+    product: "What the customer is buying now (use the exact name from the product list when it is clearly the same product).",
+    quantity: "How many.",
+    unit: "Unit (carton, bag, piece, tin, …), if said.",
+    price: "Price for one unit, digits only, ONLY if a price was said; else empty (the shop's own price is used).",
+    payment: "How the customer pays, on the first row only: cash, transfer, pos or credit. 'Owing' or 'will pay later' mean credit. Empty if not said.",
+    paid: "Amount the customer paid, digits only, on the first row only, if said.",
+    customer: "Customer name, on the first row only, if said.",
+  },
+  stock_count: {
+    product: "Product counted (use the exact name from the product list when it is clearly the same product).",
+    counted: "How many were counted on the shelf and in the store. 0 if 'none' or 'finished'.",
+    unit: "Unit counted in (carton, bag, piece, …), if said.",
+    note: "Anything said about the count (where, who counted), else empty.",
+  },
+  stock_change: {
+    product: "Product (use the exact name from the product list when it is clearly the same product).",
+    change: "remove if goods were lost, damaged, expired, missing, used or given away; add if goods were found or a count was too low.",
+    reason: "One of: damaged, expired, missing, own_use, gift, other (for remove); found, correction (for add). 'Spoilt', 'broken', 'wet', 'rats' mean damaged; 'stolen', 'can't find' mean missing; 'we used it' means own_use.",
+    quantity: "How many.",
+    unit: "Unit (carton, bag, piece, …), if said.",
+    note: "What happened, in the speaker's words, short (for example: 'rain entered the store'). Always fill this.",
+  },
+  stock_move: {
+    product: "Product moved (use the exact name from the product list when it is clearly the same product).",
+    quantity: "How many.",
+    unit: "Unit (carton, bag, piece, …), if said.",
+    toShop: "Name of the shop or branch the goods went to, as said.",
+    note: "Anything else said (who carried it, why), else empty.",
+  },
 };
 
 const PURPOSE: Record<CaptureTarget, string> = {
@@ -51,6 +81,10 @@ const PURPOSE: Record<CaptureTarget, string> = {
   sales: "sales records (a sales book page, receipts or a spoken list of sales)",
   stock_in: "goods received from a supplier (a supplier invoice, delivery note, waybill or a spoken list)",
   statement: "a bank or mobile money account statement (one row per transaction; skip opening and closing balance rows)",
+  cart: "ONE sale being made right now at the counter, usually spoken (one row per item the customer is buying)",
+  stock_count: "a stock count (a count sheet or a spoken list of how many of each product are in the shop)",
+  stock_change: "goods taken off or added to stock by hand (damaged, expired, missing, used in the shop, found), spoken or written",
+  stock_move: "goods moved from this shop to another shop of the same business, spoken or written",
 };
 
 /**

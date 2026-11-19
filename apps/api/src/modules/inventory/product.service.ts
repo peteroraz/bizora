@@ -17,6 +17,7 @@ import { auditEvents, branches, productUnits, products, stockBalances, users } f
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { type ProductRow, type ProductUnitRow, productUnitsFor, requireBusiness, requireProduct, resolveBranch } from "./inventory-scope.js";
+import { mainPhotos } from "./product-photo.service.js";
 import { StockService } from "./stock.service.js";
 
 type BalanceRow = typeof stockBalances.$inferSelect;
@@ -61,6 +62,7 @@ export class ProductService {
       .limit(PRODUCT_PAGE_SIZE)
       .offset((page - 1) * PRODUCT_PAGE_SIZE);
     const units = await productUnitsFor(this.db, tenant.tenantId, rows.map((row) => row.product.id));
+    const photos = await mainPhotos(this.db, tenant.tenantId, rows.map((row) => row.product.id));
     const totals = await this.totals(tenant, filters, branch.id);
     const categories = await this.db
       .selectDistinct({ category: products.category })
@@ -68,7 +70,7 @@ export class ProductService {
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)))
       .orderBy(asc(products.category));
     return {
-      items: rows.map((row) => this.present(tenant, row.product, units.get(row.product.id) ?? [], row.balance)),
+      items: rows.map((row) => ({ ...this.present(tenant, row.product, units.get(row.product.id) ?? [], row.balance), photoUrl: photos.get(row.product.id) ?? null })),
       page,
       pageSize: PRODUCT_PAGE_SIZE,
       total: Number(totalRow?.total ?? 0),
@@ -125,6 +127,7 @@ export class ProductService {
     const current = balances.find((row) => row.balance.branchId === tenant.branchId)?.balance ?? null;
     return {
       ...this.present(tenant, product, units, current),
+      photoUrl: (await mainPhotos(this.db, tenant.tenantId, [product.id])).get(product.id) ?? null,
       currency: business.baseCurrencyCode.trim(),
       shops: balances.map((row) => ({
         branchId: row.balance.branchId,
@@ -235,7 +238,7 @@ export class ProductService {
           eq(auditEvents.tenantId, tenant.tenantId),
           eq(auditEvents.entityType, "product"),
           eq(auditEvents.entityId, id),
-          inArray(auditEvents.action, ["product.updated", "product.archived", "stock.count_rejected"]),
+          inArray(auditEvents.action, ["product.updated", "product.archived", "stock.count_rejected", "product.photo_added", "product.photo_removed"]),
           ...(tenant.membershipBranchId ? [or(isNull(auditEvents.branchId), eq(auditEvents.branchId, tenant.membershipBranchId)) as SQL] : []),
         ),
       )

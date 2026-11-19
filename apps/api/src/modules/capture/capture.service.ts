@@ -6,7 +6,7 @@ import { ApiError } from "../../common/errors.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate } from "../../common/zoned-day.js";
 import type { AppDatabase } from "../../db/database.js";
-import { aiUsage, products } from "../../db/schema.js";
+import { aiUsage, branches, products } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
 import { EntitlementService } from "../entitlements/entitlement.service.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -19,6 +19,10 @@ const TARGET_PERMISSION: Record<CaptureTarget, string> = {
   sales: Permission.SALES_CREATE,
   stock_in: Permission.STOCK_RECEIVE,
   statement: Permission.BANK_RECONCILE,
+  cart: Permission.SALES_CREATE,
+  stock_count: Permission.STOCK_COUNT,
+  stock_change: Permission.STOCK_ADJUST,
+  stock_move: Permission.STOCK_TRANSFER,
 };
 
 const TIMEOUT_MS = 90_000;
@@ -42,16 +46,29 @@ export class CaptureService {
     @Inject(EntitlementService) private readonly entitlements: EntitlementService,
   ) {}
 
-  /** Reads a day: the plan's allowance (Starter 10), never above the server's own limit (6d). */
+  /** Reads a shop a day: the plan's allowance (100 for now, ADR-033), never above the server's own limit. */
   private async limitFor(tenantId: string) {
     const server = this.env.AI_DAILY_CAPTURE_LIMIT ?? 50;
     const plan = (await this.entitlements.plan(tenantId)).limits.ai_daily_reads;
     return plan === undefined ? server : Math.min(plan, server);
   }
 
+  /** Reads are counted against the shop being worked in; in "All shops", the business's first open shop. */
+  private async shopFor(tenant: TenantContext, businessId: string) {
+    if (tenant.membershipBranchId ?? tenant.branchId) return (tenant.membershipBranchId ?? tenant.branchId) as string;
+    const [first] = await this.db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, businessId), isNull(branches.closedAt)))
+      .orderBy(asc(branches.createdAt))
+      .limit(1);
+    if (!first) throw new ApiError("BRANCH_REQUIRED", "Choose a shop first.", 400);
+    return first.id;
+  }
+
   async status(tenant: TenantContext) {
     const business = await requireBusiness(this.db, tenant);
-    const used = await this.used(tenant.tenantId, localDate(new Date(), business.timezone));
+    const used = await this.used(tenant.tenantId, await this.shopFor(tenant, business.id), localDate(new Date(), business.timezone));
     const limit = await this.limitFor(tenant.tenantId);
     return {
       enabled: this.model !== null && limit > 0,
@@ -70,19 +87,20 @@ export class CaptureService {
     if (!this.model || limit === 0) throw new ApiError("AI_OFF", "Reading photos and voice notes is not switched on for this organization.", 503);
     const business = await requireBusiness(this.db, tenant);
     const today = localDate(new Date(), business.timezone);
+    const shopId = await this.shopFor(tenant, business.id);
     const bytes = payload.files.reduce((sum, file) => sum + Math.floor((file.data.length * 3) / 4), 0);
 
     // Count the capture before calling the model, so parallel requests cannot go over the limit.
     const [usage] = await this.db
       .insert(aiUsage)
-      .values({ tenantId: tenant.tenantId, day: today, captures: 1, inputBytes: BigInt(bytes) })
+      .values({ tenantId: tenant.tenantId, branchId: shopId, day: today, captures: 1, inputBytes: BigInt(bytes) })
       .onConflictDoUpdate({
-        target: [aiUsage.tenantId, aiUsage.day],
+        target: [aiUsage.tenantId, aiUsage.branchId, aiUsage.day],
         set: { captures: sql`${aiUsage.captures} + 1`, inputBytes: sql`${aiUsage.inputBytes} + ${bytes}`, updatedAt: new Date() },
         where: sql`${aiUsage.captures} < ${limit}`,
       })
       .returning({ captures: aiUsage.captures });
-    if (!usage) throw new ApiError("AI_LIMIT", `Your organization has used all ${limit} photo and voice reads for today. Try again tomorrow, or type the rows.`, 429);
+    if (!usage) throw new ApiError("AI_LIMIT", `This shop has used all ${limit} photo and voice reads for today. Try again tomorrow, or type the rows.`, 429);
 
     const productNames = (
       await this.db
@@ -122,6 +140,7 @@ export class CaptureService {
       actorType: "AI_AGENT",
       metadata: {
         target: payload.target,
+        branchId: shopId,
         model: this.model.name,
         files: payload.files.map((file) => file.mimeType),
         rows: result.rows.length,
@@ -131,11 +150,11 @@ export class CaptureService {
     return { target: payload.target, ...result, remainingToday: Math.max(0, limit - usage.captures) };
   }
 
-  private async used(tenantId: string, day: string) {
+  private async used(tenantId: string, branchId: string, day: string) {
     const [row] = await this.db
       .select({ captures: aiUsage.captures })
       .from(aiUsage)
-      .where(and(eq(aiUsage.tenantId, tenantId), eq(aiUsage.day, day)))
+      .where(and(eq(aiUsage.tenantId, tenantId), eq(aiUsage.branchId, branchId), eq(aiUsage.day, day)))
       .limit(1);
     return row?.captures ?? 0;
   }
