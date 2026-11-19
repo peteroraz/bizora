@@ -14,6 +14,8 @@ export type ProductView = {
   archived?: boolean;
   defaultCostMinor?: string | null;
   stock: { quantity: string; belowZero: boolean; low?: boolean; valueMinor?: string };
+  /** The main photo (ADR-033), when the product has one. */
+  photoUrl?: string | null;
 };
 
 export const pullFromServer: PullFn = async (cursors) => {

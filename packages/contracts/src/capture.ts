@@ -6,11 +6,16 @@ import { STATEMENT_IMPORT_COLUMNS } from "./reconciliation.js";
  * AI capture (ADR-018): photos, scans and voice notes become draft rows in the same review table as CSV imports.
  * Nothing is saved by capture itself; a person checks the rows and saves them through the import endpoints.
  */
-export const CAPTURE_TARGETS = ["products", "sales", "stock_in", "statement"] as const;
+/**
+ * What a capture fills. `cart` is one sale being made now at the counter (ADR-033); `stock_count`, `stock_change`
+ * and `stock_move` are spoken or photographed lists of counts, goods taken off or added, and goods moved.
+ */
+export const CAPTURE_TARGETS = ["products", "sales", "stock_in", "statement", "cart", "stock_count", "stock_change", "stock_move"] as const;
 export type CaptureTarget = (typeof CAPTURE_TARGETS)[number];
 
 export const CAPTURE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export const CAPTURE_AUDIO_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/m4a"] as const;
+/** Recorded here, or a voice note sent from another app (WhatsApp sends ogg; iPhones m4a or aac). */
+export const CAPTURE_AUDIO_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/m4a", "audio/aac", "audio/x-m4a", "audio/amr", "audio/3gpp"] as const;
 export const CAPTURE_DOCUMENT_TYPES = ["application/pdf"] as const;
 export const CAPTURE_MIME_TYPES = [...CAPTURE_IMAGE_TYPES, ...CAPTURE_AUDIO_TYPES, ...CAPTURE_DOCUMENT_TYPES] as const;
 
@@ -33,12 +38,58 @@ export const STOCK_IN_IMPORT_COLUMNS = {
 } as const;
 export type StockInImportField = keyof typeof STOCK_IN_IMPORT_COLUMNS;
 
+/** One sale being made now, spoken at the counter (ADR-033): what is bought, and how it is paid. */
+export const CART_COLUMNS = {
+  product: ["product", "item"],
+  quantity: ["quantity", "qty"],
+  unit: ["unit"],
+  price: ["price", "unit price"],
+  payment: ["payment", "paid by"],
+  paid: ["paid", "amount paid"],
+  customer: ["customer", "buyer"],
+} as const;
+export type CartField = keyof typeof CART_COLUMNS;
+
+/** A stock count list (ADR-033), from a file, a photo of a count sheet or a voice note. */
+export const STOCK_COUNT_IMPORT_COLUMNS = {
+  product: ["product", "item", "item name", "description", "product name"],
+  counted: ["counted", "count", "quantity", "qty", "on shelf", "physical"],
+  unit: ["unit", "uom"],
+  note: ["note", "notes", "comment", "remark"],
+} as const;
+export type StockCountImportField = keyof typeof STOCK_COUNT_IMPORT_COLUMNS;
+
+/** Goods taken off or added by hand (ADR-033): damaged, expired, missing, used in the shop, found. */
+export const STOCK_CHANGE_IMPORT_COLUMNS = {
+  product: ["product", "item", "item name", "description", "product name"],
+  change: ["change", "remove or add", "direction", "in or out"],
+  reason: ["reason", "why", "cause"],
+  quantity: ["quantity", "qty", "number"],
+  unit: ["unit", "uom"],
+  note: ["note", "notes", "what happened", "comment", "remark"],
+} as const;
+export type StockChangeImportField = keyof typeof STOCK_CHANGE_IMPORT_COLUMNS;
+
+/** Goods moved to another shop (ADR-033). */
+export const STOCK_MOVE_IMPORT_COLUMNS = {
+  product: ["product", "item", "item name", "description", "product name"],
+  quantity: ["quantity", "qty", "number"],
+  unit: ["unit", "uom"],
+  toShop: ["to shop", "to", "shop", "destination", "branch"],
+  note: ["note", "notes", "comment", "remark"],
+} as const;
+export type StockMoveImportField = keyof typeof STOCK_MOVE_IMPORT_COLUMNS;
+
 /** The fields each target fills, in table order. */
 export const CAPTURE_FIELDS: Record<CaptureTarget, readonly string[]> = {
   products: Object.keys(PRODUCT_IMPORT_COLUMNS),
   sales: Object.keys(SALES_IMPORT_COLUMNS),
   stock_in: Object.keys(STOCK_IN_IMPORT_COLUMNS),
   statement: Object.keys(STATEMENT_IMPORT_COLUMNS),
+  cart: Object.keys(CART_COLUMNS),
+  stock_count: Object.keys(STOCK_COUNT_IMPORT_COLUMNS),
+  stock_change: Object.keys(STOCK_CHANGE_IMPORT_COLUMNS),
+  stock_move: Object.keys(STOCK_MOVE_IMPORT_COLUMNS),
 };
 
 // Base64 grows data by a third.

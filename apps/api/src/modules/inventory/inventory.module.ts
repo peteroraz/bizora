@@ -7,13 +7,14 @@ import { SyncModule } from "../sync/sync.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { InventoryController } from "./inventory.controller.js";
 import { InventorySyncHandler } from "./inventory-sync.handler.js";
+import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
 import { StockService } from "./stock.service.js";
 
 @Module({
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule],
   controllers: [InventoryController],
-  providers: [ProductService, StockService, InventorySyncHandler, PermissionGuard],
+  providers: [ProductService, ProductPhotoService, StockService, InventorySyncHandler, PermissionGuard],
   exports: [StockService, ProductService],
 })
 export class InventoryModule {}

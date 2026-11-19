@@ -70,7 +70,7 @@ const envSchema = z
     VERTEX_LOCATION: z.string().min(1).default("global"),
     VERTEX_MODEL: z.string().min(1).default("gemini-3.8-flash"),
     // Captures each organization may run per day, to keep AI costs predictable.
-    AI_DAILY_CAPTURE_LIMIT: z.coerce.number().int().min(0).default(50),
+    AI_DAILY_CAPTURE_LIMIT: z.coerce.number().int().min(0).default(100),
   })
   .superRefine((value, ctx) => {
     if (value.EMAIL_PROVIDER === "resend") {

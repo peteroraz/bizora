@@ -118,6 +118,6 @@ variable "vertex_model" {
 
 variable "ai_daily_capture_limit" {
   type        = number
-  description = "Photo and voice captures each organization may run per day."
-  default     = 50
+  description = "Photo and voice captures each shop may run per day (ADR-033)."
+  default     = 100
 }

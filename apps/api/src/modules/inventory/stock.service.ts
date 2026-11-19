@@ -343,61 +343,67 @@ export class StockService {
 
   async adjust(tenant: TenantContext, raw: unknown) {
     const payload = stockAdjustSchema.parse(raw);
-    return this.db.transaction(async (tx) => {
-      const context = await this.context(tx, tenant, payload.productId, payload.branchId);
-      const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
-      const entered = parseQuantity(payload.quantity) as bigint;
-      const amount = this.toBase(entered, unitFactor(context.product, units, payload.unit));
-      const result = await this.applyMovement(tx, context, {
-        type: "adjusted",
-        quantity: payload.direction === "remove" ? -amount : amount,
-        enteredQuantity: entered,
-        enteredUnit: payload.unit,
-        reason: payload.reason,
-        note: payload.note ?? null,
-      });
-      await this.record(tx, tenant, "stock.adjusted", result.id, context, { reason: payload.reason, note: payload.note, quantity: payload.quantity, unit: payload.unit, direction: payload.direction });
-      return this.presentResult(tenant, result);
+    return this.db.transaction(async (tx) => this.adjustIn(tx, tenant, payload));
+  }
+
+  /** Taking stock off or adding it by hand, inside the caller's transaction (a spoken or file list, ADR-033). */
+  async adjustIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockAdjustSchema.parse>) {
+    const context = await this.context(tx, tenant, payload.productId, payload.branchId);
+    const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
+    const entered = parseQuantity(payload.quantity) as bigint;
+    const amount = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+    const result = await this.applyMovement(tx, context, {
+      type: "adjusted",
+      quantity: payload.direction === "remove" ? -amount : amount,
+      enteredQuantity: entered,
+      enteredUnit: payload.unit,
+      reason: payload.reason,
+      note: payload.note ?? null,
     });
+    await this.record(tx, tenant, "stock.adjusted", result.id, context, { reason: payload.reason, note: payload.note, quantity: payload.quantity, unit: payload.unit, direction: payload.direction });
+    return this.presentResult(tenant, result);
   }
 
   // Move to another shop ------------------------------------------------------------------------------------------
 
   async transfer(tenant: TenantContext, raw: unknown) {
     const payload = stockTransferSchema.parse(raw);
-    return this.db.transaction(async (tx) => {
-      const from = await this.context(tx, tenant, payload.productId, payload.fromBranchId);
-      if (payload.toBranchId === from.branch.id) {
-        throw new ApiError("SAME_SHOP", "Choose a different shop to move the stock to.", 422, [{ field: "toBranchId", message: "Choose another shop." }]);
-      }
-      const to = { ...from, branch: await findBranch(tx, tenant, from.business.id, payload.toBranchId) };
-      if (to.branch.closedAt) throw new ApiError("SHOP_CLOSED", "That shop is closed. Choose another shop.", 409, [{ field: "toBranchId", message: "Choose an open shop." }]);
-      const units = (await productUnitsFor(tx, tenant.tenantId, [from.product.id])).get(from.product.id) ?? [];
-      const entered = parseQuantity(payload.quantity) as bigint;
-      const amount = this.toBase(entered, unitFactor(from.product, units, payload.unit));
-      const transferId = newId();
-      const out = await this.applyMovement(tx, from, {
-        type: "transfer_out",
-        quantity: -amount,
-        enteredQuantity: entered,
-        enteredUnit: payload.unit,
-        note: payload.note ?? null,
-        transferId,
-        documentType: "stock_transfer",
-      });
-      // The receiving shop takes over exactly the cost value that left, so total stock value is unchanged.
-      await this.applyMovement(tx, to, {
-        type: "transfer_in",
-        quantity: amount,
-        enteredQuantity: entered,
-        enteredUnit: payload.unit,
-        note: payload.note ?? null,
-        transferId,
-        valueMinor: -out.valueMinor,
-      });
-      await this.record(tx, tenant, "stock.transferred", out.id, from, { note: payload.note ?? null, toBranchId: payload.toBranchId, quantity: payload.quantity, unit: payload.unit });
-      return this.presentResult(tenant, out);
+    return this.db.transaction(async (tx) => this.transferIn(tx, tenant, payload));
+  }
+
+  /** Moving stock to another shop, inside the caller's transaction (ADR-033). */
+  async transferIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockTransferSchema.parse>) {
+    const from = await this.context(tx, tenant, payload.productId, payload.fromBranchId);
+    if (payload.toBranchId === from.branch.id) {
+      throw new ApiError("SAME_SHOP", "Choose a different shop to move the stock to.", 422, [{ field: "toBranchId", message: "Choose another shop." }]);
+    }
+    const to = { ...from, branch: await findBranch(tx, tenant, from.business.id, payload.toBranchId) };
+    if (to.branch.closedAt) throw new ApiError("SHOP_CLOSED", "That shop is closed. Choose another shop.", 409, [{ field: "toBranchId", message: "Choose an open shop." }]);
+    const units = (await productUnitsFor(tx, tenant.tenantId, [from.product.id])).get(from.product.id) ?? [];
+    const entered = parseQuantity(payload.quantity) as bigint;
+    const amount = this.toBase(entered, unitFactor(from.product, units, payload.unit));
+    const transferId = newId();
+    const out = await this.applyMovement(tx, from, {
+      type: "transfer_out",
+      quantity: -amount,
+      enteredQuantity: entered,
+      enteredUnit: payload.unit,
+      note: payload.note ?? null,
+      transferId,
+      documentType: "stock_transfer",
     });
+    // The receiving shop takes over exactly the cost value that left, so total stock value is unchanged.
+    await this.applyMovement(tx, to, {
+      type: "transfer_in",
+      quantity: amount,
+      enteredQuantity: entered,
+      enteredUnit: payload.unit,
+      note: payload.note ?? null,
+      transferId,
+      valueMinor: -out.valueMinor,
+    });
+    await this.record(tx, tenant, "stock.transferred", out.id, from, { note: payload.note ?? null, toBranchId: payload.toBranchId, quantity: payload.quantity, unit: payload.unit });
+    return this.presentResult(tenant, out);
   }
 
   /**
@@ -449,43 +455,46 @@ export class StockService {
         .limit(1);
       if (existing) return this.presentCount(existing);
     }
-    return this.db.transaction(async (tx) => {
-      const context = await this.context(tx, tenant, payload.productId, payload.branchId);
-      const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
-      const counted = this.toBase(parseCountQuantity(payload.countedQuantity) as bigint, unitFactor(context.product, units, payload.unit));
-      const [balance] = await tx
-        .select({ quantity: stockBalances.quantity })
-        .from(stockBalances)
-        .where(
-          and(
-            eq(stockBalances.tenantId, tenant.tenantId),
-            eq(stockBalances.branchId, context.branch.id),
-            eq(stockBalances.productId, context.product.id),
-          ),
-        )
-        .limit(1);
-      const system = balance?.quantity ?? 0n;
-      const id = payload.id ?? newId();
-      await tx.insert(stockCounts).values({
-        id,
-        tenantId: tenant.tenantId,
-        businessId: context.business.id,
-        branchId: context.branch.id,
-        productId: context.product.id,
-        countedQuantity: counted,
-        systemQuantity: system,
-        difference: counted - system,
-        note: payload.note ?? null,
-        countedBy: tenant.userId,
-        countedMembershipId: tenant.membershipId,
-        deviceId: tenant.deviceId ?? null,
-        countedAt: new Date(),
-      });
-      await this.record(tx, tenant, "stock.counted", id, context, { note: payload.note ?? null, countedQuantity: payload.countedQuantity, unit: payload.unit });
-      if (tenant.permissions.includes(Permission.STOCK_ADJUST)) await this.decide(tx, tenant, id, "approved");
-      const [row] = await tx.select().from(stockCounts).where(eq(stockCounts.id, id)).limit(1);
-      return this.presentCount(row as typeof stockCounts.$inferSelect);
+    return this.db.transaction(async (tx) => this.countIn(tx, tenant, payload));
+  }
+
+  /** A count, inside the caller's transaction (ADR-033). Those who may adjust stock have it approved at once. */
+  async countIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockCountSchema.parse>) {
+    const context = await this.context(tx, tenant, payload.productId, payload.branchId);
+    const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
+    const counted = this.toBase(parseCountQuantity(payload.countedQuantity) as bigint, unitFactor(context.product, units, payload.unit));
+    const [balance] = await tx
+      .select({ quantity: stockBalances.quantity })
+      .from(stockBalances)
+      .where(
+        and(
+          eq(stockBalances.tenantId, tenant.tenantId),
+          eq(stockBalances.branchId, context.branch.id),
+          eq(stockBalances.productId, context.product.id),
+        ),
+      )
+      .limit(1);
+    const system = balance?.quantity ?? 0n;
+    const id = payload.id ?? newId();
+    await tx.insert(stockCounts).values({
+      id,
+      tenantId: tenant.tenantId,
+      businessId: context.business.id,
+      branchId: context.branch.id,
+      productId: context.product.id,
+      countedQuantity: counted,
+      systemQuantity: system,
+      difference: counted - system,
+      note: payload.note ?? null,
+      countedBy: tenant.userId,
+      countedMembershipId: tenant.membershipId,
+      deviceId: tenant.deviceId ?? null,
+      countedAt: new Date(),
     });
+    await this.record(tx, tenant, "stock.counted", id, context, { note: payload.note ?? null, countedQuantity: payload.countedQuantity, unit: payload.unit });
+    if (tenant.permissions.includes(Permission.STOCK_ADJUST)) await this.decide(tx, tenant, id, "approved");
+    const [row] = await tx.select().from(stockCounts).where(eq(stockCounts.id, id)).limit(1);
+    return this.presentCount(row as typeof stockCounts.$inferSelect);
   }
 
   async approveCount(tenant: TenantContext, id: string, raw: unknown) {

@@ -46,7 +46,7 @@ describe("DATABASE_SOCKET_DIR", () => {
 
 describe("AI capture settings", () => {
   it("is off by default, needs a project for Vertex AI, and never uses the fake model in production", () => {
-    expect(loadEnv(base)).toMatchObject({ AI_PROVIDER: "off", VERTEX_LOCATION: "global", VERTEX_MODEL: "gemini-3.8-flash", AI_DAILY_CAPTURE_LIMIT: 50 });
+    expect(loadEnv(base)).toMatchObject({ AI_PROVIDER: "off", VERTEX_LOCATION: "global", VERTEX_MODEL: "gemini-3.8-flash", AI_DAILY_CAPTURE_LIMIT: 100 });
     expect(() => loadEnv({ ...base, AI_PROVIDER: "vertex" })).toThrow("VERTEX_PROJECT");
     expect(loadEnv({ ...base, AI_PROVIDER: "vertex", VERTEX_PROJECT: "bizora-staging", AI_DAILY_CAPTURE_LIMIT: "10" })).toMatchObject({ VERTEX_PROJECT: "bizora-staging", AI_DAILY_CAPTURE_LIMIT: 10 });
     expect(() => loadEnv({ ...base, NODE_ENV: "production", AI_PROVIDER: "fake" })).toThrow("fake is for tests only");

@@ -15,7 +15,7 @@ type Status = { enabled: boolean; remainingToday: number; targets: CaptureTarget
  * Photo, scan and voice note capture (ADR-018). The AI's rows are added to the review table as drafts; nothing is
  * saved until the person checks the rows and presses Save.
  */
-export function CaptureBar({ target, onRows }: { target: CaptureTarget; onRows: (result: CaptureResult) => void }) {
+export function CaptureBar({ target, onRows, compact = false }: { target: CaptureTarget; onRows: (result: CaptureResult) => void; compact?: boolean }) {
   const t = useTranslations("capture");
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,14 +109,14 @@ export function CaptureBar({ target, onRows }: { target: CaptureTarget; onRows: 
   return (
     <div className="space-y-2 rounded-card border border-dashed border-primary/50 bg-primary/5 p-4">
       <p className="text-sm font-medium">{t(`title.${target}`)}</p>
-      <p className="text-sm text-muted">{t("lead")}</p>
+      {compact ? null : <p className="text-sm text-muted">{t("lead")}</p>}
       <div className="flex flex-wrap items-center gap-3">
         <label className={`inline-flex cursor-pointer items-center gap-2 rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-fg ${busy || recording ? "pointer-events-none opacity-60" : ""}`}>
           <Camera className="h-4 w-4" aria-hidden="true" />
           {t("photo")}
           <input
             type="file"
-            accept="image/*,application/pdf"
+            accept="image/*,application/pdf,audio/*"
             multiple
             className="sr-only"
             aria-label={t("photo")}
@@ -140,10 +140,12 @@ export function CaptureBar({ target, onRows }: { target: CaptureTarget; onRows: 
         )}
         <span className="text-xs text-muted">{t("remaining", { count: status.remainingToday })}</span>
       </div>
-      <label className="block text-sm">
-        <span className="text-muted">{t("noteLabel")}</span>
-        <input className="mt-1 w-full rounded-control border border-border bg-background px-2 py-1" value={note} maxLength={300} onChange={(event) => setNote(event.target.value)} />
-      </label>
+      {compact ? null : (
+        <label className="block text-sm">
+          <span className="text-muted">{t("noteLabel")}</span>
+          <input className="mt-1 w-full rounded-control border border-border bg-background px-2 py-1" value={note} maxLength={300} onChange={(event) => setNote(event.target.value)} />
+        </label>
+      )}
       {busy ? (
         <p className="text-sm" role="status">
           {t("reading")}

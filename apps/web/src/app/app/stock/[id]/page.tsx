@@ -26,6 +26,7 @@ import { enqueue } from "../../../../lib/offline/outbox";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
 import type { ProductView } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
+import { ProductPhotos } from "../../../../components/product-photos";
 import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
@@ -240,6 +241,8 @@ function ProductScreen() {
           {message.text}
         </p>
       ) : null}
+
+      <ProductPhotos productId={product.id} productName={product.name} canManage={can(access, Permission.PRODUCTS_MANAGE) && !product.archived} />
 
       <Card>
         <p className="text-sm font-medium">{t("shops")}</p>

@@ -84,6 +84,10 @@ describe("staff PIN on shop devices, roles and plans (Sprint 3C.5a)", () => {
     for (const migration of await loadMigrationSql()) {
       await client.exec(migration.sql);
     }
+    // Limits are off for now (ADR-033); these tests keep the limit checks working for when they come back.
+    await client.exec(
+      `UPDATE plans SET limits = '{"max_branches": 1, "max_staff": 2, "max_devices": 2, "features": {"multi_currency": true, "whatsapp_automation": false, "advanced_reports": false, "ai": false, "integrations": false}}'::jsonb WHERE code = 'starter'`,
+    );
     app = await createApp(env, db, createLogger("error"));
     await app.init();
     http = app.getHttpServer();
@@ -417,6 +421,10 @@ describe("customer CSV import limits", () => {
     for (const migration of await loadMigrationSql()) {
       await client.exec(migration.sql);
     }
+    // Limits are off for now (ADR-033); these tests keep the limit checks working for when they come back.
+    await client.exec(
+      `UPDATE plans SET limits = '{"max_branches": 1, "max_staff": 2, "max_devices": 2, "features": {"multi_currency": true, "whatsapp_automation": false, "advanced_reports": false, "ai": false, "integrations": false}}'::jsonb WHERE code = 'starter'`,
+    );
     app = await createApp(env, db, createLogger("error"));
     await app.init();
     http = app.getHttpServer();

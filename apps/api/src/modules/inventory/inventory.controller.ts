@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
+import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
 import { StockService } from "./stock.service.js";
 
@@ -14,7 +16,50 @@ export class InventoryController {
   constructor(
     @Inject(ProductService) private readonly products: ProductService,
     @Inject(StockService) private readonly stock: StockService,
+    @Inject(ProductPhotoService) private readonly photos: ProductPhotoService,
   ) {}
+
+  /** Product photos (ADR-033): up to 5 a product. */
+  @Get("products/:id/photos")
+  @RequirePermissions(Permission.STOCK_READ)
+  async listPhotos(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    return success(await this.photos.list(tenant, id), tenant.correlationId);
+  }
+
+  @Post("products/:id/photos")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async addPhoto(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.photos.add(tenant, id, body), tenant.correlationId);
+  }
+
+  @Post("products/:id/photos/:photoId/main")
+  @HttpCode(200)
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async mainPhoto(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Param("photoId", ParseUUIDPipe) photoId: string) {
+    return success(await this.photos.makeMain(tenant, id, photoId), tenant.correlationId);
+  }
+
+  @Delete("products/:id/photos/:photoId")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async removePhoto(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Param("photoId", ParseUUIDPipe) photoId: string) {
+    return success(await this.photos.remove(tenant, id, photoId), tenant.correlationId);
+  }
+
+  /** The photo itself, for signed-in staff only; the ?v= in its address changes when the photo does. */
+  @Get("products/:id/photos/:photoId")
+  @RequirePermissions(Permission.STOCK_READ)
+  @Header("X-Content-Type-Options", "nosniff")
+  @Header("Cache-Control", "private, max-age=86400")
+  async photo(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("photoId", ParseUUIDPipe) photoId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.photos.file(tenant, id, photoId);
+    response.setHeader("ETag", file.etag);
+    return new StreamableFile(file.data, { type: file.contentType, disposition: "inline", length: file.data.length });
+  }
 
   @Get("products")
   @RequirePermissions(Permission.STOCK_READ)

@@ -38,4 +38,29 @@ export class ImportController {
   async stockIn(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
     return success(await this.imports.stockIn(tenant, body), tenant.correlationId);
   }
+
+  /** Spoken, photographed or file lists of counts, changes and moves (ADR-033). */
+  @Post("stock-count")
+  @HttpCode(200)
+  @RequirePermissions(Permission.STOCK_COUNT)
+  @Idempotent()
+  async stockCount(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success(await this.imports.stockCount(tenant, body), tenant.correlationId);
+  }
+
+  @Post("stock-change")
+  @HttpCode(200)
+  @RequirePermissions(Permission.STOCK_ADJUST)
+  @Idempotent()
+  async stockChange(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success(await this.imports.stockChange(tenant, body), tenant.correlationId);
+  }
+
+  @Post("stock-move")
+  @HttpCode(200)
+  @RequirePermissions(Permission.STOCK_TRANSFER)
+  @Idempotent()
+  async stockMove(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success(await this.imports.stockMove(tenant, body), tenant.correlationId);
+  }
 }

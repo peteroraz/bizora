@@ -1190,12 +1190,14 @@ export const aiUsage = pgTable(
   "ai_usage",
   {
     tenantId: uuid("tenant_id").notNull(),
+    /** Reads are counted per shop (ADR-033). */
+    branchId: uuid("branch_id").notNull(),
     day: date("day", { mode: "string" }).notNull(),
     captures: integer("captures").notNull().default(0),
     inputBytes: bigint("input_bytes", { mode: "bigint" }).notNull().default(0n),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.tenantId, table.day] })],
+  (table) => [primaryKey({ columns: [table.tenantId, table.branchId, table.day] })],
 );
 
 export const notifications = pgTable(
@@ -1224,6 +1226,27 @@ const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
   toDriver: (value) => value,
   fromDriver: (value) => Buffer.from(value),
 });
+
+/** Up to 5 photos a product (migration 0031, ADR-033), shown in the order of `position`, 0 first. */
+export const productPhotos = pgTable(
+  "product_photos",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    position: smallint("position").notNull(),
+    contentType: varchar("content_type", { length: 20 }).notNull(),
+    data: bytea("data").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    sha256: char("sha256", { length: 64 }).notNull(),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("product_photos_product_idx").on(table.tenantId, table.productId, table.position)],
+);
 
 /** The company logo (migration 0022, ADR-021). One per organization. */
 export const organizationLogos = pgTable("organization_logos", {

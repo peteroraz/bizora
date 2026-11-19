@@ -102,3 +102,15 @@ export const stockCountRejectSchema = z.object({ note: requiredNote }).strict();
 
 /** Why a product is removed from the list (7f). */
 export const productArchiveSchema = z.object({ reason: note }).strict();
+
+/** Product photos (ADR-033): up to 5 a product, shrunk on the phone to at most 1280 pixels a side. */
+export const PRODUCT_PHOTO_MAX = 5;
+export const PRODUCT_PHOTO_MAX_BYTES = 600 * 1024;
+export const PRODUCT_PHOTO_MAX_SIDE = 1600;
+export const PRODUCT_PHOTO_MIN_SIDE = 64;
+export const productPhotoUploadSchema = z
+  .object({
+    contentType: z.enum(["image/jpeg", "image/png"]),
+    dataBase64: z.string().min(16).max(Math.ceil(PRODUCT_PHOTO_MAX_BYTES / 3) * 4 + 4, "That photo is too large."),
+  })
+  .strict();

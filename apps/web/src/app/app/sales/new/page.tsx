@@ -3,7 +3,7 @@
 import { IDEMPOTENCY_HEADER, Permission, amountText, parseAmount, parseQuantity, typeNumber, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { CustomerPicker, type PickedCustomer } from "../../../../components/customer-picker";
 import { RequireAccess } from "../../../../components/require-access";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
@@ -31,6 +31,7 @@ const quantityText = (thousandths: bigint) =>
 
 /** Products sold on this phone recently, newest first, for the quick tiles. Kept per shop, on the phone only. */
 const RECENT_LIMIT = 24;
+const VoiceSale = lazy(() => import("../../../../components/voice-sale"));
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
 }
@@ -80,6 +81,9 @@ function QuickSaleScreen() {
   const [extras, setExtras] = useState(false);
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
+  // Say the sale (ADR-033): the voice panel loads only when opened.
+  const [voice, setVoice] = useState(false);
+  const [heard, setHeard] = useState<string | null>(null);
   const recentStore = access.owner && access.branchId ? recentKey(access.owner.tenantId, access.branchId) : null;
 
   useEffect(() => {
@@ -268,8 +272,35 @@ function QuickSaleScreen() {
         </p>
       ) : null}
       {!catalog ? <p className="text-sm text-muted">{t("noCatalog")}</p> : null}
+      {voice && catalog ? (
+        <Suspense fallback={null}>
+          <VoiceSale
+            products={Object.values(catalog.products)}
+            onSale={(sale) => {
+              setLines((current) => [...current, ...sale.lines.map((line) => ({ key: uuidv7(), ...line }))]);
+              if (sale.payment && !desk) setMode(sale.payment);
+              if (sale.paid && sale.payment === "cash") setGiven(sale.paid);
+              setHeard(
+                [sale.unmatched.length ? t("voice.unmatched", { names: sale.unmatched.join(", ") }) : null, sale.customer ? t("voice.customer", { name: sale.customer }) : null]
+                  .filter(Boolean)
+                  .join(" ") || null,
+              );
+            }}
+          />
+        </Suspense>
+      ) : null}
+      {heard ? (
+        <p className="text-sm text-warning" role="status">
+          {heard}
+        </p>
+      ) : null}
       <FormField id="sale-search" label={t("findProduct")}>
-        <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
+        <div className="flex gap-2">
+          <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
+          <button type="button" className="min-h-11 shrink-0 rounded-control border border-border px-3 text-sm font-medium" aria-pressed={voice} onClick={() => setVoice((open) => !open)} data-testid="say-sale">
+            {t("voice.open")}
+          </button>
+        </div>
       </FormField>
       {matches.length > 0 ? (
         <ul className="divide-y divide-border rounded-card border border-border bg-card" aria-label={t("matches")}>

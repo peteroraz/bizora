@@ -11,17 +11,27 @@ import {
   Permission,
   productImportSchema,
   salesImportSchema,
+  STOCK_ADD_REASONS,
+  STOCK_REMOVE_REASONS,
+  parseCountQuantity,
+  quantityToString,
+  stockAdjustSchema,
+  stockChangeImportSchema,
+  stockCountImportSchema,
+  stockCountSchema,
   stockInImportSchema,
+  stockMoveImportSchema,
   stockReceiveSchema,
+  stockTransferSchema,
   unitFromText,
   type ImportRowResult,
 } from "@bizora/contracts";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase } from "../../db/database.js";
-import { customers, products } from "../../db/schema.js";
+import { branches, customers, products, stockBalances } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { productUnitsFor, requireBusiness, resolveBranch, type ProductRow, type ProductUnitRow } from "../inventory/inventory-scope.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -321,6 +331,149 @@ export class ImportService {
     return this.outcome(results, true);
   }
 
+  // Spoken, photographed or file lists of stock counts, changes and moves (ADR-033) ---------------------------------
+
+  /** A count list: each row becomes a count (approved at once for those who may adjust stock, else waiting). */
+  async stockCount(tenant: TenantContext, raw: unknown) {
+    const payload = stockCountImportSchema.parse(raw);
+    this.assertSize(payload.rows.length);
+    const { business, branch, match, units } = await this.stockScope(tenant);
+    const plans: ReturnType<typeof stockCountSchema.parse>[] = [];
+    const results: ImportRowResult[] = payload.rows.map((row, index) => {
+      const errors: { field: string; message: string }[] = [];
+      const product = this.stockProduct(row.product, match, errors);
+      const unit = this.stockUnit(row.unit, product, units, errors);
+      const counted = row.counted.trim() ? parseCountQuantity(row.counted) : null;
+      if (counted === null) errors.push({ field: "counted", message: row.counted.trim() ? `Can't read the number "${row.counted}".` : "Enter how many were counted." });
+      if (errors.length > 0 || !product || !unit || counted === null) return { row: index + 1, status: "error", errors };
+      plans.push(stockCountSchema.parse({ productId: product.id, branchId: branch.id, countedQuantity: decimal(counted), unit, ...(row.note.trim() ? { note: row.note.trim().slice(0, 240) } : {}) }));
+      return { row: index + 1, status: "create", message: `${decimal(counted)} ${unit} of ${product.name} counted in ${branch.name}.` };
+    });
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    await this.db.transaction(async (tx) => {
+      for (const plan of plans) await this.stock.countIn(tx, tenant, plan);
+    });
+    await this.recordImport(tenant, business.id, "stock_count", payload.source, results.length);
+    return this.outcome(results, true);
+  }
+
+  /** Goods taken off or added by hand. Every row says what happened; nothing may take a shelf below zero. */
+  async stockChange(tenant: TenantContext, raw: unknown) {
+    const payload = stockChangeImportSchema.parse(raw);
+    this.assertSize(payload.rows.length);
+    const { business, branch, match, units, onHand } = await this.stockScope(tenant);
+    const left = new Map(onHand);
+    const plans: ReturnType<typeof stockAdjustSchema.parse>[] = [];
+    const results: ImportRowResult[] = payload.rows.map((row, index) => {
+      const errors: { field: string; message: string }[] = [];
+      const product = this.stockProduct(row.product, match, errors);
+      const unit = this.stockUnit(row.unit, product, units, errors);
+      const quantity = row.quantity.trim() ? parseQuantity(row.quantity) : null;
+      if (quantity === null || quantity <= 0n) errors.push({ field: "quantity", message: row.quantity.trim() ? `Can't read the quantity "${row.quantity}".` : "Enter how many." });
+      const reason = reasonFromText(row.reason);
+      const direction = directionFromText(row.change) ?? (reason ? ((STOCK_ADD_REASONS as readonly string[]).includes(reason) ? "add" : "remove") : null);
+      if (!direction) errors.push({ field: "change", message: `Can't read "${row.change}". Use remove or add.` });
+      const chosen = reason ?? (direction === "add" ? "found" : direction === "remove" ? "other" : null);
+      if (direction && chosen && !(direction === "remove" ? (STOCK_REMOVE_REASONS as readonly string[]) : (STOCK_ADD_REASONS as readonly string[])).includes(chosen)) {
+        errors.push({ field: "reason", message: direction === "remove" ? "Use damaged, expired, missing, own use, gift or other." : "Use found or correction." });
+      }
+      const note = row.note.trim();
+      if (note.length < 3) errors.push({ field: "note", message: "Say what happened, in a few words." });
+      const factor = product && unit ? this.factor(product, units.get(product.id) ?? [], unit) : null;
+      if (direction === "remove" && product && quantity !== null && factor !== null && errors.length === 0) {
+        const base = (quantity * factor) / 1000n;
+        const have = left.get(product.id) ?? 0n;
+        if (base > have) errors.push({ field: "quantity", message: `Only ${quantityToString(have > 0n ? have : 0n)} ${product.baseUnit} of ${product.name} left in ${branch.name}.` });
+        else left.set(product.id, have - base);
+      }
+      if (errors.length > 0 || !product || !unit || quantity === null || !direction || !chosen) return { row: index + 1, status: "error", errors };
+      plans.push(stockAdjustSchema.parse({ productId: product.id, branchId: branch.id, direction, reason: chosen, quantity: decimal(quantity), unit, note: note.slice(0, 240) }));
+      return { row: index + 1, status: "create", message: `${direction === "remove" ? "Take off" : "Add"} ${decimal(quantity)} ${unit} of ${product.name} (${chosen.replace("_", " ")}).` };
+    });
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    await this.db.transaction(async (tx) => {
+      for (const plan of plans) await this.stock.adjustIn(tx, tenant, plan);
+    });
+    await this.recordImport(tenant, business.id, "stock_change", payload.source, results.length);
+    return this.outcome(results, true);
+  }
+
+  /** Goods moved from the shop being worked in to another open shop, by its name. */
+  async stockMove(tenant: TenantContext, raw: unknown) {
+    const payload = stockMoveImportSchema.parse(raw);
+    this.assertSize(payload.rows.length);
+    const { business, branch, match, units, onHand } = await this.stockScope(tenant);
+    const shops = await this.db
+      .select({ id: branches.id, name: branches.name })
+      .from(branches)
+      .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), ne(branches.id, branch.id), isNull(branches.closedAt)));
+    const shopByName = new Map(shops.map((shop) => [shop.name.trim().toLowerCase(), shop]));
+    const left = new Map(onHand);
+    const plans: ReturnType<typeof stockTransferSchema.parse>[] = [];
+    const results: ImportRowResult[] = payload.rows.map((row, index) => {
+      const errors: { field: string; message: string }[] = [];
+      const product = this.stockProduct(row.product, match, errors);
+      const unit = this.stockUnit(row.unit, product, units, errors);
+      const quantity = row.quantity.trim() ? parseQuantity(row.quantity) : null;
+      if (quantity === null || quantity <= 0n) errors.push({ field: "quantity", message: row.quantity.trim() ? `Can't read the quantity "${row.quantity}".` : "Enter how many." });
+      const to = shopByName.get(row.toShop.trim().toLowerCase()) ?? null;
+      if (!to) errors.push({ field: "toShop", message: row.toShop.trim() ? `"${row.toShop}" is not one of your other open shops.` : "Enter the shop the goods went to." });
+      const factor = product && unit ? this.factor(product, units.get(product.id) ?? [], unit) : null;
+      if (product && quantity !== null && factor !== null && errors.length === 0) {
+        const base = (quantity * factor) / 1000n;
+        const have = left.get(product.id) ?? 0n;
+        if (base > have) errors.push({ field: "quantity", message: `Only ${quantityToString(have > 0n ? have : 0n)} ${product.baseUnit} of ${product.name} left in ${branch.name}.` });
+        else left.set(product.id, have - base);
+      }
+      if (errors.length > 0 || !product || !unit || quantity === null || !to) return { row: index + 1, status: "error", errors };
+      plans.push(stockTransferSchema.parse({ productId: product.id, fromBranchId: branch.id, toBranchId: to.id, quantity: decimal(quantity), unit, ...(row.note.trim() ? { note: row.note.trim().slice(0, 240) } : {}) }));
+      return { row: index + 1, status: "create", message: `Move ${decimal(quantity)} ${unit} of ${product.name} to ${to.name}.` };
+    });
+    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    await this.db.transaction(async (tx) => {
+      for (const plan of plans) await this.stock.transferIn(tx, tenant, plan);
+    });
+    await this.recordImport(tenant, business.id, "stock_move", payload.source, results.length);
+    return this.outcome(results, true);
+  }
+
+  /** The shop being worked in, its products by name, their packs and what is on hand. */
+  private async stockScope(tenant: TenantContext) {
+    const business = await requireBusiness(this.db, tenant);
+    const branch = await resolveBranch(this.db, tenant, business.id);
+    const productRows = await this.db
+      .select()
+      .from(products)
+      .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)));
+    const match = new Map(productRows.map((product) => [product.name.trim().toLowerCase(), product]));
+    const units = await productUnitsFor(this.db, tenant.tenantId, productRows.map((product) => product.id));
+    const balances = productRows.length
+      ? await this.db
+          .select({ productId: stockBalances.productId, quantity: stockBalances.quantity })
+          .from(stockBalances)
+          .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, branch.id), inArray(stockBalances.productId, productRows.map((product) => product.id))))
+      : [];
+    return { business, branch, match, units, onHand: new Map(balances.map((row) => [row.productId, row.quantity])) };
+  }
+
+  private stockProduct(text: string, match: Map<string, ProductRow>, errors: { field: string; message: string }[]) {
+    if (!text.trim()) {
+      errors.push({ field: "product", message: "Enter the product." });
+      return null;
+    }
+    const product = match.get(text.trim().toLowerCase()) ?? null;
+    if (!product) errors.push({ field: "product", message: `"${text}" is not in your products. Fix the name to match one.` });
+    else if (!product.trackStock) errors.push({ field: "product", message: `${product.name} does not keep stock.` });
+    return product && product.trackStock ? product : null;
+  }
+
+  private stockUnit(text: string, product: ProductRow | null, units: Map<string, ProductUnitRow[]>, errors: { field: string; message: string }[]) {
+    const unit = text.trim() ? unitFromText(text) : (product?.baseUnit ?? null);
+    if (text.trim() && !unit) errors.push({ field: "unit", message: `Unknown unit "${text}".` });
+    if (product && unit && this.factor(product, units.get(product.id) ?? [], unit) === null) errors.push({ field: "unit", message: `${product.name} does not come in ${unit}.` });
+    return unit;
+  }
+
   private async recordImport(tenant: TenantContext, businessId: string, kind: string, source: "file" | "capture", rows: number) {
     await this.audit.record({
       tenantId: tenant.tenantId,
@@ -394,4 +547,29 @@ export class ImportService {
     const count = (status: ImportRowResult["status"]) => results.filter((result) => result.status === status).length;
     return { committed, results, totals: { create: count("create"), update: count("update"), error: count("error") } };
   }
+}
+
+/** "remove", "out", "minus" → remove; "add", "in", "found" → add. */
+function directionFromText(text: string): "remove" | "add" | null {
+  const value = text.trim().toLowerCase();
+  if (!value) return null;
+  if (/^(remove|take off|take out|out|minus|less|reduce|-)/.test(value)) return "remove";
+  if (/^(add|put back|in|plus|increase|found|\+)/.test(value)) return "add";
+  return null;
+}
+
+/** Plain words for why stock changed, as traders say them ("got wet", "rat chop am", "we used two"). */
+function reasonFromText(text: string) {
+  const value = ` ${text.trim().toLowerCase().replace(/[^a-z']+/g, " ")} `;
+  if (!value.trim()) return null;
+  const said = (pattern: string) => new RegExp(` (${pattern})`).test(value);
+  if (said("correct|mistake|error|recount|wrong count")) return "correction";
+  if (said("found|extra")) return "found";
+  if (said("expir|out of date|old stock")) return "expired";
+  if (said("damag|broke|spoil|wet|rat|leak|torn|crush|dent|spill|melt|rotten|bad")) return "damaged";
+  if (said("miss|stolen|steal|theft|thief|lost|can't find|cannot find|short")) return "missing";
+  if (said("own use|shop use|used|use|staff|we ate|drank|ate")) return "own_use";
+  if (said("gift|dash|free|sample|promo|give away|gave")) return "gift";
+  if (said("other")) return "other";
+  return null;
 }
