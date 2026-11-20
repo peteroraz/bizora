@@ -210,11 +210,11 @@ describe("bank statements and the reconciliation inbox", () => {
     expect(await owing()).toBe("1500000");
     const payment = await client.query<{ status: string }>("SELECT status FROM customer_payments WHERE tenant_id = $1 AND payment_number = 'PAY-000001'", [a.tenantId]);
     expect(payment.rows[0]?.status).toBe("voided");
-    // Classified another way instead: other money in.
+    // Classified another way instead: other money in, which is not a sale and so not profit (ADR-038).
     const before = await ledger.trialBalance(a.tenantId, a.businessId);
     await request(http).post(`/api/v1/reconciliation/${chikaLineId}/match`).set(auth(a.token)).send({ target: { kind: "money_in", category: "other_income" } }).expect(200);
     const after = await ledger.trialBalance(a.tenantId, a.businessId);
-    expect(balance(after.accounts, "4900") - balance(before.accounts, "4900")).toBe(-1_500_000n);
+    expect(balance(after.accounts, "2190") - balance(before.accounts, "2190")).toBe(-1_500_000n);
     expect(after.balanced).toBe(true);
   });
 

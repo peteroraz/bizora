@@ -460,7 +460,8 @@
     "cashTotal": "{count, plural, one {In the drawer} other {In # drawers}}",
     "seeCash": "See cash by shop",
     "approvalExpenses": "{count, plural, one {# expense} other {# expenses}} to approve",
-    "transfersToCheck": "{count, plural, one {# transfer to check} other {# transfers to check}} against the bank"
+    "transfersToCheck": "{count, plural, one {# transfer to check} other {# transfers to check}} against the bank",
+    "posCashout": "POS cash-out"
   },
   "onboarding": {
     "progress": "Question {current} of {total}",
@@ -1653,9 +1654,10 @@
       "kind_owner_out": "I took money from the drawer for myself",
       "kind_to_bank": "Cash from the drawer paid into the bank",
       "kind_from_bank": "Cash drawn from the bank into the drawer",
-      "kind_other_in": "Other money in (not a sale or a debt)",
+      "kind_other_in": "Other money in (not a sale, not profit)",
       "saved": "Saved.",
-      "cancelled": "Cancelled."
+      "cancelled": "Cancelled.",
+      "kind_pos_cashout": "POS cash-out"
     },
     "cash": {
       "title": "Cash in the shops",
@@ -1672,6 +1674,7 @@
       "flow_owner": "Owner's money",
       "flow_bank": "To and from the bank",
       "flow_other_in": "Other money in",
+      "flow_pos_cashout": "POS cash-outs (cash given, less fees paid in cash)",
       "flow_stock_bought": "Stock paid in cash",
       "flow_counts": "Counted short or over",
       "flow_other": "Other",
@@ -1696,7 +1699,7 @@
     },
     "profit": {
       "title": "Profit",
-      "lead": "Worked out from your sales, the cost of the goods sold, and what you spent.",
+      "lead": "Worked out from your sales only: what you sold, less what the goods cost you and what you spent. Fees for POS cash-outs count too.",
       "viewDay": "A day",
       "viewMonth": "This month",
       "monthLabel": "1 {month} to today",
@@ -1704,7 +1707,6 @@
       "discounts": "Discounts given",
       "cost": "What the goods sold cost you",
       "gross": "Made on goods sold",
-      "otherIncome": "Other money in",
       "expenses": "Running costs",
       "profit": "Profit",
       "loss": "Loss",
@@ -1712,7 +1714,9 @@
       "byDay": "Day by day",
       "noActivity": "No sales or costs recorded.",
       "costNote": "Goods are counted at what they cost you when sold. Rent and other running costs count on the day they are recorded.",
-      "returns": "Goods returned by customers"
+      "returns": "Goods returned by customers",
+      "posFees": "Fees for POS cash-outs",
+      "notFromSales": "{amount} came in that was not from sales (cash found in a count, or other money in). It is not counted as profit."
     },
     "suppliersTitle": "Suppliers",
     "suppliersOwed": "You owe {amount}",
@@ -1800,6 +1804,24 @@
       "lostWrittenOff": "Written off as lost",
       "lostOwed": "{customer} owes it again",
       "takenBy": "Taken by {name}; checked {when}"
+    },
+    "posCashout": {
+      "title": "POS cash-out",
+      "lead": "A customer pays on your POS machine and you give them cash from the drawer. The cash is not a cost and not a sale. Only your fee counts as profit.",
+      "action": "POS cash-out",
+      "amount": "Cash given to the customer",
+      "fee": "Your fee",
+      "feeHint": "Enter 0 if you did not charge.",
+      "feePaidBy": "How was the fee paid?",
+      "feeOnPos": "Added on the POS (the customer paid the cash and the fee on the machine)",
+      "feeInCash": "Paid in cash into the drawer",
+      "summary": "The POS should show {pos}. The drawer goes down by {drawer}.",
+      "feeTooHigh": "The fee cannot be more than the cash given.",
+      "save": "Save cash-out",
+      "saved": "Saved. {amount} given out, fee {fee}.",
+      "another": "Record another",
+      "feeOnPosShort": "(fee {amount} on the POS)",
+      "feeInCashShort": "(fee {amount} in cash)"
     }
   },
   "bank": {
@@ -1838,7 +1860,7 @@
     "category": {
       "unrecorded_sales": "Sales not recorded yet",
       "owner_capital": "Owner put money in",
-      "other_income": "Other money in"
+      "other_income": "Other money in (not a sale, not profit)"
     },
     "transfer": {
       "pos_settlement": "POS money settled to bank",
@@ -1858,7 +1880,7 @@
       "advance": "A customer paying ahead",
       "money_in_unrecorded_sales": "Sales not recorded yet",
       "money_in_owner_capital": "Owner put money in",
-      "money_in_other_income": "Other money in",
+      "money_in_other_income": "Other money in (not a sale, not profit)",
       "own_transfer_pos_settlement": "POS money settled to bank",
       "own_transfer_cash_deposit": "Cash paid into the bank",
       "own_transfer_other_account": "From my other account",

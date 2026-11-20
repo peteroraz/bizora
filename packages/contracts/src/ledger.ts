@@ -34,6 +34,8 @@ export type LedgerRole =
   | "transfers_waiting"
   | "transfers_lost"
   | "jobs_in_progress"
+  | "not_sales_money"
+  | "pos_cashout_fees"
   | "fx";
 
 export type AccountTemplate = { code: string; name: string; type: LedgerAccountType; role: LedgerRole };
@@ -57,9 +59,13 @@ const base: AccountTemplate[] = [
   { code: "1350", name: "Jobs in progress", type: "asset", role: "jobs_in_progress" },
   { code: "2000", name: "Suppliers we owe", type: "liability", role: "payable" },
   { code: "2100", name: "Customer advance payments", type: "liability", role: "customer_deposits" },
+  // Profit comes only from sales (ADR-038): cash found in a count, or other money in, is held here, not counted as profit.
+  { code: "2190", name: "Money in that is not from sales", type: "liability", role: "not_sales_money" },
   { code: "3000", name: "Owner's money put in", type: "equity", role: "capital" },
   { code: "3100", name: "Owner's withdrawals", type: "equity", role: "drawings" },
   { code: "3200", name: "Profit kept in the business", type: "equity", role: "retained" },
+  // Fees charged for giving customers cash on the shop's POS machine (ADR-038).
+  { code: "4060", name: "POS cash-out fees", type: "income", role: "pos_cashout_fees" },
   { code: "4100", name: "Discounts given", type: "income", role: "discounts" },
   // Money given back for goods customers returned (ADR-030). Like discounts, it lowers sales.
   { code: "4150", name: "Returns from customers", type: "income", role: "sales_returns" },
@@ -73,7 +79,7 @@ const base: AccountTemplate[] = [
   { code: "6600", name: "Bank and POS charges", type: "expense", role: "bank_charges" },
   { code: "6700", name: "Market levies and dues", type: "expense", role: "expense" },
   { code: "6900", name: "Other expenses", type: "expense", role: "expense" },
-  // A drawer that counts more or less than expected (ADR-028). Short is a cost; over lowers it.
+  // A drawer that counts less than expected is a cost (ADR-028). More than expected goes to 2190, not profit (ADR-038).
   { code: "6950", name: "Cash short or over", type: "expense", role: "cash_over_short" },
   { code: "6960", name: "Transfers that never arrived", type: "expense", role: "transfers_lost" },
   { code: "7000", name: "Exchange rate gains and losses", type: "expense", role: "fx" },

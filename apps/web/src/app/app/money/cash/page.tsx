@@ -158,6 +158,9 @@ function CashScreen() {
                       <div className="flex justify-between gap-3">
                         <span className={move.status === "voided" ? "text-muted line-through" : ""}>
                           {t(`move.kind_${move.kind}`)}
+                          {move.kind === "pos_cashout" && move.feeMinor !== "0"
+                            ? ` ${t(move.feePaidBy === "cash" ? "posCashout.feeInCashShort" : "posCashout.feeOnPosShort", { amount: money(move.feeMinor) })}`
+                            : ""}
                           {move.note ? `: ${move.note}` : ""}
                         </span>
                         <span className="tabular-nums">{money(move.amountMinor)}</span>

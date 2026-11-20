@@ -22,6 +22,7 @@ function MoneyScreen() {
   const reconciles = can(access, Permission.BANK_RECONCILE);
   const seesCash = can(access, Permission.CASH_EXPECTED_READ);
   const counts = can(access, Permission.CASH_CLOSE);
+  const collects = can(access, Permission.SALES_COLLECT);
   const seesProfit = can(access, Permission.REPORTS_PROFIT_READ);
   const records = can(access, Permission.EXPENSES_RECORD);
   const approves = can(access, Permission.EXPENSES_APPROVE);
@@ -85,6 +86,11 @@ function MoneyScreen() {
               {seesCash ? (
                 <ActionLink href="/app/money/cash" size="sm">
                   {t("seeCash")}
+                </ActionLink>
+              ) : null}
+              {collects ? (
+                <ActionLink href="/app/money/pos-cashout" size="sm" data-testid="money-pos-cashout">
+                  {t("posCashout.action")}
                 </ActionLink>
               ) : null}
             </div>

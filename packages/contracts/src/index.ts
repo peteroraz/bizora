@@ -81,6 +81,8 @@ export {
   EXPENSE_PAID_FROM,
   EXPENSE_STATUSES,
   MONEY_MOVEMENT_KINDS,
+  MOVE_SCREEN_KINDS,
+  posCashoutSchema,
   PROFIT_DAILY_MAX_DAYS,
   PROFIT_MAX_DAYS,
   cashCountSchema,
@@ -93,6 +95,7 @@ export {
   type ExpensePaidFrom,
   type ExpenseStatus,
   type MoneyMovementInput,
+  type PosCashoutInput,
   type MoneyMovementKind,
 } from "./money.js";
 export {

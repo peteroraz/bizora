@@ -229,12 +229,13 @@ describe("sprint 7b: money in and out, cash per shop, profit", () => {
       netSalesMinor: "1000000",
       costOfSalesMinor: "600000",
       grossProfitMinor: "400000",
-      otherIncomeMinor: "0",
-      // Transport 1,500 + rent 20,000 + phone 500 + cash short 500 − cash over 100.
-      expensesMinor: String(150000 + 2000000 + 50000 + 50000 - 10000),
+      posCashoutFeesMinor: "0",
+      // Transport 1,500 + rent 20,000 + phone 500 + cash short 500. Cash over is not profit (ADR-038).
+      expensesMinor: String(150000 + 2000000 + 50000 + 50000),
+      notFromSalesMinor: "10000",
       expensesAwaitingApproval: 0,
     });
-    expect(BigInt(data.profitMinor)).toBe(400000n - 2240000n);
+    expect(BigInt(data.profitMinor)).toBe(400000n - 2250000n);
     expect(data.expenses[0]).toMatchObject({ name: "Rent", amountMinor: "2000000" });
     expect(data.days).toHaveLength(1);
     expect(data.days[0]).toMatchObject({ date: today, profitMinor: data.profitMinor });

@@ -36,6 +36,7 @@ export default function AppHomePage() {
   const approvesStock = can(access, Permission.STOCK_ADJUST);
   const seesSales = shown.includes("sales") || shown.includes("mySales");
   const sells = can(access, Permission.SALES_CREATE);
+  const collects = can(access, Permission.SALES_COLLECT);
   const [sales, setSales] = useState<SaleSummary | null>(null);
   const [queues, setQueues] = useState<{ awaitingPayment: number | null; awaitingRelease: number | null } | null>(null);
   const seesQueues = shown.includes("toCollect") || shown.includes("toRelease");
@@ -175,10 +176,20 @@ export default function AppHomePage() {
         title={t("welcome", { name: name || t("fallbackName") })}
         description={seesCustomers ? `${t("customerCount", { count: customerCount })} · ${today}` : today}
       />
-      {sells ? (
-        <ActionLink href="/app/sales/new" variant="primary" className="h-14 w-full text-base sm:w-auto sm:px-10" data-testid="home-new-sale">
-          {t("newSale")}
-        </ActionLink>
+      {sells || collects ? (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {sells ? (
+            <ActionLink href="/app/sales/new" variant="primary" className="h-14 w-full text-base sm:w-auto sm:px-10" data-testid="home-new-sale">
+              {t("newSale")}
+            </ActionLink>
+          ) : null}
+          {/* Giving customers cash on the shop's POS machine (ADR-038). */}
+          {collects ? (
+            <ActionLink href="/app/money/pos-cashout" className="h-14 w-full text-base sm:w-auto sm:px-8" data-testid="home-pos-cashout">
+              {t("posCashout")}
+            </ActionLink>
+          ) : null}
+        </div>
       ) : null}
       {unfinished.length > 0 ? (
         <Card data-testid="home-checklist">
