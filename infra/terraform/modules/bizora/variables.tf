@@ -26,12 +26,29 @@ variable "db_point_in_time_recovery" {
 
 variable "api_min_instances" {
   type        = number
-  description = "Minimum bizora-api instances. Staging is 0. Production is 1. Maximum is fixed at 1."
+  description = "Minimum bizora-api instances. Staging is 0. Production is 1."
 
   validation {
     condition     = var.api_min_instances == 0 || var.api_min_instances == 1
-    error_message = "api_min_instances must be 0 or 1. The API max instance count is fixed at 1."
+    error_message = "api_min_instances must be 0 or 1."
   }
+}
+
+variable "api_max_instances" {
+  type        = number
+  description = "Maximum bizora-api instances. Sign-in limits are kept in Postgres (ADR-036), so more than one is safe."
+  default     = 4
+
+  validation {
+    condition     = var.api_max_instances >= 1 && var.api_max_instances <= 10
+    error_message = "api_max_instances must be between 1 and 10."
+  }
+}
+
+variable "alert_emails" {
+  type        = list(string)
+  description = "Email addresses told when the service is down or failing (ADR-036). Empty creates the alerts without anyone to tell."
+  default     = []
 }
 
 variable "web_min_instances" {

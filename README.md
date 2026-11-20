@@ -57,7 +57,7 @@ Set `TRUST_PROXY=true` in production. The API trusts **1 hop** (`X-Forwarded-For
 
 ## Known limitations
 
-- Auth throttling (`@nestjs/throttler`) is **in-memory per Cloud Run instance**. Terraform caps `bizora-api` at one instance until the throttler moves to Redis-backed storage. Limits can be bypassed if that cap is raised first.
+- Sign-in limits (`@nestjs/throttler`) are kept in Postgres (ADR-036), so every `bizora-api` instance counts the same attempts. Terraform allows up to `api_max_instances` (4 by default).
 - There is no custom domain yet. The public URLs are the Cloud Run `run.app` hosts.
 - There is no email delivery yet. Invite tokens are returned by the API only when `INVITE_TOKEN_EXPOSE=true` (staging). Production leaves that off.
 - PostgreSQL RLS is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).

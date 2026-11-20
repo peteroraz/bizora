@@ -37,3 +37,15 @@ variable "wif_mode" {
   type        = string
   description = "GitHub identity allowed to deploy. main_branch or production_environment."
 }
+
+variable "api_max_instances" {
+  type        = number
+  description = "Maximum bizora-api instances (ADR-036)."
+  default     = 4
+}
+
+variable "alert_emails" {
+  type        = list(string)
+  description = "Who is emailed when Bizora is down or failing (ADR-036)."
+  default     = []
+}

@@ -19,6 +19,7 @@ export const CAPTURE_BODY_LIMIT = "24mb";
 export const LOGO_PATH = "/api/v1/organizations/current/logo";
 export const LOGO_BODY_LIMIT = "800kb";
 export const PRODUCT_PHOTO_PATH = /^\/api\/v1\/products\/[^/]+\/photos$/;
+export const CSP_REPORT_PATH = "/api/v1/telemetry/csp";
 
 export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
   const app = await NestFactory.create(AppModule.register({ env, db, logger }), {
@@ -36,6 +37,8 @@ export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
   app.use(LOGO_PATH, json({ limit: LOGO_BODY_LIMIT }));
   // Product photos (ADR-033) are shrunk on the phone; at most 600 KB each.
   app.use(PRODUCT_PHOTO_PATH, json({ limit: LOGO_BODY_LIMIT }));
+  // Browsers send content security policy reports with their own content types (ADR-036).
+  app.use(CSP_REPORT_PATH, json({ limit: "16kb", type: ["application/csp-report", "application/reports+json", "application/json"] }));
   app.use(json({ limit: DEFAULT_BODY_LIMIT }));
   app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
   app.use(cookieParser());
@@ -44,10 +47,12 @@ export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("X-Frame-Options", "DENY");
     response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    // The API sends data, PDFs and pictures, never pages that run scripts (ADR-036).
+    response.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     next();
   });
   app.use(correlationMiddleware);
-  app.useGlobalFilters(new ErrorEnvelopeFilter());
+  app.useGlobalFilters(new ErrorEnvelopeFilter(logger));
   app.enableCors({
     origin: env.WEB_ORIGIN,
     credentials: true,
