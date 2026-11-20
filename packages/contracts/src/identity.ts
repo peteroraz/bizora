@@ -36,7 +36,7 @@ export function isHigherPrivilege(candidate: Role, actor: Role): boolean {
   return ROLE_RANK[candidate] < ROLE_RANK[actor];
 }
 
-export const actorTypeSchema = z.enum(["HUMAN", "STAFF_PIN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW"]);
+export const actorTypeSchema = z.enum(["HUMAN", "STAFF_PIN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW", "BIZORA_SUPPORT"]);
 export type ActorType = z.infer<typeof actorTypeSchema>;
 
 export const uuidSchema = z.string().uuid();

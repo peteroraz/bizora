@@ -14,6 +14,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import { resolveAssignableScope } from "../../common/tenant-scope.js";
+import { supportAuditFields, type SupportActor } from "../../common/support-actor.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase } from "../../db/database.js";
 import { invitations, memberships, userIdentities, users } from "../../db/schema.js";
@@ -128,6 +129,28 @@ export class InvitationService {
       correlationId: tenant.correlationId,
     });
     return { id: updated.id, status: updated.status };
+  }
+
+  /** Bizora support sends a pending invitation again with a fresh link (ADR-037). */
+  async resendForSupport(invitationId: string, actor: SupportActor) {
+    const token = randomBytes(32).toString("base64url");
+    const [updated] = await this.db
+      .update(invitations)
+      .set({ tokenHash: sha256Hex(token), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), updatedBy: null })
+      .where(and(eq(invitations.id, invitationId), eq(invitations.status, "PENDING")))
+      .returning();
+    if (!updated) throw new ApiError("INVITATION_NOT_FOUND", "Invitation was not found.", 404);
+    await this.audit.record({
+      ...supportAuditFields(actor),
+      tenantId: updated.tenantId,
+      action: "invitation.resent",
+      entityType: "invitation",
+      entityId: updated.id,
+      businessId: updated.businessId,
+      branchId: updated.branchId,
+    });
+    await this.deliverInvitation(updated.email, token);
+    return { id: updated.id, tenantId: updated.tenantId, email: updated.email, expiresAt: updated.expiresAt };
   }
 
   async resend(tenant: TenantContext, invitationId: string) {

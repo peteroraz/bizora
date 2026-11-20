@@ -49,3 +49,15 @@ variable "alert_emails" {
   description = "Who is emailed when Bizora is down or failing (ADR-036)."
   default     = []
 }
+
+variable "admin_custom_domain" {
+  type        = string
+  description = "Admin portal hostname without a scheme (ADR-037). Empty keeps the run.app origin."
+  default     = ""
+}
+
+variable "admin_bootstrap_emails" {
+  type        = list(string)
+  description = "Google accounts that become super admins the first time they sign in to the Admin portal (ADR-037)."
+  default     = []
+}

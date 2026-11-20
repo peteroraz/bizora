@@ -47,21 +47,10 @@ export class OauthService {
     inviteToken?: string;
     userId?: string;
   }): Promise<{ location: string; sealed: string }> {
-    const config = await this.configuration(input.provider);
     const returnTo = safeReturnTo(input.returnTo);
-    const codeVerifier = client.randomPKCECodeVerifier();
-    const state = client.randomState();
-    const nonce = client.randomNonce();
-    const url = client.buildAuthorizationUrl(config, {
-      redirect_uri: this.redirectUri(input.provider),
-      scope: "openid email profile",
-      code_challenge: await client.calculatePKCECodeChallenge(codeVerifier),
-      code_challenge_method: "S256",
-      state,
-      nonce,
-    });
+    const { location, state, nonce, codeVerifier } = await this.authorize(input.provider, this.redirectUri(input.provider));
     return {
-      location: url.href,
+      location,
       sealed: sealOauthTransaction(
         {
           provider: input.provider,
@@ -76,6 +65,24 @@ export class OauthService {
         this.env.JWT_SECRET,
       ),
     };
+  }
+
+  /** A Google sign-in address with PKCE; also used by the Admin portal with its own return address (ADR-037). */
+  async authorize(provider: OauthProviderName, redirectUri: string, extra: Record<string, string> = {}) {
+    const config = await this.configuration(provider);
+    const codeVerifier = client.randomPKCECodeVerifier();
+    const state = client.randomState();
+    const nonce = client.randomNonce();
+    const url = client.buildAuthorizationUrl(config, {
+      redirect_uri: redirectUri,
+      scope: "openid email profile",
+      code_challenge: await client.calculatePKCECodeChallenge(codeVerifier),
+      code_challenge_method: "S256",
+      state,
+      nonce,
+      ...extra,
+    });
+    return { location: url.href, state, nonce, codeVerifier };
   }
 
   async finish(transaction: OauthTransaction, currentUrl: URL, meta: AuthMeta): Promise<{ session: AuthPayload | null; location: string }> {
@@ -104,7 +111,8 @@ export class OauthService {
     }
   }
 
-  private async profile(transaction: OauthTransaction, currentUrl: URL): Promise<OauthProfile> {
+  /** Checks Google's answer (state, nonce, PKCE, signature) and returns who signed in. */
+  async profile(transaction: Pick<OauthTransaction, "provider" | "state" | "nonce" | "codeVerifier">, currentUrl: URL): Promise<OauthProfile> {
     const config = await this.configuration(transaction.provider);
     let tokens: client.TokenEndpointResponseHelpers;
     try {

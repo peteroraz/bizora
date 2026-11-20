@@ -64,6 +64,9 @@ const envSchema = z
     GOOGLE_OAUTH_CLIENT_ID: optionalText,
     GOOGLE_OAUTH_CLIENT_SECRET: optionalText,
     GOOGLE_OAUTH_ISSUER: optionalUrl,
+    // Admin portal (ADR-037): its address (for Google's return address), and the first super admins.
+    ADMIN_WEB_ORIGIN: optionalUrl,
+    ADMIN_BOOTSTRAP_EMAILS: optionalText,
     // AI capture (ADR-018). off: no AI; vertex: Gemini on Vertex AI in VERTEX_PROJECT; fake: canned drafts for tests.
     AI_PROVIDER: z.enum(["off", "vertex", "fake"]).default("off"),
     VERTEX_PROJECT: optionalText,
@@ -107,6 +110,8 @@ export type AppEnv = Omit<
   | "GOOGLE_OAUTH_CLIENT_ID"
   | "GOOGLE_OAUTH_CLIENT_SECRET"
   | "GOOGLE_OAUTH_ISSUER"
+  | "ADMIN_WEB_ORIGIN"
+  | "ADMIN_BOOTSTRAP_EMAILS"
   | "DEFAULT_PLAN_CODE"
   | "STAFF_SESSION_TTL"
   | "AI_PROVIDER"
@@ -131,6 +136,8 @@ export type AppEnv = Omit<
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_ISSUER?: string;
+  ADMIN_WEB_ORIGIN?: string;
+  ADMIN_BOOTSTRAP_EMAILS?: string;
   DEFAULT_PLAN_CODE?: "starter" | "business";
   STAFF_SESSION_TTL?: string;
 };

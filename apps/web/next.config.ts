@@ -31,7 +31,8 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
-      { source: "/api/:path*", destination: `${apiOrigin}/api/:path*` },
+      // The Admin portal's API is reached only from the portal's own address (ADR-037).
+      { source: "/api/:path((?!admin/).*)", destination: `${apiOrigin}/api/:path` },
       { source: "/health", destination: `${apiOrigin}/health` },
       { source: "/ready", destination: `${apiOrigin}/ready` },
     ];

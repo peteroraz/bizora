@@ -106,6 +106,18 @@ jobs:
             API_ORIGIN=${{ steps.urls.outputs.api }}
           tags: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/web:${{ github.sha }}
 
+      - name: Build and push admin image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/admin/Dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          build-args: |
+            API_ORIGIN=${{ steps.urls.outputs.api }}
+          tags: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/admin:${{ github.sha }}
+
       - name: Run database migrations
         env:
           IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/api:${{ github.sha }}
@@ -139,6 +151,19 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ vars.GCP_REGION }}" \
             --image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/web:${{ github.sha }}"
+
+      - name: Deploy admin portal
+        run: |
+          set -euo pipefail
+          # bizora-admin is created by Terraform (ADR-037). Until the owner applies it, skip rather than fail.
+          if ! gcloud run services describe bizora-admin --project="${{ vars.GCP_PROJECT_ID }}" --region="${{ vars.GCP_REGION }}" --format="value(name)" >/dev/null 2>&1; then
+            echo "bizora-admin does not exist yet; run terraform apply to create it. Skipping."
+            exit 0
+          fi
+          gcloud run services update bizora-admin \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ vars.GCP_REGION }}" \
+            --image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/admin:${{ github.sha }}"
 
       - name: Smoke test
         env:
