@@ -30,7 +30,7 @@ microphone ─► recorder.ts (≤30 s, 16 kHz mono, memory only)
 
 - **Local development.**
   - `pnpm install`, then `pnpm dev`. `predev` copies the speech runtime into `apps/web/public/voice/ort/`.
-  - To use real speech, run `pnpm --filter @bizora/web voice:models -- --allow-unlocked` once. It needs access to huggingface.co.
+  - To use real speech, run `pnpm --filter @bizora/web voice:models` once. It needs access to huggingface.co and checks every file against the lock.
   - Without the model, the panel says offline voice is not available yet. Typing the sale in words, and Bizora AI when online, still work.
 - **CI.** The e2e job:
   - fetches the model (cached by the hash of `models.json` and the lock) and prints the lock;
@@ -40,11 +40,8 @@ microphone ─► recorder.ts (≤30 s, 16 kHz mono, memory only)
   - `apps/web/Dockerfile` fetches the model before `next build`, so the site serves it from `/voice/`.
   - If the fetch fails, the build continues and offline voice shows "not available yet".
   - `/voice/*` is served with `Cache-Control: immutable`, since every path has a version in it.
-- **Pinning the model (one-off).**
-  - After the first CI run, copy the `LOCK …` lines (or the printed lock) into `models.lock.json`.
-  - Set `revision` in `models.json` to the commit shown, and commit both.
-  - From then on, a changed file fails the build.
-- **Changing the model.** Add a new entry with a higher `version`, fetch with `--allow-unlocked`, check the hashes, and commit the lock. Phones delete the old cache when they install the new one.
+- **Pinning.** The model is pinned to commit `794207fe…` of `onnx-community/whisper-tiny.en`. Every file's SHA-256 is in `models.lock.json`, recorded from the first CI fetch on 20 Nov 2026. A changed or unlisted file fails the fetch.
+- **Changing the model.** Add a new entry with a higher `version` and a pinned `revision`, fetch once with `--allow-unlocked`, check the hashes, and commit the lock. Phones delete the old cache when they install the new one.
 
 ## For traders (user guide)
 

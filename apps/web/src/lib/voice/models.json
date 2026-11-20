@@ -13,7 +13,7 @@
       "language": "en",
       "label": "English",
       "source": "onnx-community/whisper-tiny.en",
-      "revision": "main",
+      "revision": "794207fec2761281fe63a23a94b7e9f53a4efbc1",
       "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face card for openai/whisper-tiny.en says Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
       "dtype": { "encoder_model": "fp32", "decoder_model_merged": "q8" },
       "files": [

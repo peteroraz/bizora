@@ -116,4 +116,19 @@ describe("reading a spoken sale", () => {
   it("reads a customer named with 'customer is…'", () => {
     expect(read("Customer is Alhaji Musa. Ten bags of cement at 9500 each, transfer.").customerText).toBe("Alhaji Musa");
   });
+
+  it("reads words speech-to-text writes for what was said (heard by Whisper on a recording)", () => {
+    // "two" written as "to" or "too", "bags" heard as "backs".
+    for (const words of ["Sold to bags of rice at 75,000 naira each, cash.", "Sold too backs of rice at 75,000 naira each, cash.", "Sold two bags of rice at 75 thousand naira each. Cash."]) {
+      const sale = read(words);
+      expect(sale.lines, words).toEqual([expect.objectContaining({ productText: "rice", unit: "bag", quantity: 2000n, unitPriceMinor: 7_500_000n })]);
+      expect(sale.paidInFull, words).toBe(true);
+    }
+    expect(read("Sold for cartons of Indomie at 12k each, cash.").lines[0]).toMatchObject({ quantity: 4000n, unit: "carton" });
+    // A name after "to" is a customer, and "for" after a number or "paid" stays as it is.
+    expect(read("Sold two bags of rice to Emeka at 75k each, cash.").customerText).toBe("Emeka");
+    expect(read("Sold five bags of rice for 375 thousand, cash.").lines[0]).toMatchObject({ quantity: 5000n, unitPriceMinor: 7_500_000n });
+    expect(read("He paid for bags of rice, 75k each.").lines[0]?.quantity ?? null).not.toBe(4000n);
+    expect(read("Five tens of Peak Milk at 450 each, cash.").lines[0]).toMatchObject({ quantity: 5000n, unit: "tin" });
+  });
 });

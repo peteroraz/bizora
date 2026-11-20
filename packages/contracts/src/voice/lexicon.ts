@@ -40,6 +40,13 @@ export type VoiceLexicon = {
   methods: Record<string, "cash" | "transfer" | "pos">;
   /** Words that carry no meaning here: "he", "the", "me". */
   filler: string[];
+  /**
+   * Words speech-to-text writes for a number that sounds the same, used only right before a unit word and not after
+   * another number: "sold TO bags of rice" → 2 bags, "FOR cartons" → 4 cartons.
+   */
+  numberSoundAlikes?: Record<string, string>;
+  /** Words misheard for a unit or market word: "backs" of rice → "bags". */
+  soundAlikes?: Record<string, string>;
   /** Currency words and the currency they mean. "naira" → NGN. */
   currencies: Record<string, string>;
   /** The smallest coin: "kobo", "pesewas", "cents". Amounts said in these are not whole money units. */
@@ -89,6 +96,8 @@ export const ENGLISH: VoiceLexicon = {
     cash: "cash", transfer: "transfer", transferred: "transfer", bank: "transfer", "bank transfer": "transfer", trf: "transfer",
     pos: "pos", "p.o.s": "pos", card: "pos", swipe: "pos", swiped: "pos", atm: "pos",
   },
+  numberSoundAlikes: { to: "two", too: "two", for: "four" },
+  soundAlikes: { backs: "bags", back: "bag", bax: "bags", cartoons: "cartons", cartoon: "carton", creates: "crates", create: "crate", tens: "tins" },
   filler: ["he", "she", "they", "him", "her", "me", "us", "i", "we", "the", "it", "is", "was", "will", "has", "have", "just", "only", "so", "then", "also", "um", "uh", "eh", "oh", "okay", "ok", "sum", "amount", "money", "already", "about", "around", "like"],
   currencies: {
     naira: "NGN", nairas: "NGN", "₦": "NGN", "#": "NGN", n: "NGN",

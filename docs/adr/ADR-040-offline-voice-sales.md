@@ -100,4 +100,4 @@ Accepted on 20 Nov 2026. Builds on ADR-015 (offline outbox and service worker), 
 - **Accuracy.** The tiny English model is the smallest that is useful. It has not been measured on Nigerian accents (see `docs/voice/README.md`), so the review step is mandatory and every value can be edited.
 - **The Docker image** grows by about 110 MB (model and runtimes). Webpack also emits a spare copy of the WebGPU runtime under `_next/static/media`, which is unused.
 - **After a Bizora update,** the voice screen must be opened once online before it works offline, like the other offline screens.
-- **Pinning.** `models.json` points at the `main` revision until the first CI fetch records the commit. Then the lock is committed and the revision pinned.
+- **Pinning.** The model is pinned to commit `794207fe` and the lock holds every file's SHA-256 from the first CI fetch, so the build trusts nothing new.

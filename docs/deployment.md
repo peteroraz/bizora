@@ -108,7 +108,7 @@ Costs: each photo or voice note is one Gemini request, billed to the project by 
 
 - **Build.** The web image fetches the Whisper tiny English model (about 66 MB) from Hugging Face during `docker build`, and serves it from `/voice/` with the speech runtime. No speech service, key or recurring cost is involved.
 - **Network.** The build needs outbound access to `huggingface.co`. If the fetch fails, the image still builds; offline voice then says it is not available yet.
-- **Integrity.** Files are checked against `apps/web/src/lib/voice/models.lock.json`. A changed file fails the build. Pin the lock after the first CI fetch (`docs/voice/README.md`, "Pinning the model").
+- **Integrity.** Files are checked against `apps/web/src/lib/voice/models.lock.json`. A changed file fails the build. The lock is pinned to one model commit.
 - **Image size.** Expect the web image to be about 110 MB larger.
 
 ## First apply

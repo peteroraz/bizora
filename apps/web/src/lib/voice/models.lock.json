@@ -1,4 +1,65 @@
 {
-  "note": "SHA-256 of every model file as first downloaded (ADR-040). The fetch script refuses files that do not match. Empty until the first CI download writes it; then commit it.",
-  "files": {}
+  "note": "SHA-256 of every model file, recorded from the first CI fetch on 20 Nov 2026 (onnx-community/whisper-tiny.en at commit 794207fe). A file that differs stops the build.",
+  "files": {
+    "whisper-tiny.en@1/config.json": {
+      "sha256": "251ea843b5901a99efa58c0b99b8052c6019aa3e7d2baf46693a1128ff606233",
+      "bytes": 2197,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/generation_config.json": {
+      "sha256": "7b2e8451ed5f118e75fdd991409d72119d21d2fef1eba9723f68fb9c57fe5dc9",
+      "bytes": 1646,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/preprocessor_config.json": {
+      "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d",
+      "bytes": 339,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/tokenizer.json": {
+      "sha256": "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0",
+      "bytes": 2405679,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/tokenizer_config.json": {
+      "sha256": "93879c3dccdd4b976f709acd85b44778873f30c275e67026f30ca1e4c975230c",
+      "bytes": 282662,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/onnx/encoder_model.onnx": {
+      "sha256": "8c361b9430a5ef6619ee64b7fe06c725df19f36d508cc8b847064b34a888a3fe",
+      "bytes": 32904992,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/onnx/decoder_model_merged_quantized.onnx": {
+      "sha256": "c0592d0749413c960569e1c7fb806b060d5d18f3ebad4a95cbf9a77dc6e9be52",
+      "bytes": 30718858,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/special_tokens_map.json": {
+      "sha256": "98bdf3ec5b32e31575b02f64b0a32bde7c0449075d34484a7df9bdd3cdeb9fb9",
+      "bytes": 2173,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/added_tokens.json": {
+      "sha256": "560be47bea388757f8d4cc185c5d82067426cbb6361e38016dd90ddc01ab203a",
+      "bytes": 34604,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/normalizer.json": {
+      "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+      "bytes": 52666,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/vocab.json": {
+      "sha256": "f6bd25a65e4e63ca31360e9fb11c7e4f9a391a78385d640acd814092dd6eee4f",
+      "bytes": 999186,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    },
+    "whisper-tiny.en@1/merges.txt": {
+      "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+      "bytes": 456318,
+      "commit": "794207fec2761281fe63a23a94b7e9f53a4efbc1"
+    }
+  }
 }

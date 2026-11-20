@@ -58,8 +58,41 @@ export function rawTokens(text: string): (WordToken | PunctToken | { kind: "digi
  * Joins number words into numbers: "three hundred and fifty thousand" → 350000. Digits and words mix: "75 thousand".
  * A number that cannot be read stays as words.
  */
+/**
+ * Fixes words speech-to-text often writes for what was said: "backs" for "bags", and "to" or "for" for "two" or
+ * "four" when a unit comes straight after ("sold to bags of rice"). A customer's name after "to" is never a unit, so
+ * "sold rice to Emeka" is untouched; "75 thousand for bags" keeps "for", because a number comes before it.
+ */
+function soundAlikes(raw: ReturnType<typeof rawTokens>, lexicon: VoiceLexicon) {
+  const alike = lexicon.soundAlikes ?? {};
+  const numbers = lexicon.numberSoundAlikes ?? {};
+  // "tens" is a number word too; it is read as "tins" only right after a number ("five tens of milk").
+  for (let index = 0; index < raw.length; index += 1) {
+    const token = raw[index]!;
+    if (token.kind !== "word" || !(token.text in alike)) continue;
+    const before = raw[index - 1];
+    const afterNumber = before?.kind === "digits" || (before?.kind === "word" && (before.text in lexicon.units || before.text in lexicon.tens || before.text in lexicon.scales));
+    if (token.text in lexicon.tens || token.text in lexicon.units) {
+      if (afterNumber && raw[index + 1]?.kind === "word" && lexicon.of.includes((raw[index + 1] as WordToken).text)) raw[index] = { ...token, text: alike[token.text]! };
+      continue;
+    }
+    raw[index] = { ...token, text: alike[token.text]! };
+  }
+  for (let index = 0; index < raw.length; index += 1) {
+    const token = raw[index]!;
+    if (token.kind !== "word" || !(token.text in numbers)) continue;
+    const next = raw[index + 1];
+    const before = raw[index - 1];
+    const afterNumber = before?.kind === "digits" || (before?.kind === "word" && (before.text in lexicon.units || before.text in lexicon.tens || before.text in lexicon.scales));
+    // "paid for bags" is about paying, not four bags.
+    const afterPaid = before?.kind === "word" && lexicon.paid.includes(before.text);
+    if (!afterNumber && !afterPaid && next?.kind === "word" && lexicon.unit(next.text) !== null) raw[index] = { ...token, text: numbers[token.text]! };
+  }
+}
+
 export function tokenize(text: string, lexicon: VoiceLexicon): Token[] {
   const raw = rawTokens(text.replace(/-/g, " - ").replace(/\s-\s(?=[a-z])/gi, "-").replace(/([a-z])-([a-z])/gi, "$1 $2"));
+  soundAlikes(raw, lexicon);
   const out: Token[] = [];
   let i = 0;
   const isWord = (index: number, words: string[]) => {

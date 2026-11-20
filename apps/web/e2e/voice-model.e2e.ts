@@ -31,6 +31,9 @@ test("downloads once, then hears a sale with no network", async ({ page, context
   await page.getByTestId("voice-stop").click();
   await expect(page.getByTestId("voice-review")).toBeVisible({ timeout: 120_000 });
   const heard = (await page.getByTestId("voice-transcript").inputValue()).toLowerCase();
+  // Kept in the report, to compare what the model heard with what was said.
+  test.info().annotations.push({ type: "heard", description: heard });
+  console.log(`voice heard: ${heard}`);
   expect(heard).toContain("rice");
   await expect(page.getByTestId("voice-line").first()).toBeVisible();
 });
