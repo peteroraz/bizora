@@ -1,6 +1,6 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, MONEY_MOVEMENT_KINDS, Permission, parseAmount, uuidv7, type MoneyMovementKind } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, MOVE_SCREEN_KINDS, Permission, parseAmount, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader } from "@bizora/ui";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -21,7 +21,7 @@ function MoveScreen() {
   const access = useAccess();
   const place = usePlace();
   const today = dayKey(new Date(), place.timezone);
-  const [kind, setKind] = useState<MoneyMovementKind>("to_bank");
+  const [kind, setKind] = useState<(typeof MOVE_SCREEN_KINDS)[number]>("to_bank");
   const [amount, setAmount] = useState("");
   const [day, setDay] = useState(today);
   const [note, setNote] = useState("");
@@ -61,7 +61,7 @@ function MoveScreen() {
         <form className="space-y-4" onSubmit={(event) => void save(event)}>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("move.kind")}</legend>
-            {MONEY_MOVEMENT_KINDS.map((option) => (
+            {MOVE_SCREEN_KINDS.map((option) => (
               <label key={option} className="flex min-h-11 items-center gap-3 rounded-control border border-border px-3 text-sm has-[:checked]:border-primary">
                 <input type="radio" name="kind" value={option} checked={kind === option} onChange={() => setKind(option)} />
                 {t(`move.kind_${option}`)}

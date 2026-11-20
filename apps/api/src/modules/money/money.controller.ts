@@ -67,6 +67,14 @@ export class MoneyController {
     return success({ movement: await this.money.recordMovement(tenant, body) }, tenant.correlationId);
   }
 
+  /** POS cash-out (ADR-038): whoever takes money at the counter can record it. */
+  @Post("pos-cashouts")
+  @RequirePermissions(Permission.SALES_COLLECT)
+  @Idempotent()
+  async posCashout(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success({ movement: await this.money.recordPosCashout(tenant, body) }, tenant.correlationId);
+  }
+
   @Post("movements/:id/void")
   @HttpCode(200)
   @RequirePermissions(Permission.EXPENSES_APPROVE)

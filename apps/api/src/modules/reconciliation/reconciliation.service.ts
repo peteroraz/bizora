@@ -446,7 +446,7 @@ export class ReconciliationService {
         break;
       }
       case "money_in": {
-        const role = target.category === "owner_capital" ? "capital" : target.category === "other_income" ? "other_income" : businessTypeFromIndustry(business.industryCode) === "services" ? "service_income" : "sales";
+        const role = target.category === "owner_capital" ? "capital" : target.category === "other_income" ? "not_sales_money" : businessTypeFromIndustry(business.industryCode) === "services" ? "service_income" : "sales";
         update.journalEntryId = await this.post(tx, tenant, business, line, { role }, line.amountMinor, target.category);
         update.matchDetail = target.category;
         break;

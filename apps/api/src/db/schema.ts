@@ -1373,6 +1373,8 @@ export const moneyMovements = pgTable(
     branchId: uuid("branch_id").notNull(),
     kind: varchar("kind", { length: 16 }).notNull(),
     amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    feeMinor: bigint("fee_minor", { mode: "bigint" }).notNull().default(0n),
+    feePaidBy: varchar("fee_paid_by", { length: 8 }).$type<"pos" | "cash">(),
     currencyCode: char("currency_code", { length: 3 }).notNull(),
     movementDate: date("movement_date").notNull(),
     note: varchar("note", { length: 240 }),
