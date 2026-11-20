@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req, Res, UseGuards, HttpCode } from "@nestjs/common";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import type { AppEnv } from "@bizora/config/env";
 import { refreshRequestSchema, registerRequestSchema, success } from "@bizora/contracts";
@@ -153,6 +153,14 @@ export class IdentityController {
   async me(@CurrentTenant() tenant: TenantContext) {
     const profile = await this.identity.me(tenant.userId, tenant.tenantId);
     return success({ ...profile, tenant }, tenant.correlationId);
+  }
+
+  /** An owner accepts the current Terms of use (ADR-039). */
+  @Post("accept-terms")
+  @HttpCode(200)
+  @UseGuards(TenantGuard)
+  async acceptTerms(@CurrentTenant() tenant: TenantContext, @Body() body: unknown, @Req() req: AuthedRequest) {
+    return success(await this.identity.acceptTerms(tenant.userId, tenant.tenantId, body, this.meta(req)), tenant.correlationId);
   }
 
   @Post("logout")

@@ -23,7 +23,7 @@ test("public pages render for a logged-out visitor", async ({ page }) => {
   await expect(page.getByText("Draft — to be reviewed by counsel")).toBeVisible();
   await expect(page.getByText("Nigeria Data Protection Act 2023").first()).toBeVisible();
   await page.goto("/terms");
-  await expect(page.getByRole("heading", { name: "Terms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Terms of use", level: 1 })).toBeVisible();
   await expect(page.getByText("Nigeria Data Protection Act 2023").first()).toBeVisible();
 });
 
@@ -38,6 +38,7 @@ test("onboarding, customers, follow-ups, and csv import", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm password", { exact: true }).fill(password);
+  await page.getByRole("checkbox", { name: /I agree to the Terms of use/ }).check();
   await page.getByRole("button", { name: "Create your business" }).click();
 
   await expect(page.getByRole("heading", { name: "What kind of business do you run?" })).toBeVisible();

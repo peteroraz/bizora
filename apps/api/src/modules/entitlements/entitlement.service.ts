@@ -45,13 +45,14 @@ export class EntitlementService {
 
   async plan(tenantId: string): Promise<{ code: string; name: string; limits: PlanLimits }> {
     const [row] = await this.db
-      .select({ code: plans.code, name: plans.name, limits: plans.limits })
+      .select({ code: plans.code, name: plans.name, limits: plans.limits, overrides: organizationPlans.limitOverrides })
       .from(organizationPlans)
       .innerJoin(plans, eq(organizationPlans.planCode, plans.code))
       .where(eq(organizationPlans.tenantId, tenantId))
       .limit(1);
     if (row) {
-      return { code: row.code, name: row.name, limits: planLimitsSchema.parse(row.limits) };
+      // Limits set for this business in the Admin portal win over the plan (ADR-039).
+      return { code: row.code, name: row.name, limits: planLimitsSchema.parse({ ...(row.limits as object), ...(row.overrides ?? {}) }) };
     }
     const [fallback] = await this.db.select().from(plans).where(eq(plans.code, DEFAULT_PLAN_CODE)).limit(1);
     if (!fallback) {

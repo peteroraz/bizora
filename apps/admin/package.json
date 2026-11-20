@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@bizora/contracts": "workspace:*",
+    "@bizora/money": "workspace:*",
     "@bizora/ui": "workspace:*",
     "geist": "^1.9.2",
     "lucide-react": "^0.511.0",

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { OauthButtons } from "../../components/oauth-buttons";
 import { PasswordWithConfirmation } from "../../components/password-fields";
+import { TermsCheckbox } from "../../components/terms-checkbox";
 import { PublicFooter } from "../../components/public-footer";
 import { confirmPasswordError } from "../../lib/password";
 import { EmailInput, NameInput } from "../../components/typing";
@@ -28,6 +29,7 @@ export default function RegisterPage() {
   const [timezone, setTimezone] = useState("Africa/Lagos");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const countryTouched = useRef(false);
 
   useEffect(() => {
@@ -83,6 +85,7 @@ export default function RegisterPage() {
         baseCurrencyCode: currency,
         timezone,
         industryCode: "general-retail",
+        acceptTerms: true,
       }),
     });
     const payload = await response.json();
@@ -138,6 +141,7 @@ export default function RegisterPage() {
             />
           </FormField>
           {/* Currency and time zone follow the country; setup and Settings can change them (6d). */}
+          <TermsCheckbox checked={agreed} onChange={setAgreed} />
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           <SubmitButton pending={pending} pendingLabel={t("pending")} className="w-full">
             {t("submit")}

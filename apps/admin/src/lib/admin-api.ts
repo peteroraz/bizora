@@ -17,7 +17,7 @@ export class AdminApiError extends Error {
  * Calls the portal's API on this same address. Changes carry the portal's header, which other sites cannot send
  * without the API refusing them (ADR-037).
  */
-export async function adminApi<T>(path: string, init: { method?: "GET" | "POST" | "PATCH"; body?: unknown } = {}): Promise<T> {
+export async function adminApi<T>(path: string, init: { method?: "GET" | "POST" | "PATCH" | "PUT"; body?: unknown } = {}): Promise<T> {
   const method = init.method ?? "GET";
   const response = await fetch(`/api/admin/v1${path}`, {
     method,

@@ -7,6 +7,8 @@ import {
   createOrganizationSchema,
   loginRequestSchema,
   registerRequestSchema,
+  acceptTermsSchema,
+  TERMS_VERSION,
   selectContextRequestSchema,
   type AuthWorkspace,
   type RegisterRequest,
@@ -18,7 +20,7 @@ import { ApiError } from "../../common/errors.js";
 import { uniqueHandle } from "../../common/handles.js";
 import { newId, slugify } from "../../common/ids.js";
 import type { AppDatabase } from "../../db/database.js";
-import { branches, businesses, memberships, organizations, sessions, userIdentities, users } from "../../db/schema.js";
+import { branches, businesses, memberships, organizations, sessions, termsAcceptances, userIdentities, users } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { TenantRepository } from "../tenant/tenant.repository.js";
@@ -92,6 +94,18 @@ export class IdentityService {
         updatedBy: userId,
       });
       await this.entitlements.assignDefaultPlan(tenantId, tx);
+      if (payload.acceptTerms === true) {
+        // The owner ticked "I agree to the Terms of use" on the sign-up form (ADR-039).
+        await tx.insert(termsAcceptances).values({
+          id: newId(),
+          userId,
+          tenantId,
+          version: TERMS_VERSION,
+          method: "sign_up",
+          ip: meta.ip ?? null,
+          userAgent: meta.userAgent?.slice(0, 512) ?? null,
+        });
+      }
       await tx.insert(businesses).values({
         id: businessId,
         tenantId,
@@ -372,7 +386,41 @@ export class IdentityService {
       membership,
       workspaces: await this.listWorkspaces(userId),
       onboardingCompleted: Boolean(organization?.onboardingCompletedAt),
+      // Owners must accept the current Terms of use before using the app (ADR-039).
+      termsVersion: TERMS_VERSION,
+      termsRequired: user?.kind === "person" && membership?.role === "OWNER" && !(await this.hasAcceptedTerms(userId)),
     };
+  }
+
+  async hasAcceptedTerms(userId: string) {
+    const [row] = await this.db
+      .select({ id: termsAcceptances.id })
+      .from(termsAcceptances)
+      .where(and(eq(termsAcceptances.userId, userId), eq(termsAcceptances.version, TERMS_VERSION)))
+      .limit(1);
+    return Boolean(row);
+  }
+
+  /** The owner accepts the Terms of use in the app (ADR-039). Accepting twice changes nothing. */
+  async acceptTerms(userId: string, tenantId: string, raw: unknown, meta: AuthMeta) {
+    acceptTermsSchema.parse(raw ?? {});
+    await this.db
+      .insert(termsAcceptances)
+      .values({ id: newId(), userId, tenantId, version: TERMS_VERSION, method: "in_app", ip: meta.ip ?? null, userAgent: meta.userAgent?.slice(0, 512) ?? null })
+      .onConflictDoNothing();
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      actorType: "HUMAN",
+      action: "terms.accepted",
+      entityType: "user",
+      entityId: userId,
+      correlationId: meta.correlationId,
+      ip: meta.ip ?? null,
+      userAgent: meta.userAgent ?? null,
+      metadata: { version: TERMS_VERSION },
+    });
+    return { version: TERMS_VERSION, accepted: true };
   }
 
   async listWorkspaces(userId: string): Promise<WorkspaceOption[]> {

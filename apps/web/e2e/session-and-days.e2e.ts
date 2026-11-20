@@ -9,7 +9,7 @@ test("an expired sign-in pass is renewed without leaving the page, and sales ope
   const suffix = `${Date.now()}`;
   const email = `days.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Kofi Owner", organizationName: `Kofi Stores ${suffix}`, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra" },
+    data: { acceptTerms: true, email, password, displayName: "Kofi Owner", organizationName: `Kofi Stores ${suffix}`, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
   expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "GH", industryCode: "general-retail", baseCurrencyCode: "GHS", timezone: "Africa/Accra", businessName: "Kofi Stores", branchName: "Osu" } })).ok()).toBeTruthy();

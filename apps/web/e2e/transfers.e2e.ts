@@ -9,7 +9,7 @@ test("a cashier's transfer waits for the owner, who confirms one and writes off 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `transfers.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ada Owner", organizationName: `Ada Shoes ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Ada Owner", organizationName: `Ada Shoes ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
   expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Ada Shoes", branchName: "Main" } })).ok()).toBeTruthy();

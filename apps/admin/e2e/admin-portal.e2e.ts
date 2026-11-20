@@ -15,13 +15,14 @@ test("Bizora staff sign in with Google, find a business and help it, and every s
   const shopName = `Lagoon Fabrics ${stamp}`;
   const api = await apiRequest.newContext({ baseURL: API });
   const registered = await api.post("/api/v1/auth/register", {
-    data: { email: `owner-${stamp}@lagoon.test`, password, displayName: "Bola Owner", organizationName: shopName, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra", industryCode: "general-retail" },
+    data: { acceptTerms: true, email: `owner-${stamp}@lagoon.test`, password, displayName: "Bola Owner", organizationName: shopName, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra", industryCode: "general-retail" },
   });
   expect(registered.status()).toBe(201);
   const { accessToken, tenant } = (await registered.json()).data as { accessToken: string; tenant: { businessId: string; branchId: string } };
   const bearer = { authorization: `Bearer ${accessToken}` };
   expect((await api.post("/api/v1/invitations", { headers: bearer, data: { email: `kofi-${stamp}@lagoon.test`, role: "CASHIER", businessId: tenant.businessId, branchId: tenant.branchId } })).status()).toBe(201);
   expect((await api.post("/api/v1/shop-devices", { headers: bearer, data: { name: "Front counter tablet" } })).status()).toBe(201);
+  expect((await api.post("/api/v1/customers", { headers: bearer, data: { name: "Akosua Mensah", phone: "0241234567" } })).status()).toBe(201);
 
   // The portal is never indexed and runs only its own scripts.
   const first = await page.goto("/");
@@ -61,6 +62,32 @@ test("Bizora staff sign in with Google, find a business and help it, and every s
   await expect(page.getByRole("row", { name: /Front counter tablet/ }).getByText("Stopped")).toBeVisible();
   await expect(page.getByRole("cell", { name: "Owner called: tablet stolen" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Kofi lost the first email" })).toBeVisible();
+  await expect(page.getByTestId("business-usage")).toContainText("1 customer");
+
+  // Limits for this business only.
+  await page.getByRole("button", { name: "Change limits" }).click();
+  const limits = page.getByRole("dialog", { name: "Change limits" });
+  await limits.getByLabel("Shop phones").fill("1");
+  await limits.getByLabel("Why are you doing this?").fill("Trial shop, one tablet");
+  await limits.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Limits saved")).toBeVisible();
+  await expect(page.getByTestId("limit-max_devices")).toContainText("1");
+
+  // The support view: read-only, an hour, with a reason; customers' phones are partly hidden.
+  await page.getByRole("button", { name: "Open support view" }).click();
+  const open = page.getByRole("dialog", { name: "Open the support view" });
+  await open.getByLabel("Why are you doing this?").fill("Owner asked why a sale is missing");
+  await open.getByRole("button", { name: "Confirm" }).click();
+  await expect(page).toHaveURL(new RegExp("/records$"));
+  await expect(page.getByTestId("support-view-status")).toContainText("Reason: Owner asked why a sale is missing");
+  await page.getByRole("tab", { name: "Customers" }).click();
+  await expect(page.getByTestId("records-customers")).toContainText("Akosua Mensah");
+  await expect(page.getByTestId("records-customers")).not.toContainText("1234567");
+  await page.getByRole("tab", { name: "Cash and profit" }).click();
+  await expect(page.getByTestId("records-money")).toContainText("Profit for the day");
+  await page.getByRole("button", { name: "Close support view" }).click();
+  await expect(page.getByText("The support view is closed.")).toBeVisible();
+  await page.getByRole("link", { name: "Back to the business" }).click();
 
   // Super admins keep the staff list.
   await page.getByRole("link", { name: "Staff", exact: true }).click();

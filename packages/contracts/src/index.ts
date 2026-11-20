@@ -174,5 +174,8 @@ export {
   adminSearchSchema,
   adminStaffAddSchema,
   adminStaffRolesSchema,
+  adminLimitsSchema,
+  ADMIN_LIMITS,
+  SUPPORT_VIEW_MINUTES,
 } from "./admin.js";
-export type { AdminAbility, AdminRole, AdminStaffAddInput } from "./admin.js";
+export type { AdminAbility, AdminLimit, AdminRole, AdminStaffAddInput } from "./admin.js";

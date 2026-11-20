@@ -12,7 +12,7 @@ test("a customer added with no network waits on the phone, then syncs once when 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `offline.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: {
+    data: { acceptTerms: true,
       email,
       password,
       displayName: "Amaka Owner",

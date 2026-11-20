@@ -8,7 +8,7 @@ describe("Admin portal roles (ADR-037)", () => {
     expect(adminCan(["support"], "audit.read")).toBe(false);
     expect(adminCan(["operations"], "audit.read")).toBe(true);
     expect(adminCan(["finance", "viewer"], "support.act")).toBe(false);
-    expect(adminAbilities(["super_admin"])).toHaveLength(6);
+    expect(adminAbilities(["super_admin"])).toHaveLength(8);
     expect(adminCan(["owner"], "businesses.read")).toBe(false);
   });
 
