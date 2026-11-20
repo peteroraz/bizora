@@ -9,6 +9,9 @@ RUN pnpm install --frozen-lockfile
 # origin Terraform sets on the Cloud Run service.
 ARG API_ORIGIN=http://localhost:3001
 ENV API_ORIGIN=$API_ORIGIN
+# Offline voice (ADR-040): fetch the speech model, checked against models.lock.json, so this site serves it.
+# If it cannot be fetched the app still works; offline voice then says it is not available yet.
+RUN cd apps/web && (node scripts/voice-assets.mjs models --allow-unlocked || echo "Offline voice model not fetched")
 RUN pnpm --filter @bizora/web... build
 
 FROM node:22-alpine

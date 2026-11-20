@@ -37,18 +37,19 @@ test("product photos, a spoken sale and a forwarded voice note for damaged stock
   await expect(page.getByRole("img", { name: "Peak Milk, photo 1" })).toBeVisible();
   await expect(page.getByText("1 of 5")).toBeVisible();
 
-  // Say the sale: the cart is filled, then checked and recorded as usual.
+  // Say the sale through Bizora AI (offline voice is not downloaded here): the words are read on the phone and shown
+  // for checking; nothing is saved until Confirm sale (ADR-040).
   await page.goto("/app/sales/new");
   await page.getByTestId("say-sale").click();
   await page.getByRole("button", { name: "Record voice note" }).click();
   await expect(page.getByRole("button", { name: /Stop \(\d+s\)/ })).toBeVisible();
   await page.waitForTimeout(1_500);
   await page.getByRole("button", { name: /Stop/ }).click();
-  await expect(page.getByText("Heard: “I sold two Peak Milk for cash.”")).toBeVisible();
-  await expect(page.getByText(/Not found in your products: Unknown thing/)).toBeVisible();
-  await expect(page.getByTestId("sale-total")).toHaveText("₦900.00");
+  await expect(page.getByTestId("voice-review")).toBeVisible();
+  await expect(page.getByTestId("voice-transcript")).toHaveValue("I sold two Peak Milk for cash.");
+  await expect(page.getByTestId("voice-total")).toContainText("₦900.00");
   expect(await stock()).toBe("10000");
-  await page.getByRole("button", { name: "Record sale" }).click();
+  await page.getByTestId("voice-confirm").click();
   await expect(page.getByRole("heading", { name: "R-000001" })).toBeVisible();
   expect(await stock()).toBe("8000");
 

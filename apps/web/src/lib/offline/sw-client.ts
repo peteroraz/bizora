@@ -15,6 +15,8 @@ export function purgeOfflinePages() {
 /** Signs out and forgets the saved screens. */
 export async function signOutEverywhere() {
   purgeOfflinePages();
+  // Products, stock and customer names saved for offline use go; work waiting to sync stays (ADR-040).
+  await import("./customers").then((module) => module.clearSavedLists()).catch(() => undefined);
   await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" });
 }
 

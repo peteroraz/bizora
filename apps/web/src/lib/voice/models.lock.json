@@ -1,0 +1,4 @@
+{
+  "note": "SHA-256 of every model file as first downloaded (ADR-040). The fetch script refuses files that do not match. Empty until the first CI download writes it; then commit it.",
+  "files": {}
+}

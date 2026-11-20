@@ -76,6 +76,20 @@ jobs:
         with:
           version: 10.12.1
       - run: pnpm install --frozen-lockfile
+      # Offline voice (ADR-040): the speech model is served from this site, so it is fetched before the build and
+      # checked against models.lock.json. A robot-voice recording of a sale feeds the fake microphone.
+      - uses: actions/cache@v4
+        with:
+          path: apps/web/public/voice/models
+          key: voice-models-${{ hashFiles('apps/web/src/lib/voice/models.json', 'apps/web/src/lib/voice/models.lock.json') }}
+      - run: pnpm --filter @bizora/web voice:models -- --allow-unlocked
+      - name: Show the speech model lock (commit it if it changed)
+        run: cat apps/web/src/lib/voice/models.lock.json
+      - name: Make the voice test recording
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q espeak-ng
+          mkdir -p apps/web/e2e/fixtures
+          espeak-ng -v en-us -s 130 -w apps/web/e2e/fixtures/voice-sale.wav "Sold two bags of rice at seventy five thousand naira each, cash."
       - run: pnpm build
       - run: pnpm --filter @bizora/api db:migrate
         env:

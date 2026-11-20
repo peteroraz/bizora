@@ -104,6 +104,13 @@ There is no key or secret to add; the API signs in as its service account. Check
 
 Costs: each photo or voice note is one Gemini request, billed to the project by Vertex AI. The daily limit per organization caps them. Change `ai_daily_capture_limit` or `vertex_model` in Terraform when needed, and check the model's retirement date on the Vertex AI model lifecycle page before it arrives.
 
+## Offline voice model (ADR-040)
+
+- **Build.** The web image fetches the Whisper tiny English model (about 66 MB) from Hugging Face during `docker build`, and serves it from `/voice/` with the speech runtime. No speech service, key or recurring cost is involved.
+- **Network.** The build needs outbound access to `huggingface.co`. If the fetch fails, the image still builds; offline voice then says it is not available yet.
+- **Integrity.** Files are checked against `apps/web/src/lib/voice/models.lock.json`. A changed file fails the build. Pin the lock after the first CI fetch (`docs/voice/README.md`, "Pinning the model").
+- **Image size.** Expect the web image to be about 110 MB larger.
+
 ## First apply
 
 Run the same sequence in `infra/terraform/envs/staging`, then in `infra/terraform/envs/prod`. Read the plan before you apply. Do not apply production until staging is healthy.
