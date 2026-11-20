@@ -11,13 +11,22 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 const minorAmount = z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas).");
 const quantity = z.string().trim().refine((value) => parseQuantity(value) !== null, "Enter a quantity above zero, with up to 3 decimals.");
 
-export const saleLineInputSchema = z.object({
+export const saleProductLineSchema = z.object({
   productId: z.string().uuid(),
   quantity,
   unit: z.enum(UNIT_CODES),
   /** Price per unit sold. Left out: the product's price for that unit. Lower than that is a discount. */
   unitPriceMinor: minorAmount.optional(),
 });
+
+/** Something not in the products: a service done, or an item the shop does not list (ADR-035). */
+export const saleOtherLineSchema = z.object({
+  description: z.string().trim().min(1).max(160),
+  quantity: quantity.default("1"),
+  unitPriceMinor: minorAmount,
+});
+
+export const saleLineInputSchema = z.union([saleProductLineSchema, saleOtherLineSchema]);
 
 export const salePaymentInputSchema = z.object({
   method: z.enum(PAYMENT_METHODS),

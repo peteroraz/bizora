@@ -107,7 +107,7 @@ describe("AI capture of photos, scans and voice notes", () => {
   it("turns a photo into draft rows only, matched to the shop's product names", async () => {
     const http = app.getHttpServer();
     const status = await request(http).get("/api/v1/captures/status").set(auth(a.token)).expect(200);
-    expect(status.body.data).toMatchObject({ enabled: true, limit: 4, remainingToday: 4, targets: ["products", "sales", "stock_in", "statement", "cart", "stock_count", "stock_change", "stock_move"] });
+    expect(status.body.data).toMatchObject({ enabled: true, limit: 4, remainingToday: 4, targets: ["products", "sales", "stock_in", "statement", "cart", "stock_count", "stock_change", "stock_move", "job"] });
     const salesBefore = await count("sales", a.tenantId);
     const captured = await request(http).post("/api/v1/captures").set(auth(a.token)).send({ target: "sales", files: [{ mimeType: "image/jpeg", data: PHOTO }] }).expect(200);
     expect(captured.body.data).toMatchObject({ target: "sales", remainingToday: 3, transcript: null });

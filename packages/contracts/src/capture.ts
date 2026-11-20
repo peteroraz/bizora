@@ -10,7 +10,7 @@ import { STATEMENT_IMPORT_COLUMNS } from "./reconciliation.js";
  * What a capture fills. `cart` is one sale being made now at the counter (ADR-033); `stock_count`, `stock_change`
  * and `stock_move` are spoken or photographed lists of counts, goods taken off or added, and goods moved.
  */
-export const CAPTURE_TARGETS = ["products", "sales", "stock_in", "statement", "cart", "stock_count", "stock_change", "stock_move"] as const;
+export const CAPTURE_TARGETS = ["products", "sales", "stock_in", "statement", "cart", "stock_count", "stock_change", "stock_move", "job"] as const;
 export type CaptureTarget = (typeof CAPTURE_TARGETS)[number];
 
 export const CAPTURE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -80,6 +80,30 @@ export const STOCK_MOVE_IMPORT_COLUMNS = {
 } as const;
 export type StockMoveImportField = keyof typeof STOCK_MOVE_IMPORT_COLUMNS;
 
+/**
+ * A job for a customer, said or written down (ADR-035). One row per thing done, used, bought, paid to a helper or
+ * paid by the customer; the job's details (customer, what was worked on, the day, the summary) are on the first row.
+ */
+export const JOB_COLUMNS = {
+  kind: ["kind", "type"],
+  description: ["description", "item", "work"],
+  quantity: ["quantity", "qty"],
+  unit: ["unit"],
+  price: ["price", "charge", "amount"],
+  cost: ["cost", "bought for", "paid"],
+  paidFrom: ["paid from", "paid by"],
+  supplier: ["supplier", "bought from", "helper"],
+  customer: ["customer", "client"],
+  phone: ["phone", "customer phone"],
+  title: ["title", "vehicle", "item worked on"],
+  problem: ["problem", "complaint", "request"],
+  day: ["day", "date"],
+  promised: ["promised", "ready on", "due"],
+  finished: ["finished", "done", "completed"],
+  summary: ["summary"],
+} as const;
+export type JobField = keyof typeof JOB_COLUMNS;
+
 /** The fields each target fills, in table order. */
 export const CAPTURE_FIELDS: Record<CaptureTarget, readonly string[]> = {
   products: Object.keys(PRODUCT_IMPORT_COLUMNS),
@@ -90,6 +114,7 @@ export const CAPTURE_FIELDS: Record<CaptureTarget, readonly string[]> = {
   stock_count: Object.keys(STOCK_COUNT_IMPORT_COLUMNS),
   stock_change: Object.keys(STOCK_CHANGE_IMPORT_COLUMNS),
   stock_move: Object.keys(STOCK_MOVE_IMPORT_COLUMNS),
+  job: Object.keys(JOB_COLUMNS),
 };
 
 // Base64 grows data by a third.

@@ -60,6 +60,8 @@ const SOURCE_FLOW: Record<string, CashFlowKind> = {
   supplier_payment: "suppliers",
   sale_return: "refunds",
   cash_count: "counts",
+  job_deposit: "deposits",
+  job_cost: "job_costs",
 };
 
 const DAY_MS = 86_400_000;

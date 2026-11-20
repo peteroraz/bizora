@@ -107,6 +107,7 @@ export class SaleService {
       const desk = business.salesFlow === "desk" && source !== "import" && source !== "capture";
 
       const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0n);
+      const otherSubtotal = lines.reduce((sum, line) => sum + (line.other ? line.lineTotal : 0n), 0n);
       const discount = payload.discountMinor ? BigInt(payload.discountMinor) : 0n;
       if (discount > 0n && !tenant.permissions.includes(Permission.SALES_DISCOUNT)) {
         throw new ApiError("FORBIDDEN", "Ask a manager to give a discount.", 403, [{ field: "discountMinor", message: "Remove the discount." }]);
@@ -128,6 +129,7 @@ export class SaleService {
             id,
             number: receiptNumber ?? "",
             subtotal,
+            otherSubtotal,
             discount,
             total,
             entryDate: localDate(soldAt, business.timezone),
@@ -204,6 +206,129 @@ export class SaleService {
     return this.get(tenant, id);
   }
 
+  /**
+   * A finished job becomes a sale (ADR-035). Its parts already left stock when they went on the job, so no stock
+   * moves here: their cost and the helpers' pay move from "Jobs in progress" to cost of sales. Work done earns service
+   * income, parts earn sales. Deposits taken on the job are taken off the bill; the rest is owed by the customer.
+   */
+  async recordJobBill(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    input: {
+      business: BusinessRow;
+      branch: BranchRow;
+      customer: CustomerRow;
+      job: { id: string; number: string; title: string | null };
+      lines: { kind: "work" | "part" | "bought"; productId: string | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; cost: bigint; stockMovementId: string | null }[];
+      costTotal: bigint;
+      deposits: { id: string; amount: bigint }[];
+      soldAt: Date;
+      dueDate: string | null;
+    },
+  ) {
+    const { business, branch, customer } = input;
+    const id = newId();
+    const total = input.lines.reduce((sum, line) => sum + line.lineTotal, 0n);
+    const work = input.lines.reduce((sum, line) => sum + (line.kind === "work" ? line.lineTotal : 0n), 0n);
+    const deposited = input.deposits.reduce((sum, deposit) => sum + deposit.amount, 0n);
+    if (deposited > total) {
+      throw new ApiError("DEPOSIT_MORE_THAN_BILL", "The deposits are more than this job's bill. Add the missing work or parts, or give the customer the difference back first.", 409);
+    }
+    const balance = total - deposited;
+    const number = (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
+    const invoiceNumber = balance > 0n ? (await this.numbers.next(tx, tenant.tenantId, business.id, "invoice")).number : null;
+    const goodsIncome = businessTypeFromIndustry(business.industryCode) === "services" ? "service_income" : "sales";
+    const posting: PostingLine[] = [];
+    if (balance > 0n) posting.push({ account: { role: "debtors" }, debitMinor: balance, memo: customer.name });
+    if (deposited > 0n) posting.push({ account: { role: "customer_deposits" }, debitMinor: deposited, memo: input.job.number });
+    if (total - work > 0n) posting.push({ account: { role: goodsIncome }, creditMinor: total - work, memo: "Parts" });
+    if (work > 0n) posting.push({ account: { role: "service_income" }, creditMinor: work, memo: "Work done" });
+    if (input.costTotal > 0n) {
+      posting.push({ account: { role: "cogs" }, debitMinor: input.costTotal, memo: input.job.number });
+      posting.push({ account: { role: "jobs_in_progress" }, creditMinor: input.costTotal, memo: input.job.number });
+    }
+    let journalEntryId: string | null = null;
+    if (posting.length >= 2) {
+      const posted = await this.ledger.post(
+        tx,
+        { tenantId: tenant.tenantId, userId: tenant.userId },
+        {
+          businessId: business.id,
+          branchId: branch.id,
+          entryDate: localDate(input.soldAt, business.timezone),
+          source: { type: "sale", id },
+          postingKey: `sale:${id}`,
+          description: `Job ${input.job.number} for ${customer.name}`,
+          lines: posting,
+        },
+      );
+      journalEntryId = posted.entryId;
+    }
+    const now = new Date();
+    await tx.insert(sales).values({
+      id,
+      tenantId: tenant.tenantId,
+      businessId: business.id,
+      branchId: branch.id,
+      customerId: customer.id,
+      saleNumber: number,
+      invoiceNumber,
+      status: "completed",
+      historyOnly: false,
+      source: "job",
+      currencyCode: business.baseCurrencyCode.trim(),
+      subtotalMinor: total,
+      discountMinor: 0n,
+      totalMinor: total,
+      paidMinor: deposited,
+      balanceMinor: balance,
+      note: `${input.job.number}${input.job.title ? `: ${input.job.title}` : ""}`.slice(0, 240),
+      receiptToken: randomBytes(24).toString("base64url"),
+      journalEntryId,
+      soldAt: input.soldAt,
+      dueDate: balance > 0n ? input.dueDate : null,
+      collectedAt: now,
+      collectedBy: tenant.userId,
+      collectedMembershipId: tenant.membershipId,
+      releasedAt: now,
+      releasedBy: tenant.userId,
+      releasedMembershipId: tenant.membershipId,
+      createdBy: tenant.userId,
+      membershipId: tenant.membershipId,
+      deviceId: tenant.deviceId ?? null,
+      actorType: tenant.actorType ?? "HUMAN",
+    });
+    if (input.lines.length > 0) {
+      await this.insertLines(
+        tx,
+        tenant,
+        business.id,
+        id,
+        input.lines.map((line) => ({ product: line.productId ? ({ id: line.productId } as ProductRow) : null, description: line.description, quantity: line.quantity, entered: line.entered, unit: line.unit, unitPrice: line.unitPrice, lineTotal: line.lineTotal })),
+        input.lines.flatMap((line, index) => (line.stockMovementId ? [{ lineIndex: index, id: line.stockMovementId, cost: line.cost }] : [])),
+      );
+    }
+    for (const deposit of input.deposits) {
+      await tx.insert(paymentAllocations).values({ id: newId(), tenantId: tenant.tenantId, paymentId: deposit.id, saleId: id, amountMinor: deposit.amount });
+    }
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: "sale.created",
+        entityType: "sale",
+        entityId: id,
+        correlationId: tenant.correlationId,
+        businessId: business.id,
+        branchId: branch.id,
+        actorType: tenant.actorType ?? "HUMAN",
+        metadata: { number, totalMinor: total.toString(), source: "job", job: input.job.number, depositsMinor: deposited.toString() },
+      },
+      tx,
+    );
+    return { saleId: id, number, invoiceNumber, total, balance };
+  }
+
   /** The cashier takes the money, or gives credit to an approved customer, for a sale from the sales desk. */
   async collect(tenant: TenantContext, id: string, raw: unknown) {
     const payload = saleCollectSchema.parse(raw ?? {});
@@ -224,10 +349,15 @@ export class SaleService {
       const customer = customerId ? await this.requireCustomer(tx, tenant, business.id, customerId) : null;
       const now = new Date();
       const receiptNumber = sale.saleNumber ?? (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
+      const otherLines = await tx
+        .select({ total: saleLines.lineTotalMinor })
+        .from(saleLines)
+        .where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id), isNull(saleLines.productId)));
       const settled = await this.settle(tx, tenant, business, branch, {
         id: sale.id,
         number: receiptNumber,
         subtotal: sale.subtotalMinor,
+        otherSubtotal: otherLines.reduce((sum, line) => sum + line.total, 0n),
         discount: sale.discountMinor,
         total: sale.totalMinor,
         entryDate: localDate(now, business.timezone),
@@ -872,6 +1002,8 @@ export class SaleService {
       id: string;
       number: string;
       subtotal: bigint;
+      /** Lines not in the products (services); they earn service income (ADR-035). */
+      otherSubtotal?: bigint;
       discount: bigint;
       total: bigint;
       entryDate: string;
@@ -943,7 +1075,9 @@ export class SaleService {
     }
     if (balance > 0n) posting.push({ account: { role: "debtors" }, debitMinor: balance, memo: "Owed by customer" });
     if (input.discount > 0n) posting.push({ account: { role: "discounts" }, debitMinor: input.discount });
-    if (input.subtotal > 0n) posting.push({ account: { role: income }, creditMinor: input.subtotal });
+    const other = income === "service_income" ? 0n : (input.otherSubtotal ?? 0n);
+    if (input.subtotal - other > 0n) posting.push({ account: { role: income }, creditMinor: input.subtotal - other });
+    if (other > 0n) posting.push({ account: { role: "service_income" }, creditMinor: other, memo: "Services and other items" });
     let journalEntryId: string | null = null;
     if (posting.length >= 2) {
       const posted = await this.ledger.post(
@@ -1102,7 +1236,7 @@ export class SaleService {
 
   /** Prices each line from the product (or the price typed), checks discounts, and converts to base units. */
   private async priceLines(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, payload: SaleCreateInput) {
-    const ids = [...new Set(payload.lines.map((line) => line.productId))];
+    const ids = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])))];
     const rows = await tx
       .select()
       .from(products)
@@ -1111,6 +1245,15 @@ export class SaleService {
     const units = await productUnitsFor(tx, tenant.tenantId, ids);
     const canDiscount = tenant.permissions.includes(Permission.SALES_DISCOUNT);
     return payload.lines.map((line, index) => {
+      // Something not in the products: a service, or an item the shop does not list (ADR-035).
+      if (!("productId" in line)) {
+        const entered = parseQuantity(line.quantity) as bigint;
+        const unitPrice = BigInt(line.unitPriceMinor);
+        if (unitPrice === 0n && !canDiscount) {
+          throw new ApiError("FORBIDDEN", `Ask a manager to give "${line.description}" free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
+        }
+        return { product: null, unit: "piece", entered, quantity: entered, unitPrice, lineTotal: round(unitPrice * entered, 1000n), reduction: 0n, description: line.description, other: true };
+      }
       const product = byId.get(line.productId);
       if (!product || product.archivedAt) {
         throw new ApiError("PRODUCT_NOT_FOUND", "A product in this sale was not found.", 404, [{ field: `lines.${index}.productId`, message: "Not found." }]);
@@ -1136,7 +1279,7 @@ export class SaleService {
       }
       const lineTotal = round(unitPrice * entered, 1000n);
       const reduction = listPrice !== null && unitPrice < listPrice ? round((listPrice - unitPrice) * entered, 1000n) : 0n;
-      return { product, unit: line.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name };
+      return { product, unit: line.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name, other: false };
     });
   }
 

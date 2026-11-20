@@ -15,6 +15,7 @@ import { api } from "../../../../lib/api";
 import { dayKey, formatCurrency, formatPhone, formatWhen } from "../../../../i18n/format";
 import type { SaleView } from "../../../../lib/sales-client";
 import { SentenceInput } from "../../../../components/typing";
+import { CustomerJobs } from "../../../../components/customer-jobs";
 
 type Customer = {
   id: string;
@@ -209,6 +210,7 @@ function CustomerFullScreen() {
         </div>
       )}
       <CustomerCredit customerId={customer.id} credit={customer.credit} owingMinor={customer.owingMinor} onSaved={() => void load()} />
+      <CustomerJobs customerId={customer.id} customerName={customer.name} />
       {error ? (
         <p className="text-sm text-danger" role="alert">
           {error}

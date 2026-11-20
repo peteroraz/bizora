@@ -43,7 +43,18 @@ import {
 /** "1 bag", "2 bags", "1.5 kg": for messages to people. */
 const unitWord = (unit: string, quantity: bigint) => (quantity === 1000n || ["kg", "g", "ml", "l", "dozen"].includes(unit) ? unit : `${unit}s`);
 
-export type MovementType = "opening" | "received" | "sold" | "returned" | "adjusted" | "counted" | "transfer_out" | "transfer_in" | "supplier_return";
+export type MovementType =
+  | "opening"
+  | "received"
+  | "sold"
+  | "returned"
+  | "adjusted"
+  | "counted"
+  | "transfer_out"
+  | "transfer_in"
+  | "supplier_return"
+  | "job_use"
+  | "job_return";
 
 export type MovementInput = {
   id?: string;
@@ -226,7 +237,7 @@ export class StockService {
    * Stock in, inside a transaction the caller owns, so a whole supplier delivery saves together (ADR-018).
    * The caller has already checked who may pay the supplier.
    */
-  async receiveIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockReceiveSchema.parse>) {
+  async receiveIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockReceiveSchema.parse>, options: { occurredAt?: Date } = {}) {
     const context = await this.context(tx, tenant, payload.productId, payload.branchId);
     const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
     const entered = parseQuantity(payload.quantity) as bigint;
@@ -250,6 +261,7 @@ export class StockService {
       paidFrom: payload.paidFrom,
       totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
       documentType: "stock_in",
+      ...(options.occurredAt ? { occurredAt: options.occurredAt } : {}),
     });
     if (supplier && payload.paidFrom === "credit" && result.valueMinor > 0n) {
       const [movement] = await tx
@@ -896,6 +908,19 @@ export class StockService {
         { ...stock, creditMinor: amount },
       ];
     }
+    // Parts used on a job wait in "Jobs in progress" until the job is billed; a removed line brings them back (ADR-035).
+    if (input.type === "job_use") {
+      return [
+        { account: { role: "jobs_in_progress" }, debitMinor: amount },
+        { ...stock, creditMinor: amount },
+      ];
+    }
+    if (input.type === "job_return") {
+      return [
+        { ...stock, debitMinor: amount },
+        { account: { role: "jobs_in_progress" }, creditMinor: amount },
+      ];
+    }
     // Goods back from a cancelled sale return at the cost they left with.
     if (input.type === "returned" && (input.reason === "sale_void" || input.reason === "customer_return")) {
       return [
@@ -953,6 +978,10 @@ export class StockService {
         return input.reason === "customer_return" ? "Returned by a customer" : "Returned from a cancelled sale";
       case "supplier_return":
         return "Sent back to the supplier";
+      case "job_use":
+        return "Used on a job";
+      case "job_return":
+        return "Back from a job";
       case "counted":
         return "Stock count difference";
       case "adjusted":

@@ -35,11 +35,13 @@ describe("document numbers", () => {
 });
 
 describe("chart of accounts template", () => {
-  it("gives goods businesses stock accounts and services none", () => {
+  it("gives every business stock, jobs in progress and service income; services earn service income", () => {
     const shop = chartOfAccountsTemplate("shop");
-    expect(shop.map((account) => account.role)).toEqual(expect.arrayContaining(["stock", "sales", "cogs", "debtors", "bank"]));
+    expect(shop.map((account) => account.role)).toEqual(expect.arrayContaining(["stock", "sales", "service_income", "cogs", "jobs_in_progress", "debtors", "bank"]));
+    // Service businesses keep parts for jobs (ADR-035), but have no goods "Sales" account.
     const services = chartOfAccountsTemplate("services");
-    expect(services.some((account) => account.role === "stock" || account.role === "cogs")).toBe(false);
+    expect(services.map((account) => account.role)).toEqual(expect.arrayContaining(["stock", "cogs", "jobs_in_progress"]));
+    expect(services.some((account) => account.role === "sales")).toBe(false);
     expect(services.find((account) => account.code === "4000")?.role).toBe("service_income");
   });
 

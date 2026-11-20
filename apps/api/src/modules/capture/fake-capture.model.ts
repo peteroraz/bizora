@@ -34,6 +34,24 @@ export class FakeCaptureModel implements CaptureModel {
       stock_count: [{ product: first, counted: "9", unit: "", note: "Shelf count" }],
       stock_change: [{ product: first, change: "remove", reason: "damaged", quantity: "1", unit: "", note: echo || "Tin was dented" }],
       stock_move: [{ product: first, quantity: "1", unit: "", toShop: "Market shop", note: "" }],
+      job: [
+        {
+          kind: "work",
+          description: "Brake pad replacement",
+          quantity: "1",
+          price: "15000",
+          customer: "Mr Okeke",
+          phone: "",
+          title: "Toyota Camry, LND 123 AB",
+          problem: "Brakes making noise",
+          day: "",
+          finished: "no",
+          summary: "Mr Okeke's Toyota Camry had noisy brakes. The brake pads were replaced and engine oil was bought. He paid a deposit of 10,000 and the rest is owed.",
+        },
+        { kind: "bought", description: "Engine oil", quantity: "4", unit: "litre", price: "", cost: "12000", paidFrom: "cash" },
+        { kind: "helper", description: "Vulcaniser", cost: "2000", paidFrom: "cash" },
+        { kind: "payment", description: "Deposit", price: "10000", paidFrom: "cash" },
+      ],
     };
     return {
       rows: rows[request.target],

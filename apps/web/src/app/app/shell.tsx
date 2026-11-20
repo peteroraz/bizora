@@ -26,6 +26,7 @@ import {
   Settings,
   ShoppingCart,
   Users,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -44,6 +45,7 @@ import { bottomItemsFor, primaryNav, type NavId } from "../../lib/nav";
 const icons = {
   home: Home,
   sales: ShoppingCart,
+  jobs: Wrench,
   customers: Users,
   stock: Package,
   debtors: HandCoins,

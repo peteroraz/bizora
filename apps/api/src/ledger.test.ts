@@ -134,7 +134,9 @@ describe("accounting core", () => {
     expect(cash[1]?.branchId).toBe(second.body.data.branch.id);
 
     const services = await chart.list(b.tenantId, b.businessId);
-    expect(services.some((account) => account.role === "stock" || account.role === "cogs")).toBe(false);
+    // Service businesses keep parts for jobs (ADR-035) but have no goods "Sales" account.
+    expect(services.some((account) => account.role === "stock")).toBe(true);
+    expect(services.some((account) => account.role === "sales")).toBe(false);
     expect(services.some((account) => account.role === "service_income")).toBe(true);
   });
 

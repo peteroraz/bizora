@@ -172,6 +172,91 @@ export class PaymentService {
     return id;
   }
 
+  /**
+   * Money taken on a job before it is finished (ADR-035). It is the customer's money held for the job (Customer
+   * advance payments, 2100) until the job is billed, when it is taken off what the job costs. It counts as money in
+   * on the day it was taken, with its own receipt.
+   */
+  async recordDeposit(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    input: {
+      business: { id: string; timezone: string; baseCurrencyCode: string };
+      branchId: string;
+      customer: { id: string; name: string };
+      job: { id: string; number: string };
+      amount: bigint;
+      method: "cash" | "transfer" | "pos";
+      reference?: string | undefined;
+      receivedAt: Date;
+    },
+  ) {
+    const id = newId();
+    const number = await this.numbers.next(tx, tenant.tenantId, input.business.id, "payment");
+    const waits = input.method === "transfer" && transferWaits(tenant, "pos");
+    const methodAccount = {
+      cash: { role: "cash" as const, branchId: input.branchId },
+      transfer: { role: waits ? ("transfers_waiting" as const) : ("bank" as const) },
+      pos: { role: "pos_clearing" as const },
+    }[input.method];
+    const posted = await this.ledger.post(
+      tx,
+      { tenantId: tenant.tenantId, userId: tenant.userId },
+      {
+        businessId: input.business.id,
+        branchId: input.branchId,
+        entryDate: localDate(input.receivedAt, input.business.timezone),
+        source: { type: "job_deposit", id },
+        postingKey: `job_deposit:${id}`,
+        description: `Deposit ${number.number} on ${input.job.number} from ${input.customer.name}`,
+        lines: [
+          { account: methodAccount, debitMinor: input.amount, memo: input.method },
+          { account: { role: "customer_deposits" }, creditMinor: input.amount, memo: input.job.number },
+        ],
+      },
+    );
+    await tx.insert(customerPayments).values({
+      id,
+      tenantId: tenant.tenantId,
+      businessId: input.business.id,
+      branchId: input.branchId,
+      customerId: input.customer.id,
+      paymentNumber: number.number,
+      method: input.method,
+      amountMinor: input.amount,
+      currencyCode: input.business.baseCurrencyCode.trim(),
+      reference: input.reference ?? null,
+      note: `Deposit on ${input.job.number}`,
+      receivedAt: input.receivedAt,
+      journalEntryId: posted.entryId,
+      receiptToken: randomBytes(24).toString("base64url"),
+      confirmation: waits ? "waiting" : "confirmed",
+      jobId: input.job.id,
+      createdBy: tenant.userId,
+      membershipId: tenant.membershipId,
+      deviceId: tenant.deviceId ?? null,
+      actorType: tenant.actorType ?? "HUMAN",
+    });
+    if (waits) {
+      await this.notifications.notify(tx, tenant.tenantId, await bankCheckers(tx, tenant.tenantId, input.business.id), {
+        kind: "transfer.waiting",
+        saleId: null,
+        actorName: await this.actorName(tx, tenant),
+        data: { number: number.number },
+        except: tenant.membershipId,
+      });
+    }
+    await this.record_(tx, tenant, input.business.id, input.branchId, "payment.recorded", id, {
+      number: number.number,
+      amountMinor: input.amount.toString(),
+      method: input.method,
+      customerId: input.customer.id,
+      job: input.job.number,
+      deposit: true,
+    });
+    return { id, number: number.number };
+  }
+
   /** A manager or owner cancels a payment recorded by mistake; the sales owe again what it paid. */
   async void(tenant: TenantContext, id: string, raw: unknown) {
     const { reason } = paymentVoidSchema.parse(raw);
@@ -195,6 +280,32 @@ export class PaymentService {
           entryDate: localDate(new Date(), business.timezone),
           reason: `Payment ${payment.paymentNumber} cancelled: ${reason}`,
         });
+      }
+      // A deposit already taken off a finished job's bill (ADR-035): the customer owes it on that job again.
+      if (payment.jobId) {
+        const applied = await tx
+          .select({ amount: paymentAllocations.amountMinor })
+          .from(paymentAllocations)
+          .where(and(eq(paymentAllocations.tenantId, tenant.tenantId), eq(paymentAllocations.paymentId, payment.id)));
+        const total = applied.reduce((sum, row) => sum + row.amount, 0n);
+        if (total > 0n) {
+          await this.ledger.post(
+            tx,
+            { tenantId: tenant.tenantId, userId: tenant.userId },
+            {
+              businessId: business.id,
+              branchId: payment.branchId,
+              entryDate: localDate(new Date(), business.timezone),
+              source: { type: "job_deposit", id: payment.id },
+              postingKey: `job_deposit_void:${payment.id}`,
+              description: `Deposit ${payment.paymentNumber} cancelled after the job was billed`,
+              lines: [
+                { account: { role: "debtors" }, debitMinor: total },
+                { account: { role: "customer_deposits" }, creditMinor: total },
+              ],
+            },
+          );
+        }
       }
       const allocations = await tx.select().from(paymentAllocations).where(and(eq(paymentAllocations.tenantId, tenant.tenantId), eq(paymentAllocations.paymentId, payment.id)));
       for (const allocation of allocations) {
