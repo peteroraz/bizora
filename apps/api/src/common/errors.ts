@@ -6,7 +6,10 @@ import {
   HttpStatus,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
+import type { Logger } from "pino";
 import { ZodError } from "zod";
+import { reportError } from "../logging.js";
+import { TENANT_CONTEXT_KEY, type TenantContext } from "./tenant-context.js";
 
 export class ApiError extends HttpException {
   constructor(
@@ -21,10 +24,32 @@ export class ApiError extends HttpException {
 
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
+  constructor(private readonly logger?: Pick<Logger, "error">) {}
+
+  /** Server faults (5xx) go to Error Reporting with the business affected (ADR-036); mistakes by the caller do not. */
+  private report(exception: unknown, request: Request & { correlationId?: string; [TENANT_CONTEXT_KEY]?: TenantContext }, status: number) {
+    if (!this.logger) {
+      console.error(exception);
+      return;
+    }
+    const tenant = request[TENANT_CONTEXT_KEY];
+    reportError(this.logger, exception, {
+      method: request.method,
+      url: request.originalUrl ?? request.url,
+      status,
+      userId: tenant?.userId ?? null,
+      tenantId: tenant?.tenantId ?? null,
+      businessId: tenant?.businessId ?? null,
+      branchId: tenant?.branchId ?? null,
+      correlationId: request.correlationId ?? null,
+      userAgent: request.headers["user-agent"] ?? null,
+    });
+  }
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request & { correlationId?: string }>();
+    const request = ctx.getRequest<Request & { correlationId?: string; [TENANT_CONTEXT_KEY]?: TenantContext }>();
     const correlationId = request.correlationId ?? "unknown";
 
     if (exception instanceof ZodError) {
@@ -43,6 +68,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     }
 
     if (exception instanceof ApiError) {
+      if (exception.getStatus() >= 500) this.report(exception, request, exception.getStatus());
       response.status(exception.getStatus()).json({
         error: {
           code: exception.code,
@@ -56,6 +82,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
+      if (status >= 500) this.report(exception, request, status);
       const payload = exception.getResponse();
       const message =
         typeof payload === "string"
@@ -92,7 +119,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       return;
     }
 
-    console.error(exception);
+    this.report(exception, request, 500);
 
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: {

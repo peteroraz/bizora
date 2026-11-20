@@ -1,5 +1,7 @@
 import { DynamicModule, Module } from "@nestjs/common";
 import { ThrottlerModule } from "@nestjs/throttler";
+import { PostgresThrottlerStorage } from "./modules/telemetry/postgres-throttler.storage.js";
+import { TelemetryModule } from "./modules/telemetry/telemetry.module.js";
 import type { AppEnv } from "@bizora/config/env";
 import type { Logger } from "pino";
 import { CoreModule } from "./core.module.js";
@@ -52,9 +54,12 @@ export class AppModule {
               limit: options.env.THROTTLE_AUTH_LIMIT,
             },
           ],
+          // Shared by every API server (ADR-036).
+          storage: new PostgresThrottlerStorage(options.db),
         }),
         AuditModule,
         HealthModule,
+        TelemetryModule,
         TenantModule,
         IdentityModule,
         RbacModule,

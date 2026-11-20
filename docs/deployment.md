@@ -320,7 +320,14 @@ If you add a Google external Application Load Balancer in front of Cloud Run, th
 
 ## Rate limiting
 
-Auth and invitation-accept routes use `@nestjs/throttler` with **in-memory** storage. That is safe for a single Cloud Run instance. Terraform sets `bizora-api` `max_instance_count` to 1 in both environments for this reason. Before scaling the API to more than one instance, switch the throttler to Redis-backed storage (`REDIS_URL` is already provisioned locally and should be used in GCP as well).
+Auth and invitation-accept routes use `@nestjs/throttler` with its counts kept in Postgres (`throttle_hits`, ADR-036). Every API instance sees the same counts, so `bizora-api` can scale; Terraform sets `max_instance_count` from `api_max_instances` (4 by default).
+
+## Monitoring, alerts and restores
+
+- **Errors.** The API and web server log errors in Error Reporting's format, with the business affected. People's browsers report script errors to `/api/v1/telemetry/client-errors`.
+- **Content security policy.** Every page sends a nonce-based policy. Blocked content is reported to `/api/v1/telemetry/csp` and logged as a warning.
+- **Alerts.** `monitoring.tf` creates an uptime check on `/health`, plus alerts for downtime, server errors, logged errors and database disk. Set `alert_emails` in the environment's `terraform.tfvars` and apply, so someone is told. What to do for each alert: `docs/runbooks/incidents.md`.
+- **Restores.** `docs/runbooks/restore.md` covers backups, a real restore, and the drill script `docs/runbooks/restore-drill.sh`.
 
 ## Custom domain
 
@@ -405,7 +412,6 @@ Apply after the Resend key version and the Google client-secret version exist. C
 
 ## Known limitations
 
-- The API throttler is in-memory. Maximum instances stay at 1 until it moves to Redis. A second instance would give each copy its own counters.
 - Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
 - Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
 - PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).

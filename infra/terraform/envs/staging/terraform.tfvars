@@ -14,3 +14,6 @@ email_provider            = "resend"
 email_from                = "Bizora <no-reply@mail.baseportals.app>"
 google_oauth_client_id    = "811307087654-7u9v5uvc4kq239bnvbco70pdckacertk.apps.googleusercontent.com"
 ai_provider               = "vertex"
+
+# Who is emailed when staging is down or failing (ADR-036). Add your address, then apply.
+alert_emails = []

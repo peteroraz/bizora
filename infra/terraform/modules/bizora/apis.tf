@@ -9,6 +9,9 @@ locals {
     "sts.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "aiplatform.googleapis.com",
+    "monitoring.googleapis.com",
+    "logging.googleapis.com",
+    "clouderrorreporting.googleapis.com",
   ])
 }
 

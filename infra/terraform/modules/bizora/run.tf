@@ -4,9 +4,8 @@
 # The first apply cannot finish these services until bizora-jwt-secret has a
 # version. Add that version manually, then apply again. See docs/deployment.md.
 #
-# bizora-api max_instance_count is 1 because the auth throttler is in-memory.
-# Do not raise it until Redis-backed storage exists.
-# See "Known limitations" in README.md and docs/deployment.md.
+# bizora-api can run on several instances: sign-in limits are kept in Postgres
+# (ADR-036), and nothing else is held in memory between requests.
 
 resource "google_cloud_run_v2_service" "api" {
   project             = var.project_id
@@ -20,8 +19,7 @@ resource "google_cloud_run_v2_service" "api" {
 
     scaling {
       min_instance_count = var.api_min_instances
-      # In-memory throttler. Keep this at 1. See Known limitations.
-      max_instance_count = 1
+      max_instance_count = var.api_max_instances
     }
 
     volumes {

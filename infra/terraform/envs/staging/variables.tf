@@ -62,3 +62,15 @@ variable "ai_provider" {
   type        = string
   description = "AI capture of photos and voice notes: off or vertex (ADR-018)."
 }
+
+variable "api_max_instances" {
+  type        = number
+  description = "Maximum bizora-api instances (ADR-036)."
+  default     = 4
+}
+
+variable "alert_emails" {
+  type        = list(string)
+  description = "Who is emailed when Bizora is down or failing (ADR-036)."
+  default     = []
+}
