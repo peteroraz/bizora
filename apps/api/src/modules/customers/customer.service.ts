@@ -40,6 +40,9 @@ import {
   customerPayments,
 } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
+
+const DIRECTORY_FULL_LIMIT = 5000;
+const DIRECTORY_LOOKUP_LIMIT = 2000;
 import { AddressService } from "../addresses/address.service.js";
 import { AuditService } from "../audit/audit.service.js";
 
@@ -188,6 +191,46 @@ export class CustomerService {
       page: safePage,
       pageSize: CUSTOMER_PAGE_SIZE,
       total,
+    };
+  }
+
+  /**
+   * Customer names for matching a spoken sale with no network (ADR-040): names, IDs and whether they may buy on credit,
+   * never phones or emails. Whoever may read customers gets up to 5,000. Someone who may only look customers up (a
+   * cashier) gets only those approved for credit and those who bought in their shop in the last 90 days, so the
+   * list cannot be used to see every customer.
+   */
+  async directory(tenant: TenantContext) {
+    const business = await this.requireBusiness(tenant);
+    const scope = and(this.customerScope(tenant, business.id), isNull(customers.archivedAt));
+    const full = tenant.permissions.includes(Permission.CUSTOMERS_READ);
+    const limit = full ? DIRECTORY_FULL_LIMIT : DIRECTORY_LOOKUP_LIMIT;
+    const filters = [scope];
+    if (!full) {
+      const since = new Date(Date.now() - 90 * 86_400_000);
+      const recent = this.db
+        .select({ id: sales.customerId })
+        .from(sales)
+        .where(
+          and(
+            eq(sales.tenantId, tenant.tenantId),
+            eq(sales.businessId, business.id),
+            gte(sales.soldAt, since),
+            ...(tenant.branchId ?? tenant.membershipBranchId ? [eq(sales.branchId, (tenant.membershipBranchId ?? tenant.branchId) as string)] : []),
+          ),
+        );
+      filters.push(or(eq(customers.creditAllowed, true), inArray(customers.id, recent))!);
+    }
+    const rows = await this.db
+      .select({ id: customers.id, name: customers.name, creditAllowed: customers.creditAllowed })
+      .from(customers)
+      .where(and(...filters))
+      .orderBy(sql`${customers.updatedAt} DESC`, asc(customers.id))
+      .limit(limit + 1);
+    return {
+      items: rows.slice(0, limit).map((row) => ({ id: row.id, name: row.name, creditAllowed: row.creditAllowed })),
+      truncated: rows.length > limit,
+      scope: full ? ("all" as const) : ("credit_and_recent" as const),
     };
   }
 

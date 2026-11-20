@@ -59,7 +59,7 @@ test("owner sets opening hours and lets a cashier work late; a store keeper's de
   await cashier.page.goto("/app/sales/new");
   await cashier.page.getByLabel("Find a product").fill("peak");
   await cashier.page.getByRole("button", { name: /Peak Milk/ }).click();
-  await cashier.page.getByRole("button", { name: "Record sale" }).click();
+  await cashier.page.getByRole("button", { name: "Record sale", exact: true }).click();
   await expect(cashier.page.getByText(/Outside opening hours only the owner can make changes/)).toBeVisible();
 
   // The owner lets the cashier work for two hours.
@@ -71,7 +71,7 @@ test("owner sets opening hours and lets a cashier work late; a store keeper's de
   await expect(cashier.page.getByTestId("work-banner")).toContainText("The owner has let you work outside opening hours until");
   await cashier.page.getByLabel("Find a product").fill("peak");
   await cashier.page.getByRole("button", { name: /Peak Milk/ }).click();
-  await cashier.page.getByRole("button", { name: "Record sale" }).click();
+  await cashier.page.getByRole("button", { name: "Record sale", exact: true }).click();
   await expect(cashier.page.getByRole("heading", { name: "R-000001" })).toBeVisible();
   expect(await stock()).toBe("19000");
 

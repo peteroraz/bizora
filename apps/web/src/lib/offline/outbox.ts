@@ -23,7 +23,11 @@ export type OutboxItem = {
   attempts: number;
   nextAttemptAt: number;
   error: { code: string; message: string } | null;
+  /** Shown on this phone while waiting (ADR-040): what was sold and for how much. Never sent to the server. */
+  meta?: OutboxMeta;
 };
+
+export type OutboxMeta = { summary: string; totalMinor: string | null; currency: string; customerName: string | null; source: "voice" | "counter"; number: string | null };
 
 export type PushFn = (operations: { id: string; type: SyncOperationType; occurredAt: string; payload: unknown }[]) => Promise<SyncOperationResult[]>;
 
@@ -109,7 +113,7 @@ export async function enqueue(
   owner: OutboxOwner,
   type: SyncOperationType,
   payload: unknown,
-  options: { id?: string; now?: number } = {},
+  options: { id?: string; now?: number; meta?: OutboxMeta } = {},
 ): Promise<string> {
   if (!available()) throw new Error("This browser cannot save work offline.");
   const now = options.now ?? Date.now();
@@ -124,6 +128,7 @@ export async function enqueue(
     attempts: 0,
     nextAttemptAt: 0,
     error: null,
+    ...(options.meta ? { meta: options.meta } : {}),
   };
   await write((store) => store.put(item));
   return item.id;
@@ -140,6 +145,11 @@ export async function summary(owner?: OutboxOwner) {
     /** Everything waiting on this device, whoever made it. */
     devicePending: items.filter((item) => item.status === "pending").length,
   };
+}
+
+/** This person's waiting and refused items of one kind, oldest first, for showing on screen. */
+export async function items(owner: OutboxOwner, type?: SyncOperationType) {
+  return (await all()).filter((item) => mine(owner)(item) && (!type || item.type === type));
 }
 
 /** Removes rejected items once the person has seen them. */

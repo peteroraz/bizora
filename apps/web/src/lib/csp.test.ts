@@ -5,7 +5,9 @@ describe("content security policy", () => {
   it("lets only this page's scripts run, loads nothing from other sites, and cannot be framed", () => {
     const policy = contentSecurityPolicy("abc", { https: true, development: false });
     expect(policy).toContain("script-src 'self' 'nonce-abc' 'strict-dynamic'");
-    expect(policy).not.toContain("unsafe-eval");
+    expect(policy).not.toMatch(/'unsafe-eval'/);
+    // Offline voice's WebAssembly may compile, which does not allow eval() (ADR-040).
+    expect(policy).toContain("'wasm-unsafe-eval'");
     expect(policy).toContain("connect-src 'self'");
     expect(policy).toContain("frame-ancestors 'none'");
     expect(policy).toContain("object-src 'none'");

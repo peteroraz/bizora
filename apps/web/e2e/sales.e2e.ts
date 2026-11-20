@@ -42,7 +42,7 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
   await expect(page.getByTestId("sale-total")).toHaveText("₦900.00");
   await page.getByLabel("Cash given").fill("1000");
   await expect(page.getByTestId("sale-change")).toHaveText("Change: ₦100.00");
-  await page.getByRole("button", { name: "Record sale" }).click();
+  await page.getByRole("button", { name: "Record sale", exact: true }).click();
   await expect(page.getByRole("heading", { name: "R-000001" })).toBeVisible();
   await expect(page.getByTestId("next-sale")).toBeVisible();
   await page.getByText("More ways to share").click();
@@ -82,7 +82,7 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
   await page.getByLabel("Find a product").fill("peak");
   await page.getByRole("button", { name: /Peak Milk/ }).click();
   await page.getByRole("button", { name: "Transfer" }).click();
-  await page.getByRole("button", { name: "Record sale" }).click();
+  await page.getByRole("button", { name: "Record sale", exact: true }).click();
   await expect(page.getByText(/saved on this phone as DEV\d+-\d{6}/)).toBeVisible();
   await context.setOffline(false);
   await expect

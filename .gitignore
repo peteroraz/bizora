@@ -31,3 +31,6 @@ override.tf.json
 *_override.tf.json
 *.auto.tfvars
 *.auto.tfvars.json
+
+# Offline voice assets (ADR-040): copied or downloaded at build time, never committed.
+apps/web/public/voice/

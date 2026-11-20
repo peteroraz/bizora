@@ -63,3 +63,4 @@ Set `TRUST_PROXY=true` in production. The API trusts **1 hop** (`X-Forwarded-For
 - There is no email delivery yet. Invite tokens are returned by the API only when `INVITE_TOKEN_EXPOSE=true` (staging). Production leaves that off.
 - PostgreSQL RLS is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
 - CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.
+- Offline voice sales (ADR-040, `docs/voice/README.md`) are English only. They have not been measured on Nigerian accents or tested on physical phones. The speech model (about 66 MB) is fetched at build time from Hugging Face and checked against `apps/web/src/lib/voice/models.lock.json`.

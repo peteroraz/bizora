@@ -27,7 +27,19 @@ const nextConfig: NextConfig = {
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
         ],
       },
+      // Offline voice files (ADR-040) have their version in the path, so a browser may keep them for good.
+      {
+        source: "/voice/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
+  },
+  // The speech library has Node-only parts that the browser never loads.
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.alias = { ...config.resolve.alias, sharp$: false, "onnxruntime-node$": false };
+    }
+    return config;
   },
   async rewrites() {
     return [

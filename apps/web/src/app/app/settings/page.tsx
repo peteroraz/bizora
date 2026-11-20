@@ -17,6 +17,7 @@ import { CloseShop } from "../../../components/close-shop";
 import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { SupportActivity } from "../../../components/support-activity";
+import { VoiceSettings } from "../../../components/voice-settings";
 import { WorkRulesSettings } from "../../../components/work-rules-settings";
 import { BrandSettings } from "../../../components/brand-settings";
 import { can, settingsTabs as tabs, visibleSettingsTabs } from "../../../lib/access";
@@ -769,6 +770,7 @@ function SettingsScreen() {
               </Select>
             </FormField>
           </Card>
+          <VoiceSettings />
         </TabPanel>
         <TabPanel value="security">
           <SecurityPanel />
