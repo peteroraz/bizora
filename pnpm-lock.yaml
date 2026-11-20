@@ -27,6 +27,9 @@ importers:
       '@bizora/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@bizora/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       '@bizora/ui':
         specifier: workspace:*
         version: link:../../packages/ui

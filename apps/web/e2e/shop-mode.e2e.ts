@@ -11,7 +11,7 @@ test("owner turns on Shop mode, staff sign in with a PIN, the device auto-locks,
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `owner.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: {
+    data: { acceptTerms: true,
       email,
       password,
       displayName: "Ngozi Owner",

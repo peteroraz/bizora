@@ -13,7 +13,7 @@ test("a mechanic says a job, checks the lines, saves it with a deposit, finishes
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `mechanic.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Emeka Owner", organizationName: `Emeka Motors ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Emeka Owner", organizationName: `Emeka Motors ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken as string}` };
   expect(

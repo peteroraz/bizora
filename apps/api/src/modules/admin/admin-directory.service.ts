@@ -15,6 +15,9 @@ import {
   organizations,
   plans,
   productPhotos,
+  products,
+  customers,
+  sales,
   sessions,
   shopDevices,
   userIdentities,
@@ -112,6 +115,7 @@ export class AdminDirectoryService {
     if (!organization) throw new ApiError("NOT_FOUND", "Business was not found.", 404);
     const since = dayString(29);
     const today = dayString(0);
+    const counted = await this.counts(tenantId);
     const [plan, businessRows, branchRows, people, pending, devices, reads, photos, logo, lastSession, lastAudit] = await Promise.all([
       this.db
         .select({ code: organizationPlans.planCode, name: plans.name, startedAt: organizationPlans.startedAt })
@@ -230,7 +234,19 @@ export class AdminDirectoryService {
         productPhotos: Number(photos[0]?.photos ?? 0),
         bytes: Number(photos[0]?.bytes ?? 0) + Number(logo[0]?.bytes ?? 0),
       },
+      usage: counted,
     };
+  }
+
+  /** How much the business uses Bizora (ADR-039): counts only, never amounts. */
+  private async counts(tenantId: string) {
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const [[sold], [items], [people]] = await Promise.all([
+      this.db.select({ n: count() }).from(sales).where(and(eq(sales.tenantId, tenantId), gte(sales.soldAt, since))),
+      this.db.select({ n: count() }).from(products).where(and(eq(products.tenantId, tenantId), isNull(products.archivedAt))),
+      this.db.select({ n: count() }).from(customers).where(and(eq(customers.tenantId, tenantId), isNull(customers.archivedAt))),
+    ]);
+    return { sales30Days: Number(sold?.n ?? 0), products: Number(items?.n ?? 0), customers: Number(people?.n ?? 0) };
   }
 
   async searchPeople(q: string) {

@@ -1,11 +1,12 @@
 "use client";
 
-import { Badge, Button, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@bizora/ui";
+import { Badge, Button, buttonVariants, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@bizora/ui";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useCan } from "@/components/admin-shell";
+import { LimitsPanel } from "@/components/limits-panel";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Section } from "@/components/section";
 import { AdminApiError, adminApi } from "@/lib/admin-api";
@@ -26,6 +27,7 @@ type Profile = {
   invitations: { id: string; email: string; role: string; shop: string | null; sentAt: string; expiresAt: string; expired: boolean }[];
   devices: { id: string; name: string; shop: string | null; addedAt: string; lastSeenAt: string | null; status: "active" | "suspended" | "stopped" }[];
   storage: { productPhotos: number; bytes: number };
+  usage: { sales30Days: number; products: number; customers: number };
   supportHistory: { id: string; at: string; staffEmail: string; action: string; reason: string | null }[];
 };
 
@@ -42,6 +44,16 @@ export default function BusinessPage() {
   const [problem, setProblem] = useState<string | null>(null);
   const canAct = useCan("support.act");
   const canStop = useCan("devices.stop");
+  const canView = useCan("records.read");
+  const router = useRouter();
+  const [view, setView] = useState<{ expiresAt: string } | null>(null);
+
+  useEffect(() => {
+    if (!canView) return;
+    void adminApi<{ view: { expiresAt: string } | null }>(`/businesses/${id}/support-view`)
+      .then((data) => setView(data.view))
+      .catch(() => undefined);
+  }, [canView, id]);
 
   const load = useCallback(async () => {
     try {
@@ -79,6 +91,36 @@ export default function BusinessPage() {
         </div>
         <p className="max-w-prose rounded-card border border-border bg-sidebar px-4 py-2 text-sm">{t("privacy")}</p>
       </div>
+
+      {canView ? (
+        <Section title={t("supportView")}>
+          <p className="max-w-prose text-sm text-muted">{t("supportViewLead")}</p>
+          {view ? (
+            <Link href={`/businesses/${profile.id}/records`} className={buttonVariants({})} data-testid="continue-support-view">
+              {t("continueSupportView", { time: new Date(view.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) })}
+            </Link>
+          ) : (
+            <ReasonDialog
+              title={reason("openSupportView.title")}
+              description={reason("openSupportView.description", { name: profile.name })}
+              done={reason("openSupportView.done")}
+              trigger={<Button>{t("openSupportView")}</Button>}
+              onConfirm={async (text) => {
+                await adminApi(`/businesses/${profile.id}/support-view`, { method: "POST", body: { reason: text } });
+                router.push(`/businesses/${profile.id}/records`);
+              }}
+            />
+          )}
+        </Section>
+      ) : null}
+
+      <Section title={t("usage")}>
+        <p className="text-sm" data-testid="business-usage">
+          {t("usageLine", { sales: profile.usage.sales30Days, products: profile.usage.products, customers: profile.usage.customers })}
+        </p>
+      </Section>
+
+      <LimitsPanel tenantId={profile.id} />
 
       <Section title={t("businesses")}>
         <Table>

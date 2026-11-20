@@ -9,7 +9,7 @@ test("receipts and statements open at the business's own link, old links move th
   const suffix = `${Date.now()}`;
   const email = `links.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ama Owner", organizationName: `Ama Studio ${suffix}`, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra" },
+    data: { acceptTerms: true, email, password, displayName: "Ama Owner", organizationName: `Ama Studio ${suffix}`, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
   expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "GH", industryCode: "general-retail", baseCurrencyCode: "GHS", timezone: "Africa/Accra", businessName: "Ama Studio", branchName: "Osu" } })).ok()).toBeTruthy();

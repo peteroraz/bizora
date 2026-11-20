@@ -16,7 +16,7 @@ async function registerOwner(
   branchName: string,
 ): Promise<Registered> {
   const registered = await api.post("/api/v1/auth/register", {
-    data: {
+    data: { acceptTerms: true,
       email,
       password,
       displayName,

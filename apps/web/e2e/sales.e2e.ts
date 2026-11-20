@@ -14,7 +14,7 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `sales.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ada Owner", organizationName: `Ada Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Ada Owner", organizationName: `Ada Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   expect(registered.ok()).toBeTruthy();
   const token = (await registered.json()).data.accessToken as string;

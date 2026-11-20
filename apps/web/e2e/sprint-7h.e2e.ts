@@ -26,7 +26,7 @@ test("owner sets opening hours and lets a cashier work late; a store keeper's de
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `rules.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Kemi Owner", organizationName: `Kemi Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Kemi Owner", organizationName: `Kemi Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken as string}` };
   expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Kemi Stores", branchName: "Main" } })).ok()).toBeTruthy();

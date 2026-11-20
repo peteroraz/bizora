@@ -187,23 +187,124 @@
   "legal": {
     "draft": "Draft — to be reviewed by counsel",
     "privacyTitle": "Privacy",
-    "termsTitle": "Terms",
+    "termsTitle": "Terms of use",
     "privacy": [
       "This draft explains how Bizora handles personal information for shop owners and their customers. It is not legal advice and it has not been signed off by a lawyer.",
       "Bizora is used by businesses in Nigeria and other countries. Data protection law applies where the people are, such as the Nigeria Data Protection Act 2023 for people in Nigeria.",
       "We use that information to run your business account: sign-in, shops and staff, customers and what they owe, sales, stock, suppliers and money. We do not sell personal data. This public site does not use advertising or tracking cookies.",
       "Phone numbers are stored so you can call or open WhatsApp. A walk-in customer can be saved without a phone. You are responsible for telling your customers why you keep their details.",
       "Some work is done for us by other companies: Google Cloud hosts the service and reads photos and voice notes you choose to send for capture (they come back as draft rows for you to check), and an email service sends sign-in and invitation emails.",
+      "Authorised Bizora staff may see a business's records, read-only, to give support, fix faults, keep the service secure or meet the law, as the Terms of use explain. Customers' phone numbers and emails are partly hidden from them, and every look is recorded and shown to the owner.",
       "You can ask us to correct or delete your account data. Customer records you entered belong to your business and are removed when that business is deleted.",
       "This page will be replaced after counsel reviews it. Until then, do not treat it as a finished privacy notice."
     ],
-    "terms": [
-      "These draft terms are a plain-language starting point for using Bizora. They must be reviewed by counsel before anyone relies on them.",
-      "Bizora helps a business record sales, stock, customers who owe, suppliers, expenses and cash. Check the figures it shows against your money and stock regularly, and keep your own copies of important records.",
-      "You must be allowed to keep the customer and staff details you enter. Data protection law where your customers live still applies, such as the Nigeria Data Protection Act 2023 for people in Nigeria.",
-      "Keep your password to yourself. You are responsible for what your staff do inside your business.",
-      "The service is provided as it is today. We can suspend an account that is used to harm other people or to break the law.",
-      "This draft does not limit any right you have under the law of your country that cannot be limited. A lawyer still needs to review this page."
+    "termsVersion": "Version {version}. These terms apply from 20 November 2026.",
+    "termsContents": "On this page",
+    "termsSections": [
+      {
+        "id": "agreement",
+        "title": "1. This agreement",
+        "paragraphs": [
+          "These Terms of use are an agreement between you and Bizora (\"Bizora\", \"we\", \"us\"). They apply when you create a business on Bizora or use it in any way: the website, the app on a phone or computer, and shop phones.",
+          "You accept them by ticking \"I agree to the Terms of use\" when you sign up, or when the app asks you to. If you accept for a business, you confirm that you are allowed to agree for it. If you do not agree, do not use Bizora.",
+          "Our Privacy notice explains how we handle personal information. It forms part of these terms."
+        ]
+      },
+      {
+        "id": "account",
+        "title": "2. Your account",
+        "paragraphs": [
+          "You must be an adult where you live and give true details when you sign up. Keep your password and your staff PINs to yourself.",
+          "You decide who works in your business on Bizora, and what each person may do. You are responsible for what you, your staff and the shop phones you add do in your business.",
+          "Tell us at once through Help in the app if you think someone else is using your account."
+        ]
+      },
+      {
+        "id": "use",
+        "title": "3. Using Bizora",
+        "paragraphs": [
+          "Bizora helps you record sales, stock, customers and what they owe, suppliers, jobs, expenses and cash. It is a record-keeping tool. It is not accounting, tax, legal or financial advice.",
+          "Check the figures Bizora shows against your money and stock regularly. Keep your own copies of anything important, such as invoices you must keep by law.",
+          "Do not use Bizora to break the law, to cheat or harm anyone, to send messages people did not ask for, to get into other people's accounts, to copy or take apart the service, or to overload it."
+        ]
+      },
+      {
+        "id": "data",
+        "title": "4. Your business data",
+        "paragraphs": [
+          "The records you enter belong to your business. You give us permission to store, copy, process and show them only so far as needed to run Bizora for you, keep it secure, and meet the law.",
+          "You must be allowed to keep the details of your customers, staff and suppliers that you enter, and tell them why you keep them. Data protection law where those people live applies to you, for example the Nigeria Data Protection Act 2023, the GDPR in the EU and UK, or the Data Protection Act in Ghana or Kenya.",
+          "For your customers' and staff's details, you decide why they are kept and we keep them on your behalf. We do not sell personal data and we do not use your records for advertising."
+        ]
+      },
+      {
+        "id": "bizora-access",
+        "title": "5. When Bizora staff can see your business",
+        "paragraphs": [
+          "By accepting these terms you agree that authorised Bizora staff may see your business's account and records without asking you each time. This covers your sales, stock, customers and what they owe, suppliers, jobs, money, staff, shop phones and activity.",
+          "We look only when it is needed: to answer a request for help from you or your staff, to fix a fault or check that figures are right, to keep Bizora secure, to look into fraud, abuse or a dispute, or when the law requires it.",
+          "Only staff whose job needs it can look, and they are bound to keep what they see confidential. They see your records read-only, for at most one hour at a time, and must give a reason before they start. Customers' phone numbers and emails are partly hidden from them.",
+          "Every look and every action is recorded with the staff member's email, the time and the reason. As the owner you can see this list in the app under Settings, Bizora support.",
+          "Bizora staff never create, change or delete your sales, stock, payments or other records. They may do for you what you could do yourself and ask them to do, such as sending an invitation again or stopping a lost shop phone, and they may change your plan's limits. These actions are recorded in the same list."
+        ]
+      },
+      {
+        "id": "ai",
+        "title": "6. Photo and voice reading",
+        "paragraphs": [
+          "When you send a photo, scan or voice note to fill in a sale, stock or a job, it is read by an AI service run for us by Google Cloud. What comes back is a draft: check it before you save it.",
+          "Each shop can make a set number of reads a day. We may change that number, and we tell you in the app when a shop reaches it."
+        ]
+      },
+      {
+        "id": "fees",
+        "title": "7. Plans and fees",
+        "paragraphs": [
+          "Bizora is free to use for now. Before we charge for a plan, we will tell you the price and what it includes at least 30 days ahead, and you can choose whether to continue.",
+          "Prices will not include taxes unless we say so. Money you pay is not refundable unless the law or the plan says it is."
+        ]
+      },
+      {
+        "id": "service",
+        "title": "8. The service",
+        "paragraphs": [
+          "We work to keep Bizora available and your records safe, with backups. Bizora is provided as it is: it may sometimes be unavailable, for example for maintenance or because of your network. Work saved on a phone with no network is sent when the network comes back.",
+          "We may change, add or remove features. If a change takes away something important you use, we will tell you ahead where we can."
+        ]
+      },
+      {
+        "id": "ending",
+        "title": "9. Suspending or closing an account",
+        "paragraphs": [
+          "You can stop using Bizora at any time and ask us to close your business's account. You can ask us for a copy of your records first.",
+          "We may limit or suspend an account that breaks these terms, puts other people or the service at risk, or that the law requires us to suspend. Where we can, we tell you first and give you a chance to fix the problem.",
+          "After an account is closed we delete its records within a reasonable time, except what the law requires us to keep."
+        ]
+      },
+      {
+        "id": "liability",
+        "title": "10. Responsibility",
+        "paragraphs": [
+          "As far as the law allows, we are not responsible for loss of profit, business or goodwill, or for losses caused by wrong figures you did not check, by your staff, or by events we cannot control.",
+          "As far as the law allows, our total responsibility to you is limited to what you paid us for Bizora in the 12 months before the problem, or 50,000 Nigerian naira (or the same value in your currency) if you paid nothing.",
+          "Nothing in these terms takes away rights you have by law that cannot be taken away, or limits responsibility for death, injury or fraud."
+        ]
+      },
+      {
+        "id": "changes",
+        "title": "11. Changes to these terms",
+        "paragraphs": [
+          "We may update these terms. When we do, we change the version above and the app asks you to accept the new version before you continue. If you do not accept, you can ask us to close your account."
+        ]
+      },
+      {
+        "id": "law",
+        "title": "12. Law and disputes",
+        "paragraphs": [
+          "These terms are governed by the laws of the Federal Republic of Nigeria. If we disagree, we will first try to settle it by talking. If that fails, the courts of Nigeria decide, unless the law of your country lets you go to your own courts.",
+          "Contact us through Help in the app."
+        ]
+      }
     ]
   },
   "login": {
@@ -526,7 +627,8 @@
       "team": "Staff",
       "appearance": "Look",
       "security": "Sign-in",
-      "hours": "Hours and locks"
+      "hours": "Hours and locks",
+      "support": "Bizora support"
     },
     "businessName": "Business name",
     "shopName": "Shop name",
@@ -2239,5 +2341,51 @@
     "newForCustomer": "New job for this customer",
     "noneForCustomer": "No jobs for this customer yet.",
     "leftShort": "{amount} left"
+  },
+  "terms": {
+    "agreePrefix": "I agree to the",
+    "linkText": "Terms of use",
+    "agreeSuffix": ".",
+    "accessNote": "This includes that Bizora staff may see your business's records, read-only, to help you and keep Bizora safe. Every look is shown to you.",
+    "accessLink": "Read section 5",
+    "title": "Accept the Terms of use",
+    "lead": "Before you continue, read and accept the Terms of use for your business.",
+    "changed": "The Terms of use were updated on 20 November 2026.",
+    "points": [
+      "Your records belong to your business. We keep them safe and never sell personal data.",
+      "Bizora staff may see your records, read-only and for at most an hour at a time, to help you, fix faults or keep Bizora safe. They give a reason, and you see every look under Settings, Bizora support.",
+      "Bizora is a record-keeping tool. Check its figures against your money and stock.",
+      "Bizora is free for now. We tell you at least 30 days before any price applies."
+    ],
+    "read": "Read the full Terms of use",
+    "accept": "Accept and continue",
+    "pending": "Saving…",
+    "signOut": "Sign out",
+    "required": "Tick the box to accept the Terms of use.",
+    "failed": "That did not save. Check your connection and try again."
+  },
+  "supportActivity": {
+    "lead": "Every time Bizora staff looked at your records or did something for your business, with their email and the reason they gave.",
+    "terms": "Why Bizora staff can see your business",
+    "none": "Bizora staff have not looked at or changed anything in your business.",
+    "actions": {
+      "support_view_opened": "Opened the support view",
+      "support_viewed": "Looked at",
+      "business_viewed": "Looked at your account details",
+      "invitation_resent": "Sent an invitation again",
+      "device_stopped": "Stopped a shop phone",
+      "person_signed_out_everywhere": "Signed someone out everywhere",
+      "business_limits_changed": "Changed your limits",
+      "other": "Bizora support"
+    },
+    "pages": {
+      "sales": "sales",
+      "sale": "a sale",
+      "stock": "stock",
+      "customers": "customers",
+      "debtors": "customers who owe",
+      "money": "cash and profit",
+      "activity": "activity"
+    }
   }
 }

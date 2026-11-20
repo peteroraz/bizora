@@ -14,6 +14,10 @@ export const ADMIN_ABILITIES = {
   "people.read": ["super_admin", "support", "operations", "finance", "viewer"],
   /** Resend invitations and verification emails, sign someone out everywhere. */
   "support.act": ["super_admin", "support", "operations"],
+  /** Open the read-only support view of a business's records (ADR-039): sales, stock, customers, money. */
+  "records.read": ["super_admin", "support"],
+  /** Change a business's limits: shops, staff, shop phones, photo and voice reads a day (ADR-039). */
+  "limits.manage": ["super_admin", "operations"],
   /** Stop a lost or stolen shop phone. */
   "devices.stop": ["super_admin", "support", "operations"],
   /** Read what Bizora staff did. */
@@ -53,5 +57,20 @@ export const adminStaffRolesSchema = z.object({
 export const adminSearchSchema = z.object({
   q: z.string().trim().max(120).default(""),
 });
+
+/** How long a support view stays open (ADR-039). */
+export const SUPPORT_VIEW_MINUTES = 60;
+
+/** Per-business limits; a missing value means the plan's own. */
+export const adminLimitsSchema = z.object({
+  max_branches: z.number().int().min(1).max(1000).nullable(),
+  max_staff: z.number().int().min(0).max(10000).nullable(),
+  max_devices: z.number().int().min(0).max(10000).nullable(),
+  ai_daily_reads: z.number().int().min(0).max(100000).nullable(),
+  reason: adminReasonSchema.shape.reason,
+});
+
+export const ADMIN_LIMITS = ["max_branches", "max_staff", "max_devices", "ai_daily_reads"] as const;
+export type AdminLimit = (typeof ADMIN_LIMITS)[number];
 
 export type AdminStaffAddInput = z.infer<typeof adminStaffAddSchema>;

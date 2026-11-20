@@ -113,6 +113,7 @@ export const settingsTabs = [
   "hours",
   "appearance",
   "security",
+  "support",
 ] as const;
 export type SettingsTab = (typeof settingsTabs)[number];
 
@@ -146,6 +147,9 @@ export function visibleSettingsTabs(
       case "security":
         // PIN staff have no email, password or Google sign-in to manage.
         return !access.staffSession;
+      case "support":
+        // What Bizora staff looked at or did (ADR-039): for whoever reads the business's activity.
+        return can(access, Permission.AUDIT_READ) && !access.staffSession;
     }
   });
 }

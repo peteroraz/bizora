@@ -120,7 +120,29 @@
     "storage": "{photos, plural, =0 {No product photos} one {# product photo} other {# product photos}}, {size} stored",
     "resendInvitation": "Send again",
     "stopDevice": "Stop phone",
-    "openPerson": "Open"
+    "openPerson": "Open",
+    "usageLine": "{sales, plural, =0 {No sales} one {# sale} other {# sales}} in the last 30 days · {products, plural, one {# product} other {# products}} · {customers, plural, one {# customer} other {# customers}}",
+    "limits": "Limits",
+    "limitsLead": "The plan gives the starting numbers. A number set here replaces the plan's for this business only.",
+    "limitNames": {
+      "max_branches": "Shops",
+      "max_staff": "Staff (not counting the owner)",
+      "max_devices": "Shop phones",
+      "ai_daily_reads": "Photo and voice reads a shop a day"
+    },
+    "limitColumns": {
+      "what": "Limit",
+      "plan": "Plan",
+      "set": "Set for this business",
+      "used": "In use"
+    },
+    "planDefault": "Plan's",
+    "serverCap": "Reads are also capped at {count} a day for the whole service.",
+    "changeLimits": "Change limits",
+    "supportView": "Support view",
+    "supportViewLead": "See this business's sales, stock, customers and money, read-only, for one hour. The owner agreed to this in the Terms of use and sees every page you open.",
+    "openSupportView": "Open support view",
+    "continueSupportView": "Continue support view (closes {time})"
   },
   "person": {
     "back": "Back to search",
@@ -180,6 +202,16 @@
       "title": "Change roles",
       "description": "{email} gets the roles you picked the next time they open a page.",
       "done": "Roles changed"
+    },
+    "openSupportView": {
+      "title": "Open the support view",
+      "description": "You see {name}'s records read-only for one hour. Your email and this reason are shown to the owner.",
+      "done": "Support view open"
+    },
+    "changeLimits": {
+      "title": "Change limits",
+      "description": "Leave a box empty to use the plan's number. The owner sees this change.",
+      "done": "Limits saved"
     }
   },
   "staff": {
@@ -230,7 +262,11 @@
       "invitation_resent": "Sent an invitation again",
       "device_stopped": "Stopped a shop phone",
       "person_verification_resent": "Sent a confirmation email again",
-      "person_signed_out_everywhere": "Signed a person out everywhere"
+      "person_signed_out_everywhere": "Signed a person out everywhere",
+      "support_view_opened": "Opened a support view",
+      "support_view_closed": "Closed a support view",
+      "support_viewed": "Looked at records",
+      "business_limits_changed": "Changed limits"
     }
   },
   "errors": {
@@ -240,5 +276,58 @@
   },
   "format": {
     "bytes": "{value} {unit}"
+  },
+  "records": {
+    "title": "Support view: {name}",
+    "closes": "Read-only. Closes at {time}.",
+    "reason": "Reason: {reason}",
+    "close": "Close support view",
+    "closed": "The support view is closed. Open it again from the business page.",
+    "backToBusiness": "Back to the business",
+    "masked": "Customers' phone numbers and emails are partly hidden.",
+    "tabs": {
+      "sales": "Sales",
+      "stock": "Stock",
+      "customers": "Customers",
+      "debtors": "Who owes",
+      "money": "Cash and profit",
+      "activity": "Activity"
+    },
+    "day": "Day",
+    "empty": "Nothing here.",
+    "columns": {
+      "sale": "Sale",
+      "when": "When",
+      "by": "By",
+      "paid": "Paid by",
+      "total": "Total",
+      "owing": "Still owed",
+      "status": "Status",
+      "product": "Product",
+      "quantity": "In stock",
+      "price": "Price",
+      "cost": "Cost",
+      "customer": "Customer",
+      "phone": "Phone",
+      "email": "Email",
+      "owes": "Owes",
+      "late": "Late",
+      "since": "Oldest due",
+      "shop": "Shop",
+      "expected": "Cash expected",
+      "opening": "At the start",
+      "in": "In",
+      "out": "Out",
+      "action": "What happened",
+      "actor": "Who"
+    },
+    "walkIn": "Walk-in",
+    "profit": "Profit for the day: {amount}",
+    "profitParts": "Sales {sales} · cost of goods {cost} · running costs {expenses} · POS fees {fees}",
+    "notFromSales": "Not from sales (not profit): {amount}",
+    "bizoraSupport": "Bizora support",
+    "system": "System",
+    "totalStock": "{count, plural, one {# product} other {# products}}, worth {value} at selling price",
+    "totalOwed": "{count, plural, one {# customer owes} other {# customers owe}} {amount}"
   }
 }

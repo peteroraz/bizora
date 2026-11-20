@@ -8,7 +8,7 @@ test("owner adds a product, records stock in and damage, sees low stock, and cou
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `stock.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Bola Owner", organizationName: `Bola Provisions ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Bola Owner", organizationName: `Bola Provisions ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   expect(registered.ok()).toBeTruthy();
   const token = (await registered.json()).data.accessToken as string;

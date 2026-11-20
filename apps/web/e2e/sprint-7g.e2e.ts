@@ -15,7 +15,7 @@ test("product photos, a spoken sale and a forwarded voice note for damaged stock
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `voice.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Bisi Owner", organizationName: `Bisi Voice ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Bisi Owner", organizationName: `Bisi Voice ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const token = (await registered.json()).data.accessToken as string;
   const headers = { authorization: `Bearer ${token}` };

@@ -16,7 +16,9 @@ export default async function AppShellLayout({ children }: { children: React.Rea
   // A shop device goes back to the staff PIN screen, everyone else to the sign-in page.
   if (meResponse.status === 401) redirect(jar.has("bizora_device") ? "/shop" : "/login?reason=session");
   if (!meResponse.ok) redirect("/login");
-  const me = (await meResponse.json()) as { data: Omit<ShellProfile, "businesses" | "branches"> };
+  const me = (await meResponse.json()) as { data: Omit<ShellProfile, "businesses" | "branches"> & { termsRequired?: boolean } };
+  // Owners accept the Terms of use before anything else (ADR-039).
+  if (me.data.termsRequired) redirect("/accept-terms");
   const [businessResponse, branchResponse, brandResponse, workResponse] = await Promise.all([
     load("/api/v1/businesses", cookie),
     load("/api/v1/branches", cookie),

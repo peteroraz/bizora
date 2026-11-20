@@ -421,6 +421,8 @@ export const organizationPlans = pgTable("organization_plans", {
     .notNull()
     .references(() => plans.code),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Limits set for this business in the Admin portal (ADR-039); missing keys use the plan. */
+  limitOverrides: jsonb("limit_overrides").$type<Partial<Record<"max_branches" | "max_staff" | "max_devices" | "ai_daily_reads", number>>>().notNull().default({}),
 });
 
 export const sessions = pgTable(
@@ -1678,4 +1680,27 @@ export const adminAudit = pgTable("admin_audit", {
   metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
   ip: varchar("ip", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Each time an owner accepts a version of the Terms of use (ADR-039). */
+export const termsAcceptances = pgTable("terms_acceptances", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  tenantId: uuid("tenant_id"),
+  version: varchar("version", { length: 20 }).notNull(),
+  method: varchar("method", { length: 16 }).$type<"sign_up" | "in_app">().notNull(),
+  ip: varchar("ip", { length: 64 }),
+  userAgent: varchar("user_agent", { length: 512 }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A support view of one business opened by a Bizora staff member, for a set time (ADR-039). */
+export const adminSupportViews = pgTable("admin_support_views", {
+  id: uuid("id").primaryKey(),
+  staffId: uuid("staff_id").notNull(),
+  tenantId: uuid("tenant_id").notNull(),
+  reason: varchar("reason", { length: 500 }).notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
 });

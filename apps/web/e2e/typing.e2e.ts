@@ -9,7 +9,7 @@ test("boxes take only what fits: names, Ghana phone numbers, cedi amounts, and s
   const suffix = `${Date.now()}`;
   const email = `typing.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ama Owner", organizationName: `Ama Stores ${suffix}`, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra" },
+    data: { acceptTerms: true, email, password, displayName: "Ama Owner", organizationName: `Ama Stores ${suffix}`, countryCode: "GH", baseCurrencyCode: "GHS", timezone: "Africa/Accra" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
   expect(
