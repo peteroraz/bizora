@@ -12,6 +12,9 @@ locals {
   # Cookies, CORS, OAuth redirects, and email links use the custom domain when it is set.
   # The run.app host stays assigned to the service during the cutover.
   web_origin = var.custom_domain == "" ? local.run_app_web_origin : "https://${var.custom_domain}"
+  # The Admin portal (ADR-037) is its own service on its own address; Google returns staff to this origin.
+  run_app_admin_origin = "https://bizora-admin-${data.google_project.current.number}.${var.region}.run.app"
+  admin_origin         = var.admin_custom_domain == "" ? local.run_app_admin_origin : "https://${var.admin_custom_domain}"
 
   artifact_registry_url = "${var.region}-docker.pkg.dev/${var.project_id}/bizora"
 

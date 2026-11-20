@@ -1637,3 +1637,43 @@ export const jobLines = pgTable(
   },
   (table) => [uniqueIndex("job_lines_line_key").on(table.jobId, table.lineNo)],
 );
+
+/** Bizora staff who use the Admin portal (ADR-037); not business users. */
+export const adminStaff = pgTable("admin_staff", {
+  id: uuid("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
+  status: varchar("status", { length: 12 }).$type<"active" | "removed">().notNull().default("active"),
+  googleSubject: varchar("google_subject", { length: 255 }),
+  lastSignInAt: timestamp("last_sign_in_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by"),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+  removedBy: uuid("removed_by"),
+});
+
+export const adminSessions = pgTable("admin_sessions", {
+  id: uuid("id").primaryKey(),
+  staffId: uuid("staff_id").notNull(),
+  tokenHash: char("token_hash", { length: 64 }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  ip: varchar("ip", { length: 64 }),
+  userAgent: varchar("user_agent", { length: 512 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const adminAudit = pgTable("admin_audit", {
+  id: uuid("id").primaryKey(),
+  staffId: uuid("staff_id"),
+  staffEmail: varchar("staff_email", { length: 320 }).notNull(),
+  action: varchar("action", { length: 64 }).notNull(),
+  targetType: varchar("target_type", { length: 32 }),
+  targetId: uuid("target_id"),
+  tenantId: uuid("tenant_id"),
+  reason: varchar("reason", { length: 500 }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  ip: varchar("ip", { length: 64 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

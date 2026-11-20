@@ -138,3 +138,31 @@ variable "ai_daily_capture_limit" {
   description = "Photo and voice captures each shop may run per day (ADR-033)."
   default     = 100
 }
+
+variable "environment" {
+  type        = string
+  description = "staging or production. Shown on every Admin portal screen outside production (ADR-037)."
+  default     = "staging"
+
+  validation {
+    condition     = contains(["staging", "production"], var.environment)
+    error_message = "environment must be staging or production."
+  }
+}
+
+variable "admin_custom_domain" {
+  type        = string
+  description = "Admin portal hostname without a scheme (ADR-037). Empty keeps the run.app origin. Staging uses admin-staging.baseportals.app."
+  default     = ""
+
+  validation {
+    condition     = var.admin_custom_domain == "" || can(regex("^[a-z0-9][a-z0-9.-]+[a-z0-9]$", var.admin_custom_domain))
+    error_message = "admin_custom_domain must be a lowercase hostname without a scheme or path."
+  }
+}
+
+variable "admin_bootstrap_emails" {
+  type        = list(string)
+  description = "Google accounts that become super admins the first time they sign in to the Admin portal (ADR-037)."
+  default     = []
+}

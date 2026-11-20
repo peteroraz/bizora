@@ -23,6 +23,7 @@ pnpm dev
 
 - Web: http://localhost:3000
 - API health: http://localhost:3001/health
+- Admin portal (Bizora staff, ADR-037): `pnpm --filter @bizora/admin dev`, then http://localhost:3002. It needs `ADMIN_WEB_ORIGIN=http://localhost:3002`, Google sign-in settings and `ADMIN_BOOTSTRAP_EMAILS` on the API.
 - Seeded users (local only): `alice@tenant-a.test` / `bob@tenant-b.test` with password `LocalOnly!Passw0rd`
 
 Invite tokens are omitted from API responses unless `INVITE_TOKEN_EXPOSE=true` (local/dev only).
@@ -51,7 +52,7 @@ Tenant context is server-derived from the verified session. Do not send `X-Tenan
 
 See `docs/deployment.md` for the first-time runbook: state buckets, Terraform, the JWT secret, GitHub environments, deploy, rollback, and logs.
 
-Images are built from `apps/api/Dockerfile` and `apps/web/Dockerfile` and deployed by `.github/workflows/deploy.yml`. Do not apply `infra/cloudrun/*.yaml`.
+Images are built from `apps/api/Dockerfile`, `apps/web/Dockerfile` and `apps/admin/Dockerfile` and deployed by `.github/workflows/deploy.yml`. Do not apply `infra/cloudrun/*.yaml`.
 
 Set `TRUST_PROXY=true` in production. The API trusts **1 hop** (`X-Forwarded-For` from Cloud Run). If a Google external HTTPS load balancer is placed in front of Cloud Run, set trust to **2 hops**.
 

@@ -17,3 +17,8 @@ ai_provider               = "vertex"
 
 # Who is emailed when staging is down or failing (ADR-036). Add your address, then apply.
 alert_emails = []
+
+# The Admin portal (ADR-037). Put the owner's Google account in admin_bootstrap_emails, then apply; that account
+# becomes the first super admin on its first sign-in and adds everyone else from the portal.
+admin_custom_domain    = "admin-staging.baseportals.app"
+admin_bootstrap_emails = []

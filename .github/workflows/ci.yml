@@ -86,6 +86,11 @@ jobs:
         env:
           CI: "true"
           DATABASE_URL: postgres://bizora:bizora@localhost:5432/bizora
+      # The Admin portal (ADR-037), with its own API server and a stand-in for Google.
+      - run: pnpm --filter @bizora/admin e2e
+        env:
+          CI: "true"
+          DATABASE_URL: postgres://bizora:bizora@localhost:5432/bizora
 
   docker:
     if: github.event_name == 'pull_request'
@@ -98,3 +103,5 @@ jobs:
         run: docker build --file apps/api/Dockerfile --tag bizora-api:ci .
       - name: Build web image
         run: docker build --file apps/web/Dockerfile --tag bizora-web:ci .
+      - name: Build admin image
+        run: docker build --file apps/admin/Dockerfile --tag bizora-admin:ci .

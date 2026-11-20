@@ -439,3 +439,14 @@ Apply after the Resend key version and the Google client-secret version exist. C
 ## What CI checks
 
 `.github/workflows/ci.yml` runs `terraform fmt -check` and `terraform validate` for staging and production with `terraform init -backend=false`. It does not plan or apply. Pull requests also run `docker build` for the API and web Dockerfiles and do not push those images.
+
+
+## Admin portal (ADR-037)
+
+`bizora-admin` is Bizora's back office for its own staff. Terraform creates the service; the deploy skips it until it exists.
+
+1. In `envs/staging/terraform.tfvars`, put your Google account in `admin_bootstrap_emails`. Keep `admin_custom_domain = "admin-staging.baseportals.app"`.
+2. Run `terraform apply` for staging.
+3. Run `terraform output admin_custom_domain_dns_records`. Create each record in Cloudflare as DNS only (grey cloud). The certificate follows within about 15 minutes to an hour.
+4. In Google Cloud Console, under APIs & Services, then Credentials, open the OAuth client that Bizora already uses. Add this authorised redirect URI: `https://admin-staging.baseportals.app/api/admin/v1/auth/google/callback`.
+5. Merge or re-run the deploy, then open `https://admin-staging.baseportals.app` and sign in with Google. Your account becomes the first super admin. Add the rest of the team under Staff.

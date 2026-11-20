@@ -161,3 +161,15 @@ export {
   jobUpdateSchema,
 } from "./jobs.js";
 export type { JobCreateInput, JobLineInput, JobLineKind, JobPaidFrom, JobStatus } from "./jobs.js";
+export {
+  ADMIN_ABILITIES,
+  ADMIN_ROLES,
+  adminAbilities,
+  adminCan,
+  adminReasonSchema,
+  adminRoleSchema,
+  adminSearchSchema,
+  adminStaffAddSchema,
+  adminStaffRolesSchema,
+} from "./admin.js";
+export type { AdminAbility, AdminRole, AdminStaffAddInput } from "./admin.js";

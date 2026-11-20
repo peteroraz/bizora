@@ -1,0 +1,37 @@
+@import "@bizora/ui/globals.css";
+
+@source "..";
+
+/*
+ * The portal wears its own colour so staff always know they are in Bizora's back office, not a business's app
+ * (ADR-037): aubergine ink for the bar, violet for actions. Everything else comes from the shared kit.
+ */
+:root {
+  --primary: #5b2a86;
+  --primary-fg: #fbf7ff;
+  --focus: #5b2a86;
+  --canvas: #f7f5f9;
+  --sidebar: #efe8f5;
+  --sidebar-active: #e4d6f0;
+  --table-head: #efe8f5;
+  --admin-bar: #241430;
+  --admin-bar-fg: #f4ecfa;
+  --admin-bar-muted: #c9b6d8;
+  --admin-env: #f6c453;
+  --admin-env-fg: #3b2500;
+}
+
+.dark {
+  --primary: #c9a3ef;
+  --primary-fg: #1c0b2b;
+  --focus: #c9a3ef;
+  --canvas: #120c17;
+  --card: #1b1321;
+  --sidebar: #1b1321;
+  --table-head: #251a2d;
+}
+
+.admin-mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.8125rem;
+}
