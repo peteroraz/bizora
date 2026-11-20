@@ -12,5 +12,6 @@ import { CustomerService } from "./customer.service.js";
   imports: [TenantModule, AddressModule, IdempotencyModule, SyncModule],
   controllers: [CustomersController],
   providers: [CustomerService, CustomerSyncHandler, PermissionGuard],
+  exports: [CustomerService],
 })
 export class CustomersModule {}

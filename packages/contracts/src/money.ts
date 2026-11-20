@@ -45,18 +45,38 @@ export const moneyReasonSchema = z.object({ reason: z.string().trim().min(3, "Sa
  * - to_bank: cash from the drawer paid into the bank; from_bank: cash drawn from the bank into the drawer;
  * - other_in: money in that is not a sale or a debt payment (a refund from a supplier, a grant).
  */
-export const MONEY_MOVEMENT_KINDS = ["owner_in", "owner_out", "to_bank", "from_bank", "other_in"] as const;
+export const MONEY_MOVEMENT_KINDS = ["owner_in", "owner_out", "to_bank", "from_bank", "other_in", "pos_cashout"] as const;
+/** The moves shown on the "Move money" screen. POS cash-out has its own screen; other money in is not offered. */
+export const MOVE_SCREEN_KINDS = ["to_bank", "from_bank", "owner_in", "owner_out"] as const satisfies readonly MoneyMovementKind[];
 export type MoneyMovementKind = (typeof MONEY_MOVEMENT_KINDS)[number];
 
 export const moneyMovementSchema = z.object({
   id: deviceId.optional(),
-  kind: z.enum(MONEY_MOVEMENT_KINDS),
+  kind: z.enum(MONEY_MOVEMENT_KINDS).exclude(["pos_cashout"]),
   amountMinor: positiveMinor,
   branchId: z.string().uuid().optional(),
   movementDate: day.optional(),
   note: z.string().trim().max(240).optional(),
 });
 export type MoneyMovementInput = z.infer<typeof moneyMovementSchema>;
+
+/**
+ * A POS cash-out (ADR-038): a customer pays on the shop's POS machine (Moniepoint, OPay and the like) and the shop
+ * gives them cash from the drawer, for a fee. The fee is either added on the POS or paid in cash. The fee is profit;
+ * the cash given is not a cost, it moves from the drawer to the POS account.
+ */
+export const posCashoutSchema = z
+  .object({
+    id: deviceId.optional(),
+    amountMinor: positiveMinor,
+    feeMinor: z.string().trim().regex(/^\d{1,15}$/, "Enter the fee, or 0.").default("0"),
+    feePaidBy: z.enum(["pos", "cash"]).default("pos"),
+    branchId: z.string().uuid().optional(),
+    movementDate: day.optional(),
+    note: z.string().trim().max(240).optional(),
+  })
+  .refine((value) => BigInt(value.feeMinor) <= BigInt(value.amountMinor), { path: ["feeMinor"], message: "The fee cannot be more than the cash given." });
+export type PosCashoutInput = z.infer<typeof posCashoutSchema>;
 
 /** The cash counted in a shop's drawer. The person counting does not see what was expected (a blind count). */
 export const cashCountSchema = z.object({
@@ -80,6 +100,7 @@ export const CASH_FLOW_KINDS = [
   "owner",
   "bank",
   "other_in",
+  "pos_cashout",
   "stock_bought",
   "suppliers",
   "counts",

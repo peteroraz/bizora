@@ -7,6 +7,7 @@ import type { Logger } from "pino";
 import { CoreModule } from "./core.module.js";
 import type { AppDatabase } from "./db/database.js";
 import { AddressModule } from "./modules/addresses/address.module.js";
+import { AdminModule } from "./modules/admin/admin.module.js";
 import { CustomersModule } from "./modules/customers/customer.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { EmailModule } from "./modules/email/email.module.js";
@@ -60,6 +61,7 @@ export class AppModule {
         AuditModule,
         HealthModule,
         TelemetryModule,
+        AdminModule,
         TenantModule,
         IdentityModule,
         RbacModule,

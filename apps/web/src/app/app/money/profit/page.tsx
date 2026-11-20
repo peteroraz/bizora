@@ -36,7 +36,7 @@ function ProfitScreen() {
 
   const money = (minor: string | bigint) => (profit ? formatCurrency(BigInt(minor), profit.currency, locale) : "");
   const result = profit ? BigInt(profit.profitMinor) : 0n;
-  const nothing = profit && profit.salesMinor === "0" && profit.expensesMinor === "0" && profit.costOfSalesMinor === "0" && profit.otherIncomeMinor === "0";
+  const nothing = profit && profit.salesMinor === "0" && profit.expensesMinor === "0" && profit.costOfSalesMinor === "0" && profit.posCashoutFeesMinor === "0";
   const monthName = day ? new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`)) : "";
 
   return (
@@ -94,7 +94,7 @@ function ProfitScreen() {
               {profit.returnsMinor !== "0" ? <Line label={t("profit.returns")} value={`− ${money(profit.returnsMinor)}`} /> : null}
               <Line label={t("profit.cost")} value={`− ${money(profit.costOfSalesMinor)}`} />
               <Line label={t("profit.gross")} value={money(profit.grossProfitMinor)} strong />
-              {profit.otherIncomeMinor !== "0" ? <Line label={t("profit.otherIncome")} value={`+ ${money(profit.otherIncomeMinor)}`} /> : null}
+              {profit.posCashoutFeesMinor !== "0" ? <Line label={t("profit.posFees")} value={`+ ${money(profit.posCashoutFeesMinor)}`} /> : null}
               <Line label={t("profit.expenses")} value={`− ${money(profit.expensesMinor)}`} />
               <ul className="space-y-1 pl-4 text-muted">
                 {profit.expenses.map((expense) => (
@@ -106,6 +106,11 @@ function ProfitScreen() {
               </ul>
             </dl>
           )}
+          {profit.notFromSalesMinor !== "0" ? (
+            <p className="rounded-control bg-sidebar px-3 py-2 text-sm" data-testid="profit-not-from-sales">
+              {t("profit.notFromSales", { amount: money(profit.notFromSalesMinor) })}
+            </p>
+          ) : null}
           <p className="text-xs text-muted">{t("profit.costNote")}</p>
         </Card>
       ) : null}

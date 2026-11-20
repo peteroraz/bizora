@@ -10,5 +10,6 @@ import { StaffService } from "./staff.service.js";
   imports: [TenantModule, EntitlementsModule],
   controllers: [StaffController, ShopController],
   providers: [StaffService, ShopDeviceService, PermissionGuard],
+  exports: [ShopDeviceService],
 })
 export class StaffModule {}

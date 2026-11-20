@@ -55,3 +55,21 @@ output "cloud_sql_connection_name" {
   description = "Cloud SQL connection name (project:region:instance)."
   value       = google_sql_database_instance.bizora.connection_name
 }
+
+output "admin_origin" {
+  description = "Admin portal origin. Add <admin_origin>/api/admin/v1/auth/google/callback to the Google OAuth client's redirect URIs."
+  value       = local.admin_origin
+}
+
+output "admin_custom_domain_dns_records" {
+  description = "DNS records for admin_custom_domain. Create each one in Cloudflare as DNS only (grey cloud)."
+  value = var.admin_custom_domain == "" ? [] : flatten([
+    for status in google_cloud_run_domain_mapping.admin[0].status : [
+      for record in status.resource_records : {
+        name   = record.name
+        type   = record.type
+        rrdata = record.rrdata
+      }
+    ]
+  ])
+}

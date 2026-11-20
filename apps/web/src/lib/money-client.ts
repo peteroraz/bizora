@@ -37,6 +37,9 @@ export type MoneyMove = {
   branchId: string;
   kind: MoneyMovementKind;
   amountMinor: string;
+  /** POS cash-outs only (ADR-038): the fee, and whether it was added on the POS or paid in cash. */
+  feeMinor: string;
+  feePaidBy: "pos" | "cash" | null;
   movementDate: string;
   note: string | null;
   status: "recorded" | "voided";
@@ -65,9 +68,11 @@ export type ProfitFigures = {
   netSalesMinor: string;
   costOfSalesMinor: string;
   grossProfitMinor: string;
-  otherIncomeMinor: string;
+  posCashoutFeesMinor: string;
   expensesMinor: string;
   profitMinor: string;
+  /** Money in that is not from sales (cash found in counts, other money in). Never part of profit (ADR-038). */
+  notFromSalesMinor: string;
 };
 
 export type Profit = ProfitFigures & {

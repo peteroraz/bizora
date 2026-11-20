@@ -104,6 +104,17 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
       env {
+        name  = "ADMIN_WEB_ORIGIN"
+        value = local.admin_origin
+      }
+      dynamic "env" {
+        for_each = length(var.admin_bootstrap_emails) == 0 ? [] : [join(",", var.admin_bootstrap_emails)]
+        content {
+          name  = "ADMIN_BOOTSTRAP_EMAILS"
+          value = env.value
+        }
+      }
+      env {
         name  = "INVITE_TOKEN_EXPOSE"
         value = var.invite_token_expose ? "true" : "false"
       }
@@ -238,6 +249,61 @@ resource "google_cloud_run_v2_service" "web" {
   }
 
   depends_on = [google_project_service.required]
+}
+
+# The Admin portal (ADR-037). Public like the web app; only allow-listed Google accounts get past its sign-in, and
+# its API routes refuse requests from any other address.
+resource "google_cloud_run_v2_service" "admin" {
+  project             = var.project_id
+  name                = "bizora-admin"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  deletion_protection = true
+
+  template {
+    service_account = google_service_account.admin.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    containers {
+      image = local.placeholder_image
+
+      ports {
+        name           = "http1"
+        container_port = 3002
+      }
+
+      env {
+        name  = "API_ORIGIN"
+        value = local.api_origin
+      }
+      env {
+        name  = "BIZORA_ENVIRONMENT"
+        value = var.environment
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "admin_public" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.admin.location
+  name     = google_cloud_run_v2_service.admin.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "api_public" {

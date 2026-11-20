@@ -12,8 +12,9 @@ import {
   type ExpensePaidFrom,
   type ExpenseStatus,
   type MoneyMovementKind,
+  posCashoutSchema,
 } from "@bizora/contracts";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
+import { type SQL, and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -51,6 +52,7 @@ const MOVEMENT_FLOW: Record<MoneyMovementKind, CashFlowKind> = {
   to_bank: "bank",
   from_bank: "bank",
   other_in: "other_in",
+  pos_cashout: "pos_cashout",
 };
 const SOURCE_FLOW: Record<string, CashFlowKind> = {
   sale: "sales",
@@ -308,7 +310,8 @@ export class MoneyService {
         owner_out: [{ role: "drawings" }, cash, "Owner took money out"],
         to_bank: [{ role: "bank" }, cash, "Cash paid into the bank"],
         from_bank: [cash, { role: "bank" }, "Cash drawn from the bank"],
-        other_in: [cash, { role: "other_income" }, "Other money in"],
+        // Not a sale, so not profit (ADR-038).
+        other_in: [cash, { role: "not_sales_money" }, "Other money in"],
       }[payload.kind] as [AccountRef, AccountRef, string];
       const posted = await this.ledger.post(
         tx,
@@ -341,6 +344,72 @@ export class MoneyService {
         membershipId: tenant.membershipId,
       });
       await this.record(tx, tenant, business.id, branch.id, "money.moved", "money_movement", id, { kind: payload.kind, amountMinor: amount.toString(), date });
+    });
+    const [row] = await this.db.select().from(moneyMovements).where(and(eq(moneyMovements.tenantId, tenant.tenantId), eq(moneyMovements.id, id)));
+    return this.movementView(row as typeof moneyMovements.$inferSelect);
+  }
+
+  /**
+   * A POS cash-out (ADR-038). The customer pays on the shop's POS machine; the money waits with other POS payments
+   * (1150) until the bank statement shows it. The drawer gives out the cash. The fee is profit:
+   * fee on the POS: Dr 1150 cash + fee, Cr cash, Cr fees · fee in cash: Dr 1150 cash, Cr cash less the fee, Cr fees.
+   */
+  async recordPosCashout(tenant: TenantContext, raw: unknown) {
+    const payload = posCashoutSchema.parse(raw);
+    if (payload.id) {
+      const [taken] = await this.db.select().from(moneyMovements).where(eq(moneyMovements.id, payload.id)).limit(1);
+      if (taken && taken.tenantId === tenant.tenantId) return this.movementView(taken);
+      if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
+    }
+    const id = payload.id ?? newId();
+    await this.db.transaction(async (tx) => {
+      const business = await requireBusiness(tx, tenant);
+      const branch = await resolveBranch(tx, tenant, business.id, payload.branchId);
+      const date = this.pastDay(payload.movementDate, business, "movementDate");
+      const amount = BigInt(payload.amountMinor);
+      const fee = BigInt(payload.feeMinor);
+      const cash: AccountRef = { role: "cash", branchId: branch.id };
+      const onPos = payload.feePaidBy === "pos";
+      const lines = [
+        { account: { role: "pos_clearing" } as AccountRef, debitMinor: onPos ? amount + fee : amount, memo: "Paid on the POS" },
+        ...(onPos ? [{ account: cash, creditMinor: amount, memo: "Cash given" }] : amount - fee > 0n ? [{ account: cash, creditMinor: amount - fee, memo: "Cash given less the fee paid in cash" }] : []),
+        ...(fee > 0n ? [{ account: { role: "pos_cashout_fees" } as AccountRef, creditMinor: fee, memo: "Fee" }] : []),
+      ];
+      const posted = await this.ledger.post(
+        tx,
+        { tenantId: tenant.tenantId, userId: tenant.userId },
+        {
+          businessId: business.id,
+          branchId: branch.id,
+          entryDate: date,
+          source: { type: "money_movement", id },
+          postingKey: `money:${id}`,
+          description: `POS cash-out${payload.note ? `: ${payload.note}` : ""}`.slice(0, 240),
+          lines,
+        },
+      );
+      await tx.insert(moneyMovements).values({
+        id,
+        tenantId: tenant.tenantId,
+        businessId: business.id,
+        branchId: branch.id,
+        kind: "pos_cashout",
+        amountMinor: amount,
+        feeMinor: fee,
+        feePaidBy: payload.feePaidBy,
+        currencyCode: business.baseCurrencyCode,
+        movementDate: date,
+        note: payload.note || null,
+        journalEntryId: posted.entryId,
+        createdBy: tenant.userId,
+        membershipId: tenant.membershipId,
+      });
+      await this.record(tx, tenant, business.id, branch.id, "money.pos_cashout", "money_movement", id, {
+        amountMinor: amount.toString(),
+        feeMinor: fee.toString(),
+        feePaidBy: payload.feePaidBy,
+        date,
+      });
     });
     const [row] = await this.db.select().from(moneyMovements).where(and(eq(moneyMovements.tenantId, tenant.tenantId), eq(moneyMovements.id, id)));
     return this.movementView(row as typeof moneyMovements.$inferSelect);
@@ -546,7 +615,8 @@ export class MoneyService {
                 ]
               : [
                   { account: { id: accountId }, debitMinor: amount },
-                  { account: { role: "cash_over_short" }, creditMinor: amount, memo: "Over" },
+                  // Cash found is not profit (ADR-038): it is held until the owner knows where it came from.
+                  { account: { role: "not_sales_money" }, creditMinor: amount, memo: "Over" },
                 ],
           },
         );
@@ -600,7 +670,9 @@ export class MoneyService {
         role: ledgerAccounts.role,
         type: ledgerAccounts.accountType,
         debit: sql<string>`coalesce(sum(${journalLines.debitMinor}), 0)::text`,
-        credit: sql<string>`coalesce(sum(${journalLines.creditMinor}), 0)::text`,
+        // Cash counted over before ADR-038 was posted against "Cash short or over"; it is not profit either.
+        credit: sql<string>`coalesce(sum(case when ${journalEntries.sourceType} = 'cash_count' and ${ledgerAccounts.role} = 'cash_over_short' then 0 else ${journalLines.creditMinor} end), 0)::text`,
+        countedOver: sql<string>`coalesce(sum(case when ${journalEntries.sourceType} = 'cash_count' and ${ledgerAccounts.role} = 'cash_over_short' then ${journalLines.creditMinor} else 0 end), 0)::text`,
       })
       .from(journalLines)
       .innerJoin(journalEntries, and(eq(journalEntries.tenantId, journalLines.tenantId), eq(journalEntries.id, journalLines.entryId)))
@@ -611,14 +683,16 @@ export class MoneyService {
           eq(journalEntries.businessId, business.id),
           gte(journalEntries.entryDate, from),
           lte(journalEntries.entryDate, to),
-          inArray(ledgerAccounts.accountType, ["income", "expense"]),
+          or(inArray(ledgerAccounts.accountType, ["income", "expense"]), eq(ledgerAccounts.role, "not_sales_money")),
           ...(shop ? [eq(journalEntries.branchId, shop)] : []),
         ),
       )
       .groupBy(journalEntries.entryDate, ledgerAccounts.id, ledgerAccounts.name, ledgerAccounts.role, ledgerAccounts.accountType);
 
-    type Totals = { sales: bigint; discounts: bigint; returns: bigint; cost: bigint; otherIncome: bigint; expenses: bigint };
-    const empty = (): Totals => ({ sales: 0n, discounts: 0n, returns: 0n, cost: 0n, otherIncome: 0n, expenses: 0n });
+    // Profit comes only from sales (ADR-038), plus fees for POS cash-outs. Money in that is not a sale is shown
+    // apart and left out.
+    type Totals = { sales: bigint; discounts: bigint; returns: bigint; cost: bigint; posFees: bigint; expenses: bigint; notFromSales: bigint };
+    const empty = (): Totals => ({ sales: 0n, discounts: 0n, returns: 0n, cost: 0n, posFees: 0n, expenses: 0n, notFromSales: 0n });
     const all = empty();
     const byDay = new Map<string, Totals>();
     const byExpense = new Map<string, { name: string; amount: bigint }>();
@@ -630,11 +704,15 @@ export class MoneyService {
         all[key] += amount;
         day[key] += amount;
       };
-      if (row.type === "income") {
+      add("notFromSales", BigInt(row.countedOver));
+      if (row.role === "not_sales_money" || row.role === "other_income") {
+        add("notFromSales", credit - debit);
+      } else if (row.type === "income") {
         if (SALES_ROLES.has(row.role)) add("sales", credit - debit);
         else if (row.role === "discounts") add("discounts", debit - credit);
         else if (row.role === "sales_returns") add("returns", debit - credit);
-        else add("otherIncome", credit - debit);
+        else if (row.role === "pos_cashout_fees") add("posFees", credit - debit);
+        else add("notFromSales", credit - debit);
       } else if (COST_OF_SALES_ROLES.has(row.role)) {
         add("cost", debit - credit);
       } else {
@@ -655,9 +733,10 @@ export class MoneyService {
         netSalesMinor: netSales.toString(),
         costOfSalesMinor: totals.cost.toString(),
         grossProfitMinor: gross.toString(),
-        otherIncomeMinor: totals.otherIncome.toString(),
+        posCashoutFeesMinor: totals.posFees.toString(),
         expensesMinor: totals.expenses.toString(),
-        profitMinor: (gross + totals.otherIncome - totals.expenses).toString(),
+        profitMinor: (gross + totals.posFees - totals.expenses).toString(),
+        notFromSalesMinor: totals.notFromSales.toString(),
       };
     };
     const span = daysBetween(from, to) + 1;
@@ -801,6 +880,8 @@ export class MoneyService {
       branchId: row.branchId,
       kind: row.kind as MoneyMovementKind,
       amountMinor: row.amountMinor.toString(),
+      feeMinor: row.feeMinor.toString(),
+      feePaidBy: row.feePaidBy ?? null,
       movementDate: row.movementDate,
       note: row.note,
       status: row.status,

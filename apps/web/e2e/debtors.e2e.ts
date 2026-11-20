@@ -9,7 +9,7 @@ test("a debtor pays part of what they owe, gets a receipt and a statement link, 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `debtors.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ada Owner", organizationName: `Ada Debtors ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Ada Owner", organizationName: `Ada Debtors ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const token = (await registered.json()).data.accessToken as string;
   const headers = { authorization: `Bearer ${token}` };

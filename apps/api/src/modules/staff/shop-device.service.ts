@@ -5,6 +5,7 @@ import { enrollDeviceSchema, uuidSchema } from "@bizora/contracts";
 import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
+import { supportAuditFields, type SupportActor } from "../../common/support-actor.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { canManageBranchSettings } from "../../common/tenant-scope.js";
 import type { AppDatabase } from "../../db/database.js";
@@ -122,6 +123,29 @@ export class ShopDeviceService {
       });
     }
     return this.present(await this.requireInScope(tenant, id));
+  }
+
+  /** Bizora support stops a lost or stolen shop phone (ADR-037). Same effect as the owner stopping it. */
+  async stopForSupport(id: string, actor: SupportActor) {
+    if (!uuidSchema.safeParse(id).success) throw new ApiError("NOT_FOUND", "Device was not found.", 404);
+    const [device] = await this.db.select().from(shopDevices).where(eq(shopDevices.id, id)).limit(1);
+    if (!device) throw new ApiError("NOT_FOUND", "Device was not found.", 404);
+    if (device.revokedAt) return { id: device.id, tenantId: device.tenantId, alreadyStopped: true };
+    await this.db
+      .update(shopDevices)
+      .set({ revokedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(shopDevices.id, device.id), eq(shopDevices.tenantId, device.tenantId)));
+    await this.sessions.revokeAllForDevice(device.id);
+    await this.audit.record({
+      ...supportAuditFields(actor),
+      tenantId: device.tenantId,
+      action: "shop_device.revoked",
+      entityType: "shop_device",
+      entityId: device.id,
+      businessId: device.businessId,
+      branchId: device.branchId,
+    });
+    return { id: device.id, tenantId: device.tenantId, alreadyStopped: false };
   }
 
   /** Re-approve a device that was suspended after too many wrong PINs. */

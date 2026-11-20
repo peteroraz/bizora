@@ -36,7 +36,7 @@ export function isHigherPrivilege(candidate: Role, actor: Role): boolean {
   return ROLE_RANK[candidate] < ROLE_RANK[actor];
 }
 
-export const actorTypeSchema = z.enum(["HUMAN", "STAFF_PIN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW"]);
+export const actorTypeSchema = z.enum(["HUMAN", "STAFF_PIN", "AI_AGENT", "SYSTEM", "API", "WORKFLOW", "BIZORA_SUPPORT"]);
 export type ActorType = z.infer<typeof actorTypeSchema>;
 
 export const uuidSchema = z.string().uuid();
@@ -97,6 +97,16 @@ export const registerRequestSchema = z.object({
   baseCurrencyCode: z.string().length(3).toUpperCase().optional(),
   timezone: z.string().min(1).optional(),
   industryCode: z.string().min(1).max(64).optional(),
+  /** The owner ticked "I agree to the Terms of use" (ADR-039). Without it the app asks before anything else. */
+  acceptTerms: z.literal(true).optional(),
+});
+
+/** The version of the Terms of use in force (ADR-039). Changing it asks every owner to accept again. */
+export const TERMS_VERSION = "2026-11-20";
+
+export const acceptTermsSchema = z.object({
+  version: z.literal(TERMS_VERSION, { errorMap: () => ({ message: "These terms have changed. Reload the page." }) }),
+  accept: z.literal(true, { errorMap: () => ({ message: "Tick the box to accept the Terms of use." }) }),
 });
 
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;

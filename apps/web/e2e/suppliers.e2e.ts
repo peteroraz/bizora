@@ -9,7 +9,7 @@ test("stock bought on credit is owed to its supplier, paid off, and cancelled pa
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `suppliers.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Bola Owner", organizationName: `Bola Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Bola Owner", organizationName: `Bola Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
   expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Bola Stores", branchName: "Main" } })).ok()).toBeTruthy();

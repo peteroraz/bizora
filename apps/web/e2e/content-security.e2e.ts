@@ -13,7 +13,7 @@ test("every main screen works under the content security policy, with nothing bl
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `csp.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ada Owner", organizationName: `Ada CSP ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Ada Owner", organizationName: `Ada CSP ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken as string}` };
   await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "NG", industryCode: "general-retail", businessType: "shop", staffCountBand: "2-5", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Ada Stores", branchName: "Main" } });

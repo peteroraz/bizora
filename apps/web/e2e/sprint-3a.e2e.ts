@@ -15,6 +15,11 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
   await registrationCountry.click();
   await registrationCountry.fill("Kenya");
   await page.getByRole("option", { name: "Kenya", exact: true }).click();
+  // The Terms of use must be accepted to sign up (ADR-039).
+  await page.getByRole("button", { name: "Create your business" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(page.getByRole("link", { name: "Terms of use" })).toHaveAttribute("href", "/terms");
+  await page.getByRole("checkbox", { name: /I agree to the Terms of use/ }).check();
   await page.getByRole("button", { name: "Create your business" }).click();
   await expect(page.getByRole("heading", { name: "What kind of business do you run?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -68,7 +73,7 @@ test("registers, finishes setup, toggles theme, and chooses a workspace", async 
 
   const bob = await request.newContext({ baseURL: "http://localhost:3000" });
   const registered = await bob.post("/api/v1/auth/register", {
-    data: {
+    data: { acceptTerms: true,
       email: `bob.${Date.now()}@bizora.test`,
       password,
       displayName: "Bob Adeyemi",

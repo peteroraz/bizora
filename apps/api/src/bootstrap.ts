@@ -53,9 +53,10 @@ export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
   });
   app.use(correlationMiddleware);
   app.useGlobalFilters(new ErrorEnvelopeFilter(logger));
-  app.enableCors({
-    origin: env.WEB_ORIGIN,
-    credentials: true,
+  // Admin routes are never shared with other sites (ADR-037); everything else is shared with the business app only.
+  app.enableCors((request: { url?: string }, callback: (error: Error | null, options: { origin: string | false; credentials: boolean }) => void) => {
+    const admin = (request.url ?? "").startsWith("/api/admin/");
+    callback(null, { origin: admin ? false : env.WEB_ORIGIN, credentials: !admin });
   });
   return app;
 }

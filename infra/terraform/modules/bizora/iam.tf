@@ -10,6 +10,12 @@ resource "google_service_account" "web" {
   display_name = "Bizora web Cloud Run runtime"
 }
 
+resource "google_service_account" "admin" {
+  project      = var.project_id
+  account_id   = "bizora-admin-run"
+  display_name = "Bizora Admin portal Cloud Run runtime"
+}
+
 resource "google_service_account" "migrate" {
   project      = var.project_id
   account_id   = "bizora-migrate"
@@ -104,6 +110,12 @@ resource "google_service_account_iam_member" "deployer_web" {
 
 resource "google_service_account_iam_member" "deployer_migrate" {
   service_account_id = google_service_account.migrate.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_service_account_iam_member" "deployer_admin" {
+  service_account_id = google_service_account.admin.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }

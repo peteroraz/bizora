@@ -14,6 +14,6 @@ import { SessionGuard } from "./session.guard.js";
   imports: [TenantModule, RbacModule, EntitlementsModule],
   controllers: [IdentityController, OauthController],
   providers: [IdentityService, SessionGuard, AuthTokenService, AccountRecoveryService, OauthService],
-  exports: [IdentityService, SessionGuard],
+  exports: [IdentityService, SessionGuard, AccountRecoveryService, OauthService],
 })
 export class IdentityModule {}

@@ -1,0 +1,333 @@
+{
+  "shell": {
+    "portal": "Bizora Admin",
+    "environment": "{environment} — test data, not real shops",
+    "nav": {
+      "find": "Find",
+      "staff": "Staff",
+      "audit": "Staff log"
+    },
+    "signOut": "Sign out",
+    "signedInAs": "Signed in as {email}",
+    "loading": "Checking who you are…",
+    "unreachable": "The portal cannot reach Bizora right now. Try again in a minute.",
+    "retry": "Try again"
+  },
+  "signIn": {
+    "title": "Bizora staff only",
+    "lead": "Sign in with the Google account your team lead added to the staff list.",
+    "google": "Sign in with Google",
+    "errors": {
+      "not_allowed": "That Google account is not on the staff list. Ask a super admin to add your email.",
+      "removed": "You were removed from the staff list. Ask a super admin if this is a mistake.",
+      "unverified": "Google has not confirmed that email address yet.",
+      "different_account": "That email is on the staff list with a different Google account. Use the account you signed in with before, or ask a super admin.",
+      "expired": "Sign-in took too long. Try again.",
+      "google": "Google did not finish the sign-in. Try again."
+    }
+  },
+  "find": {
+    "title": "Find a business or a person",
+    "businesses": "Businesses",
+    "people": "People",
+    "searchBusinesses": "Business name, link name, owner email or phone",
+    "searchPeople": "Name or email",
+    "search": "Search",
+    "recent": "Newest businesses",
+    "noBusinesses": "No business matches that.",
+    "noPeople": "No person or invitation matches that.",
+    "typeToSearch": "Type a name or email to look someone up.",
+    "invitations": "Waiting invitations",
+    "columns": {
+      "business": "Business",
+      "owner": "Owner",
+      "plan": "Plan",
+      "shops": "Open shops",
+      "signedUp": "Signed up",
+      "person": "Person",
+      "email": "Email",
+      "worksAt": "Works at",
+      "invitedTo": "Invited to",
+      "role": "Role",
+      "expires": "Link ends"
+    },
+    "noOwner": "No owner",
+    "unconfirmed": "Email not confirmed"
+  },
+  "business": {
+    "back": "Back to search",
+    "link": "Link name: {handle}",
+    "signedUp": "Signed up {date}",
+    "setUp": "Finished setup {date}",
+    "notSetUp": "Has not finished setup",
+    "lastActive": "Last active {date}",
+    "neverActive": "No activity yet",
+    "plan": "Plan: {plan}",
+    "noPlan": "No plan",
+    "privacy": "You see the account, not the records. Sales, money and customers stay private.",
+    "businesses": "Businesses",
+    "shops": "Shops",
+    "people": "People",
+    "invitations": "Waiting invitations",
+    "devices": "Shop phones",
+    "usage": "Usage",
+    "history": "Bizora support history",
+    "none": "None",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "country": "Country",
+      "currency": "Currency",
+      "timezone": "Time zone",
+      "business": "Business",
+      "status": "Status",
+      "reads": "Photo and voice reads (today / 30 days)",
+      "role": "Role",
+      "shop": "Shop",
+      "signsIn": "Signs in with",
+      "lastSeen": "Last seen",
+      "email": "Email",
+      "sent": "Sent",
+      "expires": "Link ends",
+      "added": "Added",
+      "when": "When",
+      "who": "Who",
+      "what": "What",
+      "why": "Why"
+    },
+    "allShops": "All shops",
+    "shopStatus": {
+      "open": "Open",
+      "locked": "Locked by owner",
+      "closed": "Closed"
+    },
+    "deviceStatus": {
+      "active": "Working",
+      "suspended": "Paused after wrong PINs",
+      "stopped": "Stopped"
+    },
+    "signsIn": {
+      "email": "Email",
+      "pin": "PIN on a shop phone"
+    },
+    "membership": {
+      "ACTIVE": "Active",
+      "SUSPENDED": "Paused",
+      "REMOVED": "Removed"
+    },
+    "never": "Never",
+    "expired": "Link ended",
+    "storage": "{photos, plural, =0 {No product photos} one {# product photo} other {# product photos}}, {size} stored",
+    "resendInvitation": "Send again",
+    "stopDevice": "Stop phone",
+    "openPerson": "Open",
+    "usageLine": "{sales, plural, =0 {No sales} one {# sale} other {# sales}} in the last 30 days · {products, plural, one {# product} other {# products}} · {customers, plural, one {# customer} other {# customers}}",
+    "limits": "Limits",
+    "limitsLead": "The plan gives the starting numbers. A number set here replaces the plan's for this business only.",
+    "limitNames": {
+      "max_branches": "Shops",
+      "max_staff": "Staff (not counting the owner)",
+      "max_devices": "Shop phones",
+      "ai_daily_reads": "Photo and voice reads a shop a day"
+    },
+    "limitColumns": {
+      "what": "Limit",
+      "plan": "Plan",
+      "set": "Set for this business",
+      "used": "In use"
+    },
+    "planDefault": "Plan's",
+    "serverCap": "Reads are also capped at {count} a day for the whole service.",
+    "changeLimits": "Change limits",
+    "supportView": "Support view",
+    "supportViewLead": "See this business's sales, stock, customers and money, read-only, for one hour. The owner agreed to this in the Terms of use and sees every page you open.",
+    "openSupportView": "Open support view",
+    "continueSupportView": "Continue support view (closes {time})"
+  },
+  "person": {
+    "back": "Back to search",
+    "signedUp": "Signed up {date}",
+    "lastSeen": "Last seen {date}",
+    "neverSeen": "Not signed in yet",
+    "devices": "{count, plural, =0 {Not signed in anywhere} one {Signed in on # device} other {Signed in on # devices}}",
+    "confirmed": "Email confirmed",
+    "unconfirmed": "Email not confirmed",
+    "signsInWith": "Signs in with: {methods}",
+    "methods": {
+      "password": "password",
+      "google": "Google",
+      "pin": "PIN"
+    },
+    "businesses": "Businesses",
+    "invitations": "Waiting invitations",
+    "none": "None",
+    "actions": "Help this person",
+    "resendVerification": "Send confirmation email again",
+    "signOutEverywhere": "Sign out everywhere",
+    "signOutHint": "Use when a phone or laptop is lost, or the person thinks someone else has their password."
+  },
+  "reason": {
+    "label": "Why are you doing this?",
+    "hint": "The business owner can see this, with your email.",
+    "placeholder": "For example: owner asked on WhatsApp, ticket 1042",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "working": "Working…",
+    "resendInvitation": {
+      "title": "Send the invitation again",
+      "description": "{email} gets a new link. The old link stops working.",
+      "done": "Invitation sent again"
+    },
+    "stopDevice": {
+      "title": "Stop this shop phone",
+      "description": "{name} is signed out and cannot be used for this business again. The owner can add a new phone.",
+      "done": "Phone stopped"
+    },
+    "resendVerification": {
+      "title": "Send the confirmation email again",
+      "description": "{email} gets a new link to confirm the address.",
+      "done": "Confirmation email sent"
+    },
+    "signOutEverywhere": {
+      "title": "Sign out everywhere",
+      "description": "{name} is signed out on every phone and computer and must sign in again.",
+      "done": "Signed out everywhere"
+    },
+    "removeStaff": {
+      "title": "Remove from staff",
+      "description": "{email} is signed out and can no longer use the portal.",
+      "done": "Removed from staff"
+    },
+    "changeRoles": {
+      "title": "Change roles",
+      "description": "{email} gets the roles you picked the next time they open a page.",
+      "done": "Roles changed"
+    },
+    "openSupportView": {
+      "title": "Open the support view",
+      "description": "You see {name}'s records read-only for one hour. Your email and this reason are shown to the owner.",
+      "done": "Support view open"
+    },
+    "changeLimits": {
+      "title": "Change limits",
+      "description": "Leave a box empty to use the plan's number. The owner sees this change.",
+      "done": "Limits saved"
+    }
+  },
+  "staff": {
+    "title": "Bizora staff",
+    "lead": "Only these Google accounts can sign in. Every change is kept in the staff log.",
+    "add": "Add someone",
+    "email": "Google email",
+    "name": "Name",
+    "roles": "Roles",
+    "save": "Add to staff",
+    "added": "Added to staff",
+    "lastSignIn": "Last sign-in",
+    "never": "Never",
+    "removed": "Removed",
+    "you": "You",
+    "change": "Change roles",
+    "remove": "Remove",
+    "roleNames": {
+      "super_admin": "Super admin",
+      "support": "Support",
+      "operations": "Operations",
+      "finance": "Finance",
+      "viewer": "Viewer"
+    },
+    "roleHints": {
+      "super_admin": "Everything, including this staff list",
+      "support": "Look up businesses and people, resend links, sign people out, stop phones",
+      "operations": "Support, plus the staff log",
+      "finance": "Look up businesses and their plans",
+      "viewer": "Look only"
+    }
+  },
+  "audit": {
+    "title": "Staff log",
+    "lead": "What Bizora staff did and looked at, newest first. Nothing here can be changed.",
+    "more": "Show older",
+    "empty": "Nothing yet.",
+    "actions": {
+      "staff_signed_in": "Signed in",
+      "staff_signed_out": "Signed out",
+      "staff_sign_in_refused": "Sign-in refused",
+      "staff_bootstrapped": "Became the first super admin",
+      "staff_added": "Added to staff",
+      "staff_roles_changed": "Roles changed",
+      "staff_removed": "Removed from staff",
+      "business_viewed": "Looked at a business",
+      "person_viewed": "Looked at a person",
+      "invitation_resent": "Sent an invitation again",
+      "device_stopped": "Stopped a shop phone",
+      "person_verification_resent": "Sent a confirmation email again",
+      "person_signed_out_everywhere": "Signed a person out everywhere",
+      "support_view_opened": "Opened a support view",
+      "support_view_closed": "Closed a support view",
+      "support_viewed": "Looked at records",
+      "business_limits_changed": "Changed limits"
+    }
+  },
+  "errors": {
+    "notAllowed": "Your role cannot do this.",
+    "notFound": "Not found. It may have been removed.",
+    "generic": "That did not work. Try again."
+  },
+  "format": {
+    "bytes": "{value} {unit}"
+  },
+  "records": {
+    "title": "Support view: {name}",
+    "closes": "Read-only. Closes at {time}.",
+    "reason": "Reason: {reason}",
+    "close": "Close support view",
+    "closed": "The support view is closed. Open it again from the business page.",
+    "backToBusiness": "Back to the business",
+    "masked": "Customers' phone numbers and emails are partly hidden.",
+    "tabs": {
+      "sales": "Sales",
+      "stock": "Stock",
+      "customers": "Customers",
+      "debtors": "Who owes",
+      "money": "Cash and profit",
+      "activity": "Activity"
+    },
+    "day": "Day",
+    "empty": "Nothing here.",
+    "columns": {
+      "sale": "Sale",
+      "when": "When",
+      "by": "By",
+      "paid": "Paid by",
+      "total": "Total",
+      "owing": "Still owed",
+      "status": "Status",
+      "product": "Product",
+      "quantity": "In stock",
+      "price": "Price",
+      "cost": "Cost",
+      "customer": "Customer",
+      "phone": "Phone",
+      "email": "Email",
+      "owes": "Owes",
+      "late": "Late",
+      "since": "Oldest due",
+      "shop": "Shop",
+      "expected": "Cash expected",
+      "opening": "At the start",
+      "in": "In",
+      "out": "Out",
+      "action": "What happened",
+      "actor": "Who"
+    },
+    "walkIn": "Walk-in",
+    "profit": "Profit for the day: {amount}",
+    "profitParts": "Sales {sales} · cost of goods {cost} · running costs {expenses} · POS fees {fees}",
+    "notFromSales": "Not from sales (not profit): {amount}",
+    "bizoraSupport": "Bizora support",
+    "system": "System",
+    "totalStock": "{count, plural, one {# product} other {# products}}, worth {value} at selling price",
+    "totalOwed": "{count, plural, one {# customer owes} other {# customers owe}} {amount}"
+  }
+}

@@ -55,7 +55,7 @@ test("core screens stay within the JavaScript and loading-speed budgets", async 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `budget.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Budget Owner", organizationName: `Budget ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Budget Owner", organizationName: `Budget ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   expect(registered.ok()).toBeTruthy();
   const token = (await registered.json()).data.accessToken as string;

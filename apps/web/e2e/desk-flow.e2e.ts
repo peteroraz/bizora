@@ -20,7 +20,7 @@ test("sales desk sends a credit sale to the cashier, the store keeper gives out 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `desk.${suffix}@bizora.test`;
   const registered = await request.post("/api/v1/auth/register", {
-    data: { email, password, displayName: "Ada Owner", organizationName: `Ada Wholesale ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+    data: { acceptTerms: true, email, password, displayName: "Ada Owner", organizationName: `Ada Wholesale ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
   });
   expect(registered.ok()).toBeTruthy();
   const token = (await registered.json()).data.accessToken as string;

@@ -37,3 +37,13 @@ output "cloud_sql_connection_name" {
   description = "Cloud SQL connection name."
   value       = module.bizora.cloud_sql_connection_name
 }
+
+output "admin_origin" {
+  description = "Admin portal origin; its Google return address is <origin>/api/admin/v1/auth/google/callback."
+  value       = module.bizora.admin_origin
+}
+
+output "admin_custom_domain_dns_records" {
+  description = "DNS records for the Admin portal's hostname."
+  value       = module.bizora.admin_custom_domain_dns_records
+}
