@@ -1,0 +1,50 @@
+name: Voice benchmark
+
+# Compares offline speech models on Nigerian English and spoken sales (ADR-041). Run by pushing a bench/voice*
+# branch or from the Actions tab; it never runs on pull requests.
+on:
+  push:
+    branches: ["bench/voice**"]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @bizora/contracts build
+      - run: sudo apt-get update -q && sudo apt-get install -y -q espeak-ng ffmpeg unzip
+      - uses: actions/cache@v4
+        with:
+          path: apps/web/.cache/voice-bench
+          key: voice-bench-models-v1
+      - name: Nigerian English clips (OpenSLR SLR70, CC BY-SA 4.0; used for this test only, not shipped)
+        run: |
+          mkdir -p bench/ng
+          for gender in female male; do
+            curl -sSfL --retry 3 -o bench/ng/line_index_$gender.tsv https://openslr.org/resources/70/line_index_$gender.tsv
+            curl -sSfL --retry 3 -o bench/ng/$gender.zip https://openslr.org/resources/70/en_ng_$gender.zip
+          done
+          python3 apps/web/scripts/voice-bench/pick.py bench/ng 25
+      - name: Spoken sales (espeak-ng, three accents)
+        run: |
+          mkdir -p bench/sales
+          n=0
+          while IFS= read -r line; do
+            for voice in en-us en-029 en-gb-scotland; do
+              n=$((n+1))
+              espeak-ng -v $voice -s 135 -w bench/sales/s$n.wav "$line"
+              printf 's%s.wav\t%s\n' "$n" "$line" >> bench/sales/index.tsv
+            done
+          done < apps/web/scripts/voice-bench/sales.txt
+      - name: Benchmark
+        working-directory: apps/web
+        run: node scripts/voice-benchmark.mjs ../../bench/ng ../../bench/sales
