@@ -5,11 +5,14 @@
  *   Any other screen opened with no network shows a short "no network" page.
  * - Saved screens are deleted when someone signs out or locks a shop device (message "purge-pages").
  * - API calls are never cached.
+ * - Offline voice files (/voice/, ADR-040) are kept in their own cache by the voice set-up, not here; they are served
+ *   from that cache first so voice works with no network, and an update of this worker never deletes them.
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC_CACHE = `bizora-static-${VERSION}`;
 const PAGES_CACHE = `bizora-pages-${VERSION}`;
-const OFFLINE_PAGES = ["/app", "/app/sales/new", "/app/stock", "/app/customers/new", "/shop"];
+// The sales list opens offline too, to show sales waiting to sync (ADR-040).
+const OFFLINE_PAGES = ["/app", "/app/sales", "/app/sales/new", "/app/stock", "/app/customers/new", "/shop"];
 
 const OFFLINE_HTML = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bizora</title><body style="font-family:system-ui,sans-serif;padding:2rem;max-width:28rem;margin:auto"><h1 style="font-size:1.25rem">No network</h1><p>This screen has not been saved on this phone yet. Open it once while online, then it will work offline.</p><p><a href="/app/sales/new">Try the sales screen</a></p></body></html>`;
 
@@ -21,7 +24,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("bizora-") && !key.endsWith(VERSION)).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("bizora-") && !key.startsWith("bizora-voice-") && !key.endsWith(VERSION)).map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
   );
 });
@@ -36,6 +39,10 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
+  if (url.pathname.startsWith("/voice/")) {
+    event.respondWith(caches.match(event.request).then((saved) => saved || fetch(event.request)));
+    return;
+  }
   if (url.pathname.startsWith("/_next/static/") || url.pathname === "/icon.svg" || url.pathname === "/manifest.webmanifest") {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {

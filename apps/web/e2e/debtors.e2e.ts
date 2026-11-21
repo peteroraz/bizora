@@ -69,6 +69,6 @@ test("a debtor pays part of what they owe, gets a receipt and a statement link, 
   await page.getByLabel("Phone number", { exact: true }).fill("08051112222");
   await page.getByRole("button", { name: "Add customer" }).click();
   await expect(page.getByText("Bola Ade")).toBeVisible();
-  await page.getByRole("button", { name: "Record sale" }).click();
+  await page.getByRole("button", { name: "Record sale", exact: true }).click();
   await expect(page.getByText("Customer: Bola Ade (phone ending 2222)")).toBeVisible();
 });

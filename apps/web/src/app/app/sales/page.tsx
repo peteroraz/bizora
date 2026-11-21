@@ -13,6 +13,7 @@ import { useAccess, usePlace } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 import type { SaleReleaseRow, SaleSummary, SaleView } from "../../../lib/sales-client";
 import { ActionLink } from "../../../components/action-link";
+import { WaitingSales } from "../../../components/waiting-sales";
 
 type Tab = "day" | "awaiting_payment" | "awaiting_release";
 
@@ -107,6 +108,9 @@ function SalesScreen() {
           canSell ? (
             <>
               <ActionLink href="/app/sales/import">{t("import")}</ActionLink>
+              <ActionLink href="/app/sales/new?voice=1" data-testid="sales-voice">
+                {t("voice.open")}
+              </ActionLink>
               <ActionLink href="/app/sales/new" variant="primary">
                 {t("new")}
               </ActionLink>
@@ -114,6 +118,7 @@ function SalesScreen() {
           ) : undefined
         }
       />
+      <WaitingSales />
       {offline ? (
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
           {t("listOffline")}

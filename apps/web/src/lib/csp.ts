@@ -6,7 +6,8 @@
 export function contentSecurityPolicy(nonce: string, options: { https: boolean; development: boolean }) {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${options.development ? " 'unsafe-eval'" : ""}`,
+    // 'wasm-unsafe-eval' lets offline voice run its WebAssembly speech model (ADR-040); it does not allow eval().
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${options.development ? " 'unsafe-eval'" : ""}`,
     // React and Tailwind set some styles inline; styles cannot run code.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
@@ -14,7 +15,8 @@ export function contentSecurityPolicy(nonce: string, options: { https: boolean; 
     "connect-src 'self'",
     // Voice notes play back from the phone's memory.
     "media-src 'self' blob:",
-    "worker-src 'self'",
+    // The speech model runs in a worker from this site; its runtime may start a helper from a blob.
+    "worker-src 'self' blob:",
     "manifest-src 'self'",
     "frame-src 'none'",
     "object-src 'none'",

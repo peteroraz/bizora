@@ -15,6 +15,10 @@
     "./phone": {
       "types": "./dist/phone.d.ts",
       "import": "./dist/phone.js"
+    },
+    "./voice": {
+      "types": "./dist/voice/index.d.ts",
+      "import": "./dist/voice/index.js"
     }
   },
   "scripts": {

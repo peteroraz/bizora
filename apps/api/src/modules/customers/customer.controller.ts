@@ -37,6 +37,13 @@ export class CustomersController {
     return success(await this.customers.list(tenant, q ?? "", Number.isFinite(parsed) ? parsed : 1), tenant.correlationId);
   }
 
+  /** Names for matching a spoken sale offline (ADR-040). Must come before customers/:id. */
+  @Get("customers/directory")
+  @RequireAnyPermission(Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP)
+  async directory(@CurrentTenant() tenant: TenantContext) {
+    return success(await this.customers.directory(tenant), tenant.correlationId);
+  }
+
   // Offline-capable: the web app sends an Idempotency-Key, so a retried request never creates a second customer.
   @Post("customers")
   @RequireAnyPermission(Permission.CUSTOMERS_MANAGE, Permission.CUSTOMERS_ADD)

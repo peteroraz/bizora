@@ -1,0 +1,32 @@
+{
+  "runtime": {
+    "package": "onnxruntime-web",
+    "version": "1.31.0-dev.20260914-8d85527a0",
+    "license": "MIT",
+    "cpu": "ort-wasm-simd-threaded",
+    "gpu": "ort-wasm-simd-threaded.asyncify"
+  },
+  "models": [
+    {
+      "id": "whisper-tiny.en",
+      "version": "1",
+      "language": "en",
+      "label": "English",
+      "source": "onnx-community/whisper-tiny.en",
+      "revision": "794207fec2761281fe63a23a94b7e9f53a4efbc1",
+      "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face card for openai/whisper-tiny.en says Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
+      "dtype": { "encoder_model": "fp32", "decoder_model_merged": "q8" },
+      "files": [
+        "config.json",
+        "generation_config.json",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "onnx/encoder_model.onnx",
+        "onnx/decoder_model_merged_quantized.onnx"
+      ],
+      "optionalFiles": ["special_tokens_map.json", "added_tokens.json", "normalizer.json", "vocab.json", "merges.txt"],
+      "approxBytes": 66000000
+    }
+  ]
+}
