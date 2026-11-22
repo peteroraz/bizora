@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
+import { performance } from "node:perf_hooks";
 import console from "node:console";
 import { env, pipeline } from "@huggingface/transformers";
 import { parseSpokenSale } from "@bizora/contracts/voice";
@@ -34,7 +35,16 @@ const CANDIDATES = [
   { name: "moonshine tiny", id: "onnx-community/moonshine-tiny-ONNX", dtype: { encoder_model: "fp32", decoder_model_merged: "q8" } },
   { name: "moonshine base", id: "onnx-community/moonshine-base-ONNX", dtype: { encoder_model: "fp32", decoder_model_merged: "q8" } },
 ];
+// Round 2 (ADR-041): the set-ups considered for shipping, with output capped to the length of the recording.
+CANDIDATES.push(
+  { name: "whisper base.en q8 + prompt + cap", id: "onnx-community/whisper-base.en", dtype: { encoder_model: "q8", decoder_model_merged: "q8" }, prompt: true, cap: true },
+  { name: "whisper small.en q8 + prompt + cap", id: "onnx-community/whisper-small.en", dtype: { encoder_model: "q8", decoder_model_merged: "q8" }, prompt: true, cap: true },
+  { name: "moonshine base + cap", id: "onnx-community/moonshine-base-ONNX", dtype: { encoder_model: "fp32", decoder_model_merged: "q8" }, cap: true },
+);
 const only = process.env.VOICE_BENCH_ONLY ? new RegExp(process.env.VOICE_BENCH_ONLY, "i") : null;
+const CROWD_DB = Number(process.env.VOICE_BENCH_CROWD_DB ?? 5);
+/** About 8 tokens a second of speech, plus a little: enough for any sale said, not enough to run on and on. */
+const capFor = (audio) => Math.min(440, Math.ceil((audio.length / 16000) * 8) + 16);
 
 function readIndex(dir) {
   return readFileSync(join(dir, "index.tsv"), "utf8")
@@ -57,7 +67,7 @@ const rms = (audio) => Math.sqrt(audio.reduce((sum, value) => sum + value * valu
 function withCrowd(audio, others) {
   const crowd = new Float32Array(audio.length);
   for (const other of others) for (let index = 0; index < audio.length; index += 1) crowd[index] += other[index % other.length];
-  const scale = rms(audio) / (rms(crowd) * 10 ** (5 / 20) || 1);
+  const scale = rms(audio) / (rms(crowd) * 10 ** (CROWD_DB / 20) || 1);
   return audio.map((value, index) => value + crowd[index] * scale);
 }
 
@@ -115,7 +125,7 @@ function saleRight(reference, hypothesis) {
 }
 
 async function modelBytes(id, dtype) {
-  const response = await fetch(`https://huggingface.co/api/models/${id}/tree/main/onnx`);
+  const response = await globalThis.fetch(`https://huggingface.co/api/models/${id}/tree/main/onnx`);
   if (!response.ok) return null;
   const files = await response.json();
   const suffix = { fp32: "", q8: "_quantized", fp16: "_fp16", q4: "_q4" };
@@ -125,7 +135,8 @@ async function modelBytes(id, dtype) {
 async function transcriber(candidate) {
   const asr = await pipeline("automatic-speech-recognition", candidate.id, { dtype: candidate.dtype, device: "cpu" });
   if (!candidate.prompt) {
-    return async (audio) => (await asr(audio, { ...(candidate.language ? { language: candidate.language, task: "transcribe" } : {}), ...(candidate.beams ? { num_beams: candidate.beams } : {}) })).text;
+    return async (audio) =>
+      (await asr(audio, { ...(candidate.language ? { language: candidate.language, task: "transcribe" } : {}), ...(candidate.beams ? { num_beams: candidate.beams } : {}), ...(candidate.cap ? { max_new_tokens: capFor(audio) } : {}) })).text;
   }
   // Whisper's prompt: earlier words before the start, so names and "naira" are expected (the library has no prompt option).
   const [startOfPrevious] = asr.tokenizer.convert_tokens_to_ids(["<|startofprev|>"]);
@@ -134,7 +145,7 @@ async function transcriber(candidate) {
   const init = [startOfPrevious, ...promptIds, ...start];
   return async (audio) => {
     const { input_features } = await asr.processor(audio);
-    const output = await asr.model.generate({ inputs: input_features, decoder_input_ids: init, max_new_tokens: 440 - init.length });
+    const output = await asr.model.generate({ inputs: input_features, decoder_input_ids: init, max_new_tokens: candidate.cap ? Math.min(440 - init.length, capFor(audio)) : 440 - init.length });
     const ids = Array.from(output.tolist()[0]).slice(init.length).map(Number);
     return asr.tokenizer.decode(ids, { skip_special_tokens: true });
   };
