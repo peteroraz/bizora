@@ -82,7 +82,8 @@ The models were benchmarked on 31 Nigerian English recordings (OpenSLR SLR70) an
 
 ## Consequences
 
-- **Hashes.** Models must be fetched once with `--allow-unlocked` in CI to record their hashes; then the lock is committed and strict checking returns.
+- **Hashes.** New models are fetched once with `--allow-unlocked` in CI to record their hashes, then the lock is committed and strict checking returns. Done for base.en (`51eefc0a`) and small.en (`482fb8ba`) on 22 Nov 2026.
+- **Real speech in CI.** With the network off, Standard heard the robot-voice recording "Sold two bags of rice at seventy five thousand naira each, cash" as "sold two bags of rice at 75,000 each, cash." The old model heard "sold to bags of rice at 75,000, every each cash."
 - **Image size.** The web image carries both models, about 330 MB.
 - **Accuracy.** Still English only. Real accents were measured on read-out sentences, not real market sales. Spoken-sale tests use a robot voice, so an on-device test with traders is still needed.
 - **Typed items have no cost,** so their whole price shows as sales. Owners who need item profit should add the item as a product.

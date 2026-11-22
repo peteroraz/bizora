@@ -14,7 +14,7 @@
       "language": "en",
       "label": "Standard",
       "source": "onnx-community/whisper-base.en",
-      "revision": "main",
+      "revision": "51eefc0af78b103839eda9e7e4f4186acc6517fe",
       "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face cards for openai/whisper-*.en say Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
       "dtype": {
         "encoder_model": "q8",
@@ -46,7 +46,7 @@
       "language": "en",
       "label": "Best accuracy",
       "source": "onnx-community/whisper-small.en",
-      "revision": "main",
+      "revision": "482fb8ba081b6e906f92efe103622316b2a0cc69",
       "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face cards for openai/whisper-*.en say Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
       "dtype": {
         "encoder_model": "q8",

@@ -66,7 +66,7 @@ When the shop sells products only, an unknown item stops the sale until a produc
   - `apps/web/Dockerfile` fetches the model before `next build`, so the site serves it from `/voice/`.
   - If the fetch fails, the build continues and offline voice shows "not available yet".
   - `/voice/*` is served with `Cache-Control: immutable`, since every path has a version in it.
-- **Pinning.** Each model is pinned to one commit of its `onnx-community` repository. Every file's SHA-256 is in `models.lock.json`, recorded from the first CI fetch of that model. A changed or unlisted file fails the fetch.
+- **Pinning.** Each model is pinned to one commit of its `onnx-community` repository (base.en `51eefc0a`, small.en `482fb8ba`). Every file's SHA-256 is in `models.lock.json`, recorded from the first CI fetch of that model. A changed or unlisted file fails the fetch.
 - **Changing the model.** Add a new entry with a higher `version` and a pinned `revision`, fetch once with `--allow-unlocked`, check the hashes, and commit the lock. Phones delete the old cache when they install the new one.
 
 ## For traders (user guide)
