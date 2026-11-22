@@ -6,7 +6,9 @@ A trader says a sale out loud. The phone turns the speech into words, reads the 
 
 ```
 microphone ─► recorder.ts (≤30 s, 16 kHz mono, memory only)
-           ─► speech.worker.ts (Whisper tiny.en · Transformers.js · ONNX Runtime Web: WebGPU or WASM)
+           ─► clean.ts (high-pass, trim silence, level quiet speech; "nothing heard")
+           ─► speech.worker.ts (Whisper base.en or small.en, 8-bit · shop prompt · length cap · Transformers.js ·
+                                ONNX Runtime Web: WebGPU or WASM)
            ─► words (editable)
            ─► @bizora/contracts/voice: tokenize → parseSpokenSale → buildReview (saved products + customer names)
            ─► review screen (trader checks, edits, confirms)
@@ -26,6 +28,30 @@ microphone ─► recorder.ts (≤30 s, 16 kHz mono, memory only)
 | Screens | `apps/web/src/components/voice-sale.tsx`, `waiting-sales.tsx`, `voice-settings.tsx` |
 | Customer names for the phone | `GET /api/v1/customers/directory`, `apps/web/src/lib/offline/customers.ts` |
 
+## Models (ADR-041)
+
+Chosen on a benchmark of Nigerian English recordings and spoken sales; see [benchmark.md](benchmark.md).
+
+| Choice | Model | Download | Nigerian English, words wrong | With crowd noise | Spoken sales read right |
+| --- | --- | --- | --- | --- | --- |
+| Standard (default) | Whisper base.en, 8-bit | about 80 MB (+14 MB runtime) | 15.7% | 28.3% | 10 of 36 |
+| Best accuracy | Whisper small.en, 8-bit | about 250 MB (+14 MB runtime) | 12.4% | 20.2% | 19 of 36 |
+| (before, ADR-040) | Whisper tiny.en | 64 MB | 21.6% | 110.8% | 2 of 36 |
+
+- **One model on the phone.** Only one is kept at a time. Settings › Look › Offline voice switches between them; Best accuracy is flagged on phones that report under 4 GB of memory.
+- **Shop prompt.** Before it listens, Whisper is given the currency word and this shop's product and customer names (`speechPrompt` in `@bizora/contracts/voice`). They go in as the first tokens, because the library has no prompt option.
+- **Length cap.** Output stops at about 8 tokens per second of recording, so noise can't make it run on.
+- **Clean-up.** Recordings are tidied first (`lib/voice/clean.ts`). Words the model writes for silence ("[BLANK_AUDIO]", "Thank you.") are dropped, and "nothing heard" is said instead of guessing.
+
+## Items not in your products (ADR-041)
+
+When the shop allows typed items (Settings › Setup › What staff can sell):
+
+- **A new item.** An item said that is not in the products or saved items is sold as a **new typed item**, at the price said. It is remembered for next time.
+- **A saved item.** An item said that matches a saved typed item uses its last price as a suggestion; any price may be set.
+
+When the shop sells products only, an unknown item stops the sale until a product is chosen, and the message says the owner can allow typed items.
+
 ## Setup
 
 - **Local development.**
@@ -40,14 +66,14 @@ microphone ─► recorder.ts (≤30 s, 16 kHz mono, memory only)
   - `apps/web/Dockerfile` fetches the model before `next build`, so the site serves it from `/voice/`.
   - If the fetch fails, the build continues and offline voice shows "not available yet".
   - `/voice/*` is served with `Cache-Control: immutable`, since every path has a version in it.
-- **Pinning.** The model is pinned to commit `794207fe…` of `onnx-community/whisper-tiny.en`. Every file's SHA-256 is in `models.lock.json`, recorded from the first CI fetch on 20 Nov 2026. A changed or unlisted file fails the fetch.
+- **Pinning.** Each model is pinned to one commit of its `onnx-community` repository (base.en `51eefc0a`, small.en `482fb8ba`). Every file's SHA-256 is in `models.lock.json`, recorded from the first CI fetch of that model. A changed or unlisted file fails the fetch.
 - **Changing the model.** Add a new entry with a higher `version` and a pinned `revision`, fetch once with `--allow-unlocked`, check the hashes, and commit the lock. Phones delete the old cache when they install the new one.
 
 ## For traders (user guide)
 
 1. **Set up once (needs a network, ideally Wi-Fi).**
    - Open **New sale** and tap **Record sale by voice**, then **Download offline voice**.
-   - It is about 80 MB and stays on this phone.
+   - Standard is about 95 MB in all and stays on this phone. Phones with more memory can choose **Best accuracy** (about 265 MB) in Settings.
    - You can also do this in **Settings › Appearance › Offline voice on this phone**, which shows the size and lets you remove it.
 2. **Open Bizora once with a network,** so your products and customer names are saved on the phone.
 3. **Record a sale.**
@@ -119,7 +145,9 @@ The panel checks what the browser has and says plainly when offline voice cannot
 | Browser, offline: typed sale → review → confirm → waiting → reload → sync once | Passing (Playwright, Chrome 153) |
 | Browser, offline: cancel saves nothing; Read again refreshes the review | Passing (Playwright) |
 | Browser, real model offline (espeak-ng recording) | Runs in CI where the model can be fetched; skipped in this sandbox, which cannot reach huggingface.co |
-| Nigerian English accent accuracy | **Not measured.** espeak-ng is a robot voice, not a Nigerian accent |
+| Nigerian English accent accuracy | **Measured on read-out sentences** (31 speakers, OpenSLR SLR70): Standard 15.7%, Best accuracy 12.4% of words wrong. See benchmark.md. Real market sales are not measured |
+| Typed items and items said that are not in the products (ADR-041) | Passing (unit, API, Playwright with the network off) |
+| Recording clean-up and dropped silence words | Passing (unit) |
 | WebGPU on real phones, low-end Android speed, memory, battery | **Not tested** on devices |
 | Pidgin, Igbo, Yoruba, Hausa | **Not supported yet** (architecture only) |
 
@@ -145,16 +173,17 @@ Record 20 real sales from traders on each, and log the words heard against the w
 
 | Component | Licence | Notes |
 | --- | --- | --- |
-| OpenAI Whisper (tiny.en) | MIT for the code and weights in github.com/openai/whisper; the Hugging Face card for `openai/whisper-tiny.en` is tagged Apache-2.0 | Both allow commercial use and redistribution with the notice. `NOTICE.txt` is written beside the served model |
-| ONNX conversion `onnx-community/whisper-tiny.en` | No separate licence stated; derived from the above | |
+| OpenAI Whisper (base.en, small.en) | MIT for the code and weights in github.com/openai/whisper; the Hugging Face cards for `openai/whisper-base.en` and `openai/whisper-small.en` are tagged Apache-2.0 | Both allow commercial use and redistribution with the notice. `NOTICE.txt` is written beside the served model |
+| ONNX conversions `onnx-community/whisper-base.en`, `onnx-community/whisper-small.en` | No separate licence stated; derived from the above | |
+| OpenSLR SLR70 Nigerian English (benchmark only, not shipped) | CC BY-SA 4.0 | Downloaded in the benchmark job only |
 | Transformers.js (`@huggingface/transformers` 4.3.2) | Apache-2.0 | |
 | ONNX Runtime Web (`onnxruntime-web` 1.31.0-dev) | MIT | |
 | espeak-ng (CI test recording only, not shipped) | GPL-3.0 | Used as a tool in CI; nothing from it is distributed |
 
 ## Known limitations
 
-- **English only.** The tiny model is not tuned for Nigerian accents, so the review step matters; every value can be edited.
-- **The download** is about 80 MB (93 MB with WebGPU). Phones low on space are told before downloading. The phone may remove it to free space; Bizora notices and offers to download again.
+- **English only.** It was measured on read-out Nigerian English, not real market sales; the review step still matters, and every value can be edited.
+- **The download** is about 95 MB for Standard or 265 MB for Best accuracy (13 MB more with WebGPU). Phones low on space are told before downloading. The phone may remove it to free space; Bizora notices and offers to download again.
 - **30 seconds** per recording. One sale per recording.
 - **After a Bizora update,** open the voice screen once with a network before using it offline.
 - **The offline customer list** is limited (5,000, or 2,000 for cashiers) and is as fresh as the last time Bizora was opened online. A new customer cannot be created from voice offline; pick walk-in or add them on the Customers screen.

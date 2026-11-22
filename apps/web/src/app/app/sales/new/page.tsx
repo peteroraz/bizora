@@ -1,13 +1,13 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, amountText, parseAmount, parseQuantity, typeNumber, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, capitaliseFirst, parseAmount, parseQuantity, sellsProducts, sellsTyped, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { CustomerPicker, type PickedCustomer } from "../../../../components/customer-picker";
+import type { PickedCustomer } from "../../../../components/customer-picker";
 import { RequireAccess } from "../../../../components/require-access";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
-import { dayKey, formatCurrency } from "../../../../i18n/format";
+import { formatCurrency } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
 import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
@@ -16,13 +16,13 @@ import { enqueue } from "../../../../lib/offline/outbox";
 import { warmOfflineCopy } from "../../../../lib/offline/sw-client";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
 import { nextProvisionalNumber } from "../../../../lib/provisional";
-import { baseQuantity, lineTotal, listPrice, sellingUnits } from "../../../../lib/sales-client";
+import { baseQuantity, lineTotal, listPrice } from "../../../../lib/sales-client";
 import { refreshOfflineCatalog } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
-import { AmountInput, SentenceInput } from "../../../../components/typing";
-import { DueDatePicker } from "../../../../components/due-date-picker";
+import { SentenceInput } from "../../../../components/typing";
+import { asProduct } from "../../../../lib/offline/typed-product";
 
-type Line = { key: string; product: CachedProduct; unit: string; quantity: string; price: string };
+import type { Line } from "../../../../components/quick-sale-lines";
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";
 
 /** Quantities are thousandths (ADR-014); the stepper shows them as people type them: "3", "2.5". */
@@ -31,7 +31,19 @@ const quantityText = (thousandths: bigint) =>
 
 /** Products sold on this phone recently, newest first, for the quick tiles. Kept per shop, on the phone only. */
 const RECENT_LIMIT = 24;
-const VoiceSale = lazy(() => import("../../../../components/voice-sale"));
+const voiceModule = () => import("../../../../components/voice-sale");
+const VoiceSale = lazy(voiceModule);
+// Loaded when shown, to keep the quick sale within its script budget.
+const pickerModule = () => import("../../../../components/customer-picker");
+const CustomerPicker = lazy(() => pickerModule().then((module) => ({ default: module.CustomerPicker })));
+const creditModule = () => import("../../../../components/credit-fields");
+const CreditFields = lazy(creditModule);
+const extrasModule = () => import("../../../../components/sale-money-extras");
+const SaleMoneyExtras = lazy(extrasModule);
+const linesModule = () => import("../../../../components/quick-sale-lines");
+const QuickSaleLines = lazy(linesModule);
+const savedItemsModule = () => import("../../../../lib/offline/saved-items");
+
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
 }
@@ -81,6 +93,9 @@ function QuickSaleScreen() {
   const [extras, setExtras] = useState(false);
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
+  const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
+  const typedOk = sellsTyped(access.salesItems);
+  const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
   const [voice, setVoice] = useState(false);
   // A sale confirmed on the voice screen is saved once its fields are in place (ADR-040).
@@ -116,28 +131,48 @@ function QuickSaleScreen() {
       if (fresh) setCatalog(fresh);
     })();
     warmOfflineCopy();
-  }, [access.owner, access.branchId]);
+    // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
+    const preload = () => void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule()]).catch(() => undefined);
+    if (document.readyState === "complete") window.setTimeout(preload, 0);
+    else window.addEventListener("load", () => window.setTimeout(preload, 0), { once: true });
+    if (typedOk) {
+      void (async () => {
+        const { readSavedItems, refreshSavedItems } = await savedItemsModule();
+        const saved = await readSavedItems(owner);
+        if (saved) setSavedList(saved.items.map(asProduct));
+        const fresh = await refreshSavedItems(owner);
+        if (fresh) setSavedList(fresh.items.map(asProduct));
+      })();
+    }
+  }, [access.owner, access.branchId, typedOk]);
 
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
   const money = (minor: bigint) => formatCurrency(minor, currency, locale);
-  const matches = useMemo(() => (catalog && query.trim() ? searchCatalog(catalog, query).slice(0, 8) : []), [catalog, query]);
+  const asked = query.trim().toLowerCase();
+  // Products from the list and items typed before, as the shop allows (ADR-041).
+  const matches = useMemo(
+    () => (asked ? [...(listOk && catalog ? searchCatalog(catalog, query) : []), ...savedList.filter((item) => item.name.toLowerCase().includes(asked))].slice(0, 8) : []),
+    [catalog, query, asked, listOk, savedList],
+  );
   // Quick tiles: what this phone sold recently, then the rest of the list, 12 at most.
   const tiles = useMemo(() => {
+    if (!listOk) return savedList.slice(0, 12);
     if (!catalog) return [];
     const all = searchCatalog(catalog, "");
     const byId = new Map(all.map((product) => [product.id, product]));
     const first = recent.map((id) => byId.get(id)).filter((product): product is NonNullable<typeof product> => Boolean(product));
     const seen = new Set(first.map((product) => product.id));
     return [...first, ...all.filter((product) => !seen.has(product.id))].slice(0, 12);
-  }, [catalog, recent]);
+  }, [catalog, recent, listOk, savedList]);
 
   /** Each line's price and total, worked out the way the server will. Problems are shown before saving. */
   const priced = lines.map((line) => {
     const entered = parseQuantity(line.quantity);
     const list = listPrice(line.product, line.unit);
     const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
-    const unitPrice = canDiscount && typed !== null ? typed : list;
+    // A typed item's price is whatever it sells for today; its last price is only a suggestion.
+    const unitPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
     const total = entered !== null && unitPrice !== null ? lineTotal(unitPrice, entered) : null;
     const onHand = BigInt(catalog?.quantities[line.product.id] ?? "0");
     const short = line.product.trackStock && entered !== null && baseQuantity(line.product, line.unit, entered) > onHand;
@@ -206,6 +241,14 @@ function QuickSaleScreen() {
     void save();
   }, [autoSave]);
 
+  /** Typed items sold are remembered on this phone at once (the server remembers them with the sale). */
+  async function remember() {
+    const sold = priced.filter((item) => item.line.product.typed).map((item) => ({ name: item.line.product.name, unit: item.line.unit, priceMinor: String(item.unitPrice) }));
+    if (!sold.length || !access.owner) return;
+    const saved = await (await savedItemsModule()).rememberOnPhone(access.owner, sold);
+    setSavedList(saved.items.map(asProduct));
+  }
+
   async function save() {
     setError(null);
     setSavedOffline(null);
@@ -217,12 +260,16 @@ function QuickSaleScreen() {
     const id = uuidv7();
     const body = {
       id,
-      lines: priced.map((item) => ({
-        productId: item.line.product.id,
-        quantity: item.line.quantity.trim().replace(/,/g, ""),
-        unit: item.line.unit,
-        ...(canDiscount && item.line.price.trim() && item.unitPrice !== null ? { unitPriceMinor: item.unitPrice.toString() } : {}),
-      })),
+      lines: priced.map((item) =>
+        item.line.product.typed
+          ? { description: item.line.product.name, quantity: item.line.quantity.trim().replace(/,/g, ""), unit: item.line.unit, unitPriceMinor: String(item.unitPrice), saved: true }
+          : {
+              productId: item.line.product.id,
+              quantity: item.line.quantity.trim().replace(/,/g, ""),
+              unit: item.line.unit,
+              ...(canDiscount && item.line.price.trim() && item.unitPrice !== null ? { unitPriceMinor: item.unitPrice.toString() } : {}),
+            },
+      ),
       payments: paidParts.map((part) => ({ method: part.method, amountMinor: (part.amountMinor ?? 0n).toString() })),
       ...(discountMinor > 0n ? { discountMinor: discountMinor.toString() } : {}),
       ...(customer ? { customerId: customer.id } : {}),
@@ -237,6 +284,7 @@ function QuickSaleScreen() {
       const payload = await response.json().catch(() => null);
       if (response.ok) {
         if (recentStore) rememberRecent(recentStore, lines.map((line) => line.product.id));
+        await remember();
         window.location.href = `/app/sales/${payload.data.sale.id}`;
         return;
       }
@@ -244,6 +292,7 @@ function QuickSaleScreen() {
     } catch (failure) {
       if (isNetworkFailure(failure) && access.owner) {
         if (recentStore) rememberRecent(recentStore, lines.map((line) => line.product.id));
+        await remember();
         const provisional = nextProvisionalNumber();
         await enqueue(
           access.owner,
@@ -299,11 +348,12 @@ function QuickSaleScreen() {
       {voice && catalog ? (
         <Suspense fallback={null}>
           <VoiceSale
-            products={Object.values(catalog.products)}
+            products={[...(listOk ? Object.values(catalog.products) : []), ...savedList]}
             currency={currency}
             owner={access.owner ?? null}
             canChangePrice={canDiscount}
             canGiveCredit={canCredit}
+            typedItems={typedOk}
             desk={desk}
             onClose={() => setVoice(false)}
             onDone={(result, saveNow) => {
@@ -346,9 +396,9 @@ function QuickSaleScreen() {
             </li>
           ))}
         </ul>
-      ) : query.trim() && catalog ? (
+      ) : query.trim() && catalog && !typedOk ? (
         <p className="text-sm text-muted">{t("noMatches")}</p>
-      ) : tiles.length > 0 ? (
+      ) : !asked && tiles.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label={t("quickPicks")} data-testid="product-tiles">
           {tiles.map((product) => (
             <button
@@ -363,79 +413,17 @@ function QuickSaleScreen() {
           ))}
         </div>
       ) : null}
+      {typedOk && asked && !matches.some((item) => item.name.toLowerCase() === asked) ? (
+        <button type="button" className="min-h-12 w-full rounded-card border border-dashed border-primary px-4 text-left text-sm font-medium text-primary" data-testid="sell-typed" onClick={() => addProduct(asProduct({ name: capitaliseFirst(query.trim()), unit: "piece", lastPriceMinor: null }))}>
+          {t("typed.sell", { name: capitaliseFirst(query.trim()) })}
+        </button>
+      ) : null}
       <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
         {priced.length > 0 ? (
           <Card className="p-4">
-            <ul className="divide-y divide-border">
-              {priced.map(({ line, list, total: lineAmount, short, onHand }, index) => (
-                <li key={line.key} className="space-y-2 py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-sm font-medium">{line.product.name}</span>
-                    <span className="text-sm font-semibold tabular-nums">{lineAmount !== null ? money(lineAmount) : "–"}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center">
-                      <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-l-control border border-border text-lg" aria-label={t("less", { name: line.product.name })} onClick={() => step(line, -1000n)}>
-                        −
-                      </button>
-                      <label htmlFor={`qty-${index}`} className="sr-only">
-                        {t("quantity")}
-                      </label>
-                      <input
-                        id={`qty-${index}`}
-                        inputMode="decimal"
-                        className="h-11 w-16 border-y border-border bg-input text-center text-base tabular-nums outline-none"
-                        value={line.quantity}
-                        onChange={(event) => updateLine(line.key, { quantity: typeNumber(event.target.value, 3) })}
-                      />
-                      <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-r-control border border-border text-lg" aria-label={t("more", { name: line.product.name })} onClick={() => step(line, 1000n)}>
-                        +
-                      </button>
-                    </div>
-                    {sellingUnits(line.product).length > 1 ? (
-                      <div className="flex flex-wrap gap-1" role="group" aria-label={t("unit")}>
-                        {sellingUnits(line.product).map((unit) => {
-                          const unitPrice = listPrice(line.product, unit);
-                          return (
-                            <button
-                              key={unit}
-                              type="button"
-                              aria-pressed={line.unit === unit}
-                              className={`min-h-11 rounded-control border px-3 text-sm ${line.unit === unit ? "border-primary bg-primary text-primary-fg" : "border-border"}`}
-                              onClick={() => updateLine(line.key, { unit, price: "" })}
-                            >
-                              {unitName(unit, 1)}
-                              {unitPrice !== null ? <span className="ml-1 text-xs opacity-80">{money(unitPrice)}</span> : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted">{list !== null ? t("eachPrice", { price: money(list), unit: unitName(line.unit, 1) }) : t("noPriceShort")}</span>
-                    )}
-                  </div>
-                  {canDiscount ? (
-                    priceOpen === line.key || line.price.trim() ? (
-                      <FormField id={`price-${index}`} label={t("price")}>
-                        <AmountInput
-                          currency={currency}
-                          id={`price-${index}`}
-                          className="max-w-40"
-                          value={line.price}
-                          placeholder={list !== null ? amountText(list, currency) : ""}
-                          onChange={(event) => updateLine(line.key, { price: event.target.value })}
-                        />
-                      </FormField>
-                    ) : (
-                      <button type="button" className="min-h-11 text-sm text-primary" onClick={() => setPriceOpen(line.key)}>
-                        {t("changePrice")}
-                      </button>
-                    )
-                  ) : null}
-                  {short ? <p className="text-xs text-warning">{t("shortStock", { quantity: stockText(onHand.toString(), line.product.baseUnit, line.product.packs) })}</p> : null}
-                </li>
-              ))}
-            </ul>
+            <Suspense fallback={<p className="text-sm text-muted">{t("loading")}</p>}>
+              <QuickSaleLines priced={priced} currency={currency} canDiscount={canDiscount} priceOpen={priceOpen} onPriceOpen={setPriceOpen} onStep={step} onChange={updateLine} />
+            </Suspense>
           </Card>
         ) : (
           <p className="text-sm text-muted">{t("startHint")}</p>
@@ -449,64 +437,35 @@ function QuickSaleScreen() {
               </Button>
             ))}
           </div>
-          {mode === "cash" && !desk && total > 0n ? (
-            <div className="flex flex-wrap items-end gap-3">
-              <FormField id="sale-given" label={t("cashGiven")} hint={t("optional")}>
-                <AmountInput currency={currency} id="sale-given" className="max-w-40" value={given} onChange={(event) => setGiven(event.target.value)} />
-              </FormField>
-              {change !== null ? (
-                <p className={`pb-6 text-base font-semibold tabular-nums ${change < 0n ? "text-danger" : "text-success"}`} data-testid="sale-change" role="status">
-                  {change < 0n ? t("shortBy", { amount: money(-change) }) : t("change", { amount: money(change) })}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {mode === "split" && !desk ? (
-            <div className="grid gap-2 sm:grid-cols-3">
-              {(["cash", "transfer", "pos"] as const).map((method) => (
-                <FormField key={method} id={`split-${method}`} label={t(`mode.${method}`)}>
-                  <AmountInput currency={currency} id={`split-${method}`} value={split[method]} onChange={(event) => setSplit({ ...split, [method]: event.target.value })} />
-                </FormField>
-              ))}
-            </div>
+          {(mode === "cash" && !desk && total > 0n) || (mode === "split" && !desk) ? (
+            <Suspense fallback={null}>
+              <SaleMoneyExtras kind={mode === "split" ? "split" : "change"} currency={currency} given={given} onGiven={setGiven} change={change} split={split} onSplit={setSplit} />
+            </Suspense>
           ) : null}
         </fieldset>
         {findsCustomers ? (
           <Card className="p-4">
             <p className="text-sm font-medium">{balance > 0n || mode === "credit" ? t("customer") : t("customerOptional")}</p>
             <div className="mt-2">
-              <CustomerPicker id="sale-customer" value={customer} onChange={setCustomer} />
+              <Suspense fallback={null}>
+                <CustomerPicker id="sale-customer" value={customer} onChange={setCustomer} />
+              </Suspense>
             </div>
           </Card>
         ) : null}
         {balance > 0n ? (
-          <Card className="p-4">
-            <p className="text-sm font-medium">{t("creditTitle")}</p>
-            <div className="mt-2 space-y-3">
-              <FormField id="sale-due" label={t("dueDate")}>
-                <DueDatePicker id="sale-due" value={dueDate} today={dayKey(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} onChange={setDueDate} />
-              </FormField>
-              <FormField id="sale-credit-comment" label={t("creditComment")}>
-                <SentenceInput id="sale-credit-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
-              </FormField>
-            </div>
-          </Card>
+          <Suspense fallback={null}>
+            <CreditFields dueDate={dueDate} comment={comment} onDueDate={setDueDate} onComment={setComment} />
+          </Suspense>
         ) : desk ? (
           <FormField id="sale-comment" label={t("deskComment")} hint={t("optional")}>
             <SentenceInput id="sale-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
           </FormField>
         ) : null}
         {extras || discount.trim() || note.trim() ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {canDiscount ? (
-              <FormField id="sale-discount" label={t("discount")} hint={t("optional")}>
-                <AmountInput currency={currency} id="sale-discount" value={discount} onChange={(event) => setDiscount(event.target.value)} />
-              </FormField>
-            ) : null}
-            <FormField id="sale-note" label={t("note")} hint={t("optional")}>
-              <SentenceInput id="sale-note" value={note} maxLength={240} onChange={(event) => setNote(event.target.value)} />
-            </FormField>
-          </div>
+          <Suspense fallback={null}>
+            <SaleMoneyExtras kind="extras" currency={currency} canDiscount={canDiscount} discount={discount} onDiscount={setDiscount} note={note} onNote={setNote} />
+          </Suspense>
         ) : (
           <button type="button" className="min-h-11 text-sm font-medium text-primary" onClick={() => setExtras(true)}>
             {canDiscount ? t("addDiscountOrNote") : t("addNote")}

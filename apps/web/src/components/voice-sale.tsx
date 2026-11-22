@@ -6,6 +6,7 @@ import {
   buildReview,
   checkReview,
   parseSpokenSale,
+  speechPrompt,
   priceLine,
   rank,
   sellingUnitsOf,
@@ -22,6 +23,7 @@ import { formatCurrency } from "../i18n/format";
 import type { CachedProduct } from "../lib/offline/catalog";
 import { readCustomerDirectory, refreshCustomerDirectory, type DirectoryCustomer } from "../lib/offline/customers";
 import type { OutboxOwner } from "../lib/offline/outbox";
+import { cleanUp, tidyWords } from "../lib/voice/clean";
 import { detectSupport, downloadSize, engine, install, installState, prepare, VoiceError, type InstallState, type Support } from "../lib/voice/engine";
 import { MAX_SECONDS, startRecording, type Recording } from "../lib/voice/recorder";
 import { CaptureBar } from "./capture-bar";
@@ -48,6 +50,8 @@ type Props = {
   owner: OutboxOwner | null;
   canChangePrice: boolean;
   canGiveCredit: boolean;
+  /** The shop sells items not in its products (ADR-041): a new item said is sold as typed and remembered. */
+  typedItems?: boolean;
   /** At a sales desk the cashier takes the money; the payment said is only what the customer asked for. */
   desk?: boolean;
   /** Fill the sale with what was said; `save` also records it straight away. */
@@ -65,7 +69,10 @@ const METHODS: VoicePayment["method"][] = ["cash", "transfer", "pos"];
  * checked against this shop's products, prices and customers, and shown for correcting. Nothing is saved until the
  * person confirms, and then the normal sale is used, online or offline. Loaded only when opened.
  */
-export default function VoiceSale({ products, currency, owner, canChangePrice, canGiveCredit, desk = false, onDone, onClose }: Props) {
+/** Units offered for typed items (ADR-041). */
+const TYPED_UNITS = ["piece", "pack", "carton", "bag", "sachet", "bottle", "tin", "crate", "dozen", "paint", "kg", "litre"];
+
+export default function VoiceSale({ products, currency, owner, canChangePrice, canGiveCredit, typedItems = false, desk = false, onDone, onClose }: Props) {
   const t = useTranslations("sales.voice");
   const locale = useLocale();
   const unitName = useUnitName();
@@ -91,7 +98,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
   const [customerSearch, setCustomerSearch] = useState("");
   const recording = useRef<Recording | null>(null);
   const ticker = useRef<number | null>(null);
-  const options = useMemo(() => ({ canChangePrice, canGiveCredit }), [canChangePrice, canGiveCredit]);
+  const options = useMemo(() => ({ canChangePrice, canGiveCredit, typedItems }), [canChangePrice, canGiveCredit, typedItems]);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -211,9 +218,24 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     if (!current) return;
     setStage("reading");
     try {
-      const audio = await current.stop();
+      const recorded = await current.stop();
+      // Trim silence, remove hum, level quiet speech (ADR-041). Nothing said: say so instead of guessing.
+      const cleaned = cleanUp(recorded);
+      if (!cleaned.heard) {
+        setProblem(t("errors.nothingHeard"));
+        setStage("start");
+        return;
+      }
       await prepare();
-      read(await engine.transcribe(audio));
+      // This shop's own names go first, so the model expects them (ADR-041).
+      const prompt = speechPrompt({ currency, products: products.map((product) => product.name), customers: customers.map((customer) => customer.name) });
+      const words = tidyWords(await engine.transcribe(cleaned.audio, prompt));
+      if (!words) {
+        setProblem(t("errors.nothingHeard"));
+        setStage("start");
+        return;
+      }
+      read(words);
     } catch {
       setProblem(t("errors.transcribe"));
       setStage("start");
@@ -267,10 +289,12 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     const lines = review.lines
       .filter((line): line is ReviewLine & { product: NonNullable<ReviewLine["product"]> } => Boolean(line.product))
       .map((line) => {
-        const product = products.find((item) => item.id === line.product.id)!;
+        // A new item said (ADR-041) is not in the list yet: it goes on the sale as a typed item and is remembered.
+        const product = products.find((item) => item.id === line.product.id) ?? { ...line.product, category: null, lowStockLevel: null, barcode: null, trackStock: false, archived: false, typed: true };
         const quantity = line.quantity !== null ? quantityToString(line.quantity) : "1";
-        // A price other than the list price goes on the line only for someone allowed to change prices.
-        const price = canChangePrice && line.priceMinor !== null && line.priceMinor !== line.listPriceMinor ? amountText(line.priceMinor, currency) : "";
+        // A price other than the list price goes on the line only for someone allowed to change prices; a typed
+        // item always carries the price it sold for.
+        const price = (canChangePrice || product.typed) && line.priceMinor !== null && (product.typed || line.priceMinor !== line.listPriceMinor) ? amountText(line.priceMinor, currency) : "";
         return { product, unit: line.unit ?? product.baseUnit, quantity, price };
       });
     const paid = payments
@@ -445,7 +469,8 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
           <ul className="space-y-3">
             {review.lines.map((line, index) => {
               const product = line.product;
-              const units = product ? sellingUnitsOf(product) : [];
+              // Typed items sell in any unit (ADR-041).
+              const units = product?.typed ? [...new Set([line.unit ?? product.baseUnit, ...TYPED_UNITS])] : product ? sellingUnitsOf(product) : [];
               const differs = line.listPriceMinor !== null && line.priceMinor !== null && line.priceMinor !== line.listPriceMinor;
               return (
                 <li key={`${reading}-${index}`} className="space-y-2 rounded-control border border-border p-3" data-testid="voice-line">
@@ -461,8 +486,11 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
                     <Select
                       id={`voice-product-${index}`}
                       value={product?.id ?? ""}
-                      onChange={(event) => changeLine(index, { product: products.find((item) => item.id === event.target.value) ?? null, unit: null })}
+                      onChange={(event) =>
+                        changeLine(index, { product: products.find((item) => item.id === event.target.value) ?? (product?.isNew && event.target.value === product.id ? product : null), unit: null })
+                      }
                     >
+                      {product?.isNew ? <option value={product.id}>{t("newItem", { name: product.name })}</option> : null}
                       <option value="">{line.productStatus === "choose" ? t("chooseProduct") : t("pickProduct")}</option>
                       {line.options.length > 0 ? (
                         <optgroup label={t("closest")}>
@@ -508,8 +536,8 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
                         key={`${reading}-${index}-${line.priceMinor ?? "none"}`}
                         inputMode="decimal"
                         defaultValue={line.priceMinor !== null ? amountText(line.priceMinor, currency) : ""}
-                        readOnly={!canChangePrice}
-                        onBlur={(event) => canChangePrice && changeLine(index, { priceOverride: parseAmount(event.target.value, currency) })}
+                        readOnly={!canChangePrice && !product?.typed}
+                        onBlur={(event) => (canChangePrice || product?.typed) && changeLine(index, { priceOverride: parseAmount(event.target.value, currency) })}
                       />
                     </FormField>
                     <div className="flex flex-col justify-end text-sm">
@@ -631,7 +659,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
             <ul className="space-y-1 text-sm" data-testid="voice-warnings">
               {review.warnings.map((warning, index) => (
                 <li key={`${warning.code}-${index}`} className={blockers.includes(warning) ? "text-danger" : "text-warning"}>
-                  {warningText(warning, review, t, money)}
+                  {warningText(warning, review, t, money, typedItems)}
                 </li>
               ))}
             </ul>
@@ -670,11 +698,13 @@ function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function warningText(warning: ReviewWarning, review: SaleReview, t: ReturnType<typeof useTranslations<"sales.voice">>, money: (minor: bigint) => string) {
+function warningText(warning: ReviewWarning, review: SaleReview, t: ReturnType<typeof useTranslations<"sales.voice">>, money: (minor: bigint) => string, typedItems = false) {
   const said = (line: number) => review.lines[line]?.spoken.productText ?? "";
   switch (warning.code) {
     case "product_unknown":
-      return t("warnings.product_unknown", { name: warning.said });
+      return t(typedItems ? "warnings.product_unknown" : "warnings.product_unknown_list", { name: warning.said });
+    case "new_item":
+      return t("warnings.new_item", { name: warning.name });
     case "product_choose":
       return t("warnings.product_choose", { name: warning.said });
     case "unit_not_sold":

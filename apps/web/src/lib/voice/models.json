@@ -8,25 +8,68 @@
   },
   "models": [
     {
-      "id": "whisper-tiny.en",
-      "version": "1",
+      "id": "whisper-base.en",
+      "version": "2",
+      "tier": "standard",
       "language": "en",
-      "label": "English",
-      "source": "onnx-community/whisper-tiny.en",
-      "revision": "794207fec2761281fe63a23a94b7e9f53a4efbc1",
-      "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face card for openai/whisper-tiny.en says Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
-      "dtype": { "encoder_model": "fp32", "decoder_model_merged": "q8" },
+      "label": "Standard",
+      "source": "onnx-community/whisper-base.en",
+      "revision": "51eefc0af78b103839eda9e7e4f4186acc6517fe",
+      "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face cards for openai/whisper-*.en say Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
+      "dtype": {
+        "encoder_model": "q8",
+        "decoder_model_merged": "q8"
+      },
       "files": [
         "config.json",
         "generation_config.json",
         "preprocessor_config.json",
         "tokenizer.json",
         "tokenizer_config.json",
-        "onnx/encoder_model.onnx",
+        "onnx/encoder_model_quantized.onnx",
         "onnx/decoder_model_merged_quantized.onnx"
       ],
-      "optionalFiles": ["special_tokens_map.json", "added_tokens.json", "normalizer.json", "vocab.json", "merges.txt"],
-      "approxBytes": 66000000
+      "optionalFiles": [
+        "special_tokens_map.json",
+        "added_tokens.json",
+        "normalizer.json",
+        "vocab.json",
+        "merges.txt"
+      ],
+      "approxBytes": 77000000,
+      "benchmark": "Nigerian English 15.7% words wrong (tiny.en: 21.6%); see docs/voice/benchmark.md"
+    },
+    {
+      "id": "whisper-small.en",
+      "version": "2",
+      "tier": "best",
+      "language": "en",
+      "label": "Best accuracy",
+      "source": "onnx-community/whisper-small.en",
+      "revision": "482fb8ba081b6e906f92efe103622316b2a0cc69",
+      "license": "OpenAI Whisper: code and weights MIT (github.com/openai/whisper); the Hugging Face cards for openai/whisper-*.en say Apache-2.0. ONNX conversion by onnx-community. See docs/voice/README.md",
+      "dtype": {
+        "encoder_model": "q8",
+        "decoder_model_merged": "q8"
+      },
+      "files": [
+        "config.json",
+        "generation_config.json",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "onnx/encoder_model_quantized.onnx",
+        "onnx/decoder_model_merged_quantized.onnx"
+      ],
+      "optionalFiles": [
+        "special_tokens_map.json",
+        "added_tokens.json",
+        "normalizer.json",
+        "vocab.json",
+        "merges.txt"
+      ],
+      "approxBytes": 249000000,
+      "benchmark": "Nigerian English 12.4% words wrong with the shop prompt; see docs/voice/benchmark.md"
     }
   ]
 }

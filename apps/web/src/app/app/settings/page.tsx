@@ -18,6 +18,7 @@ import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { SupportActivity } from "../../../components/support-activity";
 import { VoiceSettings } from "../../../components/voice-settings";
+import { SavedItemsList } from "../../../components/saved-items-list";
 import { WorkRulesSettings } from "../../../components/work-rules-settings";
 import { BrandSettings } from "../../../components/brand-settings";
 import { can, settingsTabs as tabs, visibleSettingsTabs } from "../../../lib/access";
@@ -45,6 +46,7 @@ type Business = {
   staffFeaturesEnabled: boolean;
   visibleModules: string[];
   salesFlow?: "simple" | "desk";
+  salesItems?: "products" | "typed" | "both";
 };
 type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null };
 type BranchDraft = { name: string; phone: string; address: AddressValue };
@@ -132,6 +134,8 @@ function SettingsScreen() {
       .catch(() => undefined);
   }, []);
   const [savedFlow, setSavedFlow] = useState<"simple" | "desk">("simple");
+  const [salesItems, setSalesItems] = useState<"products" | "typed" | "both">("products");
+  const [savedItemsSetting, setSavedItemsSetting] = useState<"products" | "typed" | "both">("products");
   const [modules, setModules] = useState<string[]>([...TRADER_MODULES]);
 
   async function subdivisionsFor(code: string) {
@@ -185,6 +189,8 @@ function SettingsScreen() {
       setStaffFeatures(current.staffFeaturesEnabled !== false);
       setSalesFlow(current.salesFlow === "desk" ? "desk" : "simple");
       setSavedFlow(current.salesFlow === "desk" ? "desk" : "simple");
+      setSalesItems(current.salesItems ?? "products");
+      setSavedItemsSetting(current.salesItems ?? "products");
       setModules(current.visibleModules);
     }
     const loadedBranches: Branch[] = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
@@ -273,12 +279,13 @@ function SettingsScreen() {
           staffFeaturesEnabled: staffFeatures,
           visibleModules: visible,
           salesFlow,
+          salesItems,
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? t("saveFailed"));
       // Menus and screens change with the way of selling, so load the app again.
-      if (salesFlow !== savedFlow) {
+      if (salesFlow !== savedFlow || salesItems !== savedItemsSetting) {
         window.location.reload();
         return;
       }
@@ -566,6 +573,19 @@ function SettingsScreen() {
                     {t("deskNeedsStaff", { plan: planName, limit: staffLimit })}
                   </p>
                 ) : null}
+              </fieldset>
+              <fieldset className="space-y-2" data-testid="sales-items-setting">
+                <legend className="text-sm font-medium">{t("salesItems")}</legend>
+                {(["products", "typed", "both"] as const).map((option) => (
+                  <label key={option} className="flex items-start gap-2 text-sm">
+                    <input type="radio" name="setup-sales-items" className="mt-1" checked={salesItems === option} onChange={() => setSalesItems(option)} />
+                    <span>
+                      <span className="block font-medium">{t(`salesItemsOption.${option}`)}</span>
+                      <span className="block text-muted">{t(`salesItemsHint.${option}`)}</span>
+                    </span>
+                  </label>
+                ))}
+                {savedItemsSetting !== "products" ? <SavedItemsList /> : null}
               </fieldset>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{t("modules")}</legend>

@@ -173,6 +173,8 @@ export const businesses = pgTable(
     multiCurrencyEnabled: boolean("multi_currency_enabled").notNull().default(false),
     staffFeaturesEnabled: boolean("staff_features_enabled").notNull().default(true),
     salesFlow: varchar("sales_flow", { length: 10 }).notNull().default("simple"),
+    /** What staff can sell (ADR-041): products from the list, any typed item, or both. */
+    salesItems: varchar("sales_items", { length: 10 }).notNull().default("products"),
     visibleModules: text("visible_modules")
       .array()
       .notNull()
@@ -800,6 +802,29 @@ export const products = pgTable(
   ],
 );
 
+/** Items typed in at a sale, remembered so staff can pick them next time (ADR-041). No stock is kept for them. */
+export const savedItems = pgTable(
+  "saved_items",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    nameKey: varchar("name_key", { length: 160 }).notNull(),
+    unit: varchar("unit", { length: 16 }).notNull().default("piece"),
+    lastPriceMinor: bigint("last_price_minor", { mode: "bigint" }),
+    timesSold: integer("times_sold").notNull().default(0),
+    lastSoldAt: timestamp("last_sold_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("saved_items_name_key").on(table.tenantId, table.businessId, table.nameKey),
+    index("saved_items_recent_idx").on(table.tenantId, table.businessId, table.lastSoldAt),
+    foreignKey({ name: "saved_items_tenant_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+  ],
+);
+
 export const productUnits = pgTable(
   "product_units",
   {
@@ -1306,6 +1331,7 @@ export const schema = {
   journalLines,
   products,
   productUnits,
+  savedItems,
   stockMovements,
   stockBalances,
   stockCounts,

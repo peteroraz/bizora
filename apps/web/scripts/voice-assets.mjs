@@ -69,13 +69,16 @@ async function models(allowUnlocked) {
   let total = 0;
   for (const model of registry.models) {
     const root = join(app, "public", "voice", "models", model.version, model.id);
+    let bytes = 0;
     const files = [...model.files.map((file) => ({ file, optional: false })), ...(model.optionalFiles ?? []).map((file) => ({ file, optional: true }))];
     for (const { file, optional } of files) {
       const key = `${model.id}@${model.version}/${file}`;
       const path = join(root, file);
       const expected = lock.files[key]?.sha256;
       if (expected && (await exists(path)) && (await sha256(path)) === expected) {
-        total += (await stat(path)).size;
+        const size = (await stat(path)).size;
+        total += size;
+        bytes += size;
         continue;
       }
       const url = `https://huggingface.co/${model.source}/resolve/${model.revision}/${file}`;
@@ -94,11 +97,12 @@ async function models(allowUnlocked) {
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, body);
       total += body.length;
+      bytes += body.length;
     }
     // The licence notice travels with the files this site serves.
     await writeFile(join(root, "NOTICE.txt"), `${model.id} ${model.version} from ${model.source}@${model.revision}\nLicence: ${model.license}\nRuntime: ${registry.runtime.package} ${registry.runtime.version} (${registry.runtime.license}); Transformers.js (Apache-2.0).\n`);
     // What the phone downloads, for the size shown before installing.
-    await writeFile(join(root, "bizora-manifest.json"), JSON.stringify({ id: model.id, version: model.version, files: model.files, bytes: total }, null, 2));
+    await writeFile(join(root, "bizora-manifest.json"), JSON.stringify({ id: model.id, version: model.version, files: model.files, bytes }, null, 2));
   }
   if (changed) await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
   console.log(`voice models ready (${(total / 1_000_000).toFixed(1)} MB)`);

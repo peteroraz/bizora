@@ -16,6 +16,8 @@ export type CachedProduct = {
   barcode: string | null;
   trackStock: boolean;
   archived: boolean;
+  /** An item typed in at a sale and remembered (ADR-041), not a product: no stock, the last price as its price. */
+  typed?: boolean;
 };
 
 export type Catalog = {

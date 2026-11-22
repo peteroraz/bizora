@@ -8,6 +8,7 @@ export {
   buildReview,
   checkReview,
   listPriceOf,
+  newTypedItem,
   priceLine,
   sellingUnitsOf,
   type ReviewCustomer,
@@ -17,3 +18,4 @@ export {
   type ReviewWarning,
   type SaleReview,
 } from "./review.js";
+export { speechPrompt } from "./prompt.js";
