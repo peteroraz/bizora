@@ -6,17 +6,45 @@ import type { WorkerMessage, WorkerRequest } from "./speech.worker";
  * with progress, and turning recorded audio into words. No audio or words ever leave the phone from here.
  */
 export type SpeechModel = (typeof registry.models)[number];
-export const SPEECH_MODEL: SpeechModel = registry.models[0]!;
 export const RUNTIME = registry.runtime;
+
+/**
+ * Two models (ADR-041): Standard (Whisper base, about 80 MB) for every phone, and Best accuracy (Whisper small, about
+ * 250 MB) for phones with the memory and room. One is kept on the phone at a time.
+ */
+export type VoiceTier = "standard" | "best";
+const TIER_KEY = "bizora.voice.tier";
+export const modelFor = (tier: VoiceTier): SpeechModel => registry.models.find((model) => model.tier === tier) ?? registry.models[0]!;
+export function chosenTier(): VoiceTier {
+  try {
+    return window.localStorage.getItem(TIER_KEY) === "best" ? "best" : "standard";
+  } catch {
+    return "standard";
+  }
+}
+export function chooseTier(tier: VoiceTier) {
+  try {
+    window.localStorage.setItem(TIER_KEY, tier);
+  } catch {
+    // Without storage the phone uses Standard.
+  }
+  engine.reset();
+}
+export const speechModel = () => modelFor(chosenTier());
+/** Best accuracy needs about 1 GB of memory while it works: offered on phones with 4 GB or more (or that do not say). */
+export function bestFits() {
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return memory === undefined || memory >= 4;
+}
 
 const MARKER = "bizora.voice.installed";
 /** Every cache this feature has ever used starts with this, so old versions can be removed. */
 const CACHE_PREFIX = "bizora-voice-";
 
-export function cacheName(model: SpeechModel = SPEECH_MODEL) {
+export function cacheName(model: SpeechModel = speechModel()) {
   return `${CACHE_PREFIX}${model.id}-v${model.version}-ort${RUNTIME.version}`;
 }
-export const modelPath = (model: SpeechModel = SPEECH_MODEL) => `/voice/models/${model.version}/`;
+export const modelPath = (model: SpeechModel = speechModel()) => `/voice/models/${model.version}/`;
 export const runtimePath = () => `/voice/ort/${RUNTIME.version}/`;
 
 export type Support = {
@@ -92,10 +120,10 @@ export async function storageRoom(): Promise<{ free: number | null; persisted: b
 }
 
 /** The download size: the model as the server lists it, plus the runtime this device needs. */
-export async function downloadSize(webgpu: boolean): Promise<number> {
-  let model = SPEECH_MODEL.approxBytes;
+export async function downloadSize(webgpu: boolean, chosen: SpeechModel = speechModel()): Promise<number> {
+  let model = chosen.approxBytes;
   try {
-    const response = await fetch(`${modelPath()}${SPEECH_MODEL.id}/bizora-manifest.json`, { cache: "no-store" });
+    const response = await fetch(`${modelPath(chosen)}${chosen.id}/bizora-manifest.json`, { cache: "no-store" });
     if (response.ok) model = ((await response.json()) as { bytes: number }).bytes || model;
   } catch {
     // Offline or not yet published: the registry's estimate.
@@ -106,7 +134,8 @@ export async function downloadSize(webgpu: boolean): Promise<number> {
 /** Whether the server has the model at all (it is downloaded at build time). */
 export async function modelPublished(): Promise<boolean> {
   try {
-    const response = await fetch(`${modelPath()}${SPEECH_MODEL.id}/config.json`, { method: "HEAD", cache: "no-store" });
+    const chosen = speechModel();
+    const response = await fetch(`${modelPath(chosen)}${chosen.id}/config.json`, { method: "HEAD", cache: "no-store" });
     return response.ok;
   } catch {
     return false;
@@ -174,24 +203,25 @@ class Engine {
     const request: WorkerRequest = {
       type: "load",
       modelPath: modelPath(),
-      modelId: SPEECH_MODEL.id,
+      modelId: speechModel().id,
       cacheName: cacheName(),
       runtimePath: runtimePath(),
       runtimeFile: options.device === "webgpu" ? RUNTIME.gpu : RUNTIME.cpu,
       device: options.device,
-      dtype: SPEECH_MODEL.dtype,
+      dtype: speechModel().dtype,
     };
     worker.postMessage(request);
     return this.ready;
   }
 
-  transcribe(audio: Float32Array): Promise<string> {
+  /** The prompt names this shop's products and customers, so the model expects them (ADR-041). */
+  transcribe(audio: Float32Array, prompt?: string): Promise<string> {
     if (!this.worker) return Promise.reject(new VoiceError("unsupported", "Voice is not ready."));
     const id = this.next++;
     return new Promise<string>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       // The buffer moves to the worker; this page no longer holds the sound.
-      this.worker!.postMessage({ type: "transcribe", id, audio } satisfies WorkerRequest, [audio.buffer]);
+      this.worker!.postMessage({ type: "transcribe", id, audio, ...(prompt ? { prompt } : {}) } satisfies WorkerRequest, [audio.buffer]);
     });
   }
 

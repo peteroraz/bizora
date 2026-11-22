@@ -14,10 +14,11 @@ import { PublicReceiptController, SaleController } from "./sale.controller.js";
 import { SaleSyncHandler } from "./sale-sync.handler.js";
 import { ReturnService } from "./return.service.js";
 import { SaleService } from "./sale.service.js";
+import { SavedItemsController } from "./saved-items.controller.js";
 
 @Module({
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, InventoryModule, NotificationsModule, BrandingModule],
-  controllers: [SaleController, PublicReceiptController, ImportController],
+  controllers: [SaleController, PublicReceiptController, ImportController, SavedItemsController],
   providers: [SaleService, ReturnService, SaleSyncHandler, ImportService, PermissionGuard],
   exports: [SaleService],
 })

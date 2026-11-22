@@ -18,7 +18,7 @@ export type WorkerRequest =
       device: "wasm" | "webgpu";
       dtype: Record<string, string>;
     }
-  | { type: "transcribe"; id: number; audio: Float32Array }
+  | { type: "transcribe"; id: number; audio: Float32Array; prompt?: string }
   | { type: "dispose" };
 
 export type WorkerMessage =
@@ -72,6 +72,36 @@ async function load(request: Extract<WorkerRequest, { type: "load" }>) {
   post({ type: "ready", device: request.device, ms: Math.round(performance.now() - started) });
 }
 
+/** About 8 tokens a second of speech, plus a little: enough for any sale said, never a runaway repeat (ADR-041). */
+const capFor = (audio: Float32Array) => Math.min(440, Math.ceil((audio.length / 16_000) * 8) + 16);
+
+type WhisperParts = {
+  tokenizer: { convert_tokens_to_ids: (tokens: string[]) => number[]; encode: (text: string, options: { add_special_tokens: boolean }) => number[]; decode: (ids: number[], options: { skip_special_tokens: boolean }) => string };
+  processor: (audio: Float32Array) => Promise<{ input_features: unknown }>;
+  model: { config: { model_type?: string }; generation_config: unknown; _retrieve_init_tokens: (config: unknown) => number[]; generate: (options: Record<string, unknown>) => Promise<{ tolist: () => (number | bigint)[][] }> };
+};
+
+/**
+ * Reads one recording. With a prompt (this shop's product and customer names, the currency), Whisper is told these
+ * words came just before, so it writes "naira" and "Emeka" rather than "near a" and "America". The library has no
+ * prompt option, so the prompt goes in as the first tokens, as Whisper was trained to expect (ADR-041).
+ */
+async function read(asr: AutomaticSpeechRecognitionPipeline, audio: Float32Array, prompt?: string): Promise<string> {
+  const cap = capFor(audio);
+  const parts = asr as unknown as WhisperParts;
+  if (prompt && parts.model.config.model_type === "whisper") {
+    const [previous] = parts.tokenizer.convert_tokens_to_ids(["<|startofprev|>"]);
+    const promptIds = parts.tokenizer.encode(` ${prompt}`, { add_special_tokens: false }).slice(-180);
+    const init = [previous!, ...promptIds, ...parts.model._retrieve_init_tokens(parts.model.generation_config)];
+    const { input_features } = await parts.processor(audio);
+    const output = await parts.model.generate({ inputs: input_features, decoder_input_ids: init, max_new_tokens: Math.min(440 - init.length, cap) });
+    const ids = (output.tolist()[0] ?? []).slice(init.length).map(Number);
+    return parts.tokenizer.decode(ids, { skip_special_tokens: true });
+  }
+  const output = (await asr(audio, { chunk_length_s: 30, max_new_tokens: cap } as never)) as { text: string } | { text: string }[];
+  return Array.isArray(output) ? output.map((part) => part.text).join(" ") : output.text;
+}
+
 scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   if (request.type === "load") {
@@ -89,8 +119,7 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
     const started = performance.now();
     try {
-      const output = (await recognizer(request.audio, { chunk_length_s: 30 })) as { text: string } | { text: string }[];
-      const text = (Array.isArray(output) ? output.map((part) => part.text).join(" ") : output.text).trim();
+      const text = (await read(recognizer, request.audio, request.prompt)).trim();
       post({ type: "result", id: request.id, text, ms: Math.round(performance.now() - started) });
     } catch (error) {
       post({ type: "error", id: request.id, stage: "transcribe", message: error instanceof Error ? error.message : String(error) });

@@ -13,6 +13,8 @@ export type Access = {
   branchId?: string | null;
   /** How the business sells (ADR-016): simple, or sales desk → cashier → store keeper. */
   salesFlow?: "simple" | "desk";
+  /** What staff can sell (ADR-041): products from the list, any typed item, or both. */
+  salesItems?: "products" | "typed" | "both";
   /** Where the business is: decides how phone numbers and amounts are typed (ADR-027). */
   country?: string;
   currency?: string;

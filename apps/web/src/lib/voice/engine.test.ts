@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cacheName, installState, runtimePath, SPEECH_MODEL } from "./engine";
+import { cacheName, installState, runtimePath, speechModel } from "./engine";
 
 // A tiny stand-in for the browser's file cache and local notes.
 function browser(files: string[]) {
@@ -14,7 +14,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("offline voice set-up", () => {
   it("names the cache after the model and runtime versions, so a new version never mixes with an old one", () => {
-    expect(cacheName()).toBe(`bizora-voice-${SPEECH_MODEL.id}-v${SPEECH_MODEL.version}-ort${runtimePath().split("/")[3]}`);
+    expect(cacheName()).toBe(`bizora-voice-${speechModel().id}-v${speechModel().version}-ort${runtimePath().split("/")[3]}`);
     expect(runtimePath()).toMatch(/^\/voice\/ort\/[^/]+\/$/);
   });
 

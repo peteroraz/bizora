@@ -1,3 +1,5 @@
+import { savedItemKey } from "../sales.js";
+import { capitaliseFirst } from "../typing.js";
 import { ENGLISH, type VoiceLexicon } from "./lexicon.js";
 import { decide, rank } from "./match.js";
 import { spokenLineTotal, type SpokenLine, type SpokenSale } from "./spoken-sale.js";
@@ -14,6 +16,10 @@ export type ReviewProduct = {
   priceMinor: string | null;
   packs: { unitCode: string; baseQuantity: string; priceMinor: string | null }[];
   trackStock?: boolean;
+  /** An item typed in and remembered, or a new one from this sale (ADR-041): any unit, its price is not fixed. */
+  typed?: boolean;
+  /** Not seen before: it will be added to the saved items when the sale is saved. */
+  isNew?: boolean;
 };
 export type ReviewCustomer = { id: string; name: string; creditAllowed: boolean };
 
@@ -39,6 +45,7 @@ export type ReviewLine = {
 export type ReviewWarning =
   | { code: "product_unknown"; line: number; said: string }
   | { code: "product_choose"; line: number; said: string }
+  | { code: "new_item"; line: number; name: string }
   | { code: "unit_not_sold"; line: number; unit: string }
   | { code: "no_quantity"; line: number }
   | { code: "no_price"; line: number }
@@ -74,8 +81,16 @@ export type ReviewOptions = {
   canChangePrice: boolean;
   /** Whether this person may leave money owed. */
   canGiveCredit: boolean;
+  /** Whether the shop sells items not in its products (ADR-041): an item not found becomes a new typed item. */
+  typedItems?: boolean;
   lexicon?: VoiceLexicon;
 };
+
+/** An item said that is not in the products or saved items, to be sold as typed and remembered (ADR-041). */
+export function newTypedItem(said: string, unit: string | null): ReviewProduct {
+  const name = capitaliseFirst(said.trim().replace(/\s+/g, " "));
+  return { id: `typed:${savedItemKey(name)}`, name, baseUnit: unit ?? "piece", priceMinor: null, packs: [], trackStock: false, typed: true, isNew: true };
+}
 
 export function sellingUnitsOf(product: ReviewProduct) {
   return [product.baseUnit, ...product.packs.map((pack) => pack.unitCode)];
@@ -90,14 +105,16 @@ export function listPriceOf(product: ReviewProduct, unit: string): bigint | null
   return spokenLineTotal(BigInt(product.priceMinor), BigInt(pack.baseQuantity));
 }
 
-function reviewLine(spoken: SpokenLine, products: ReviewProduct[], lexicon: VoiceLexicon): ReviewLine {
+function reviewLine(spoken: SpokenLine, products: ReviewProduct[], lexicon: VoiceLexicon, typedItems: boolean): ReviewLine {
   const found = decide(rank(spoken.productText, products, (product) => [product.name], { lexicon }));
-  const product = found.status === "sure" ? found.best : null;
+  // Not found at all, and the shop sells typed items: sell it as said, and it is remembered for next time.
+  const fresh = found.status === "none" && typedItems && spoken.productText.trim().length >= 2;
+  const product = found.status === "sure" ? found.best : fresh ? newTypedItem(spoken.productText, spoken.unit) : null;
   return priceLine({
     spoken,
     product,
     options: found.options,
-    productStatus: found.status,
+    productStatus: fresh ? "sure" : found.status,
     unit: null,
     unitNotSold: false,
     quantity: spoken.quantity,
@@ -117,6 +134,11 @@ export function priceLine(line: ReviewLine): ReviewLine {
   if (!product) {
     next.unit = spoken.unit;
     next.listPriceMinor = null;
+  } else if (product.typed) {
+    // Typed items sell in any unit; the last price is a suggestion for the unit it was last sold in.
+    next.unitNotSold = false;
+    next.unit = line.unit ?? spoken.unit ?? product.baseUnit;
+    next.listPriceMinor = next.unit === product.baseUnit && product.priceMinor !== null ? BigInt(product.priceMinor) : null;
   } else {
     const units = sellingUnitsOf(product);
     const said = spoken.unit;
@@ -158,7 +180,7 @@ export function priceLine(line: ReviewLine): ReviewLine {
 
 export function buildReview(sale: SpokenSale, products: ReviewProduct[], customers: ReviewCustomer[], options: ReviewOptions): SaleReview {
   const lexicon = options.lexicon ?? ENGLISH;
-  const lines = sale.lines.map((line) => reviewLine(line, products, lexicon));
+  const lines = sale.lines.map((line) => reviewLine(line, products, lexicon, options.typedItems === true));
   let customer: ReviewCustomer | null = null;
   let customerOptions: ReviewCustomer[] = [];
   let customerStatus: SaleReview["customerStatus"] = "not_said";
@@ -189,6 +211,9 @@ export function checkReview(review: SaleReview, options: ReviewOptions): SaleRev
       warnings.push({ code: line.productStatus === "choose" ? "product_choose" : "product_unknown", line: index, said: line.spoken.productText });
       complete = false;
     }
+    if (line.product?.isNew) {
+      warnings.push({ code: "new_item", line: index, name: line.product.name });
+    }
     if (line.product && line.unitNotSold && line.spoken.unitText) warnings.push({ code: "unit_not_sold", line: index, unit: line.spoken.unitText });
     if (line.quantity === null || line.quantity <= 0n) {
       warnings.push({ code: "no_quantity", line: index });
@@ -199,7 +224,8 @@ export function checkReview(review: SaleReview, options: ReviewOptions): SaleRev
       else warnings.push({ code: "no_price", line: index });
       complete = false;
     }
-    if ((line.priceSource === "said" || line.priceSource === "typed") && line.listPriceMinor !== null && line.priceMinor !== null && line.priceMinor !== line.listPriceMinor) {
+    // A typed item's price is whatever it sells for today, so a different price is not a discount.
+    if (!line.product?.typed && (line.priceSource === "said" || line.priceSource === "typed") && line.listPriceMinor !== null && line.priceMinor !== null && line.priceMinor !== line.listPriceMinor) {
       warnings.push({ code: options.canChangePrice ? "price_differs" : "price_needs_manager", line: index, saidMinor: line.priceMinor, listMinor: line.listPriceMinor });
     }
     total += line.totalMinor ?? 0n;

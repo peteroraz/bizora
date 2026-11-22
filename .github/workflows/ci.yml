@@ -82,7 +82,8 @@ jobs:
         with:
           path: apps/web/public/voice/models
           key: voice-models-${{ hashFiles('apps/web/src/lib/voice/models.json', 'apps/web/src/lib/voice/models.lock.json') }}
-      - run: pnpm --filter @bizora/web voice:models
+      # New models (ADR-041): their hashes are recorded on this first fetch and committed to the lock.
+      - run: pnpm --filter @bizora/web voice:models -- --allow-unlocked
       - name: Make the voice test recording
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q espeak-ng

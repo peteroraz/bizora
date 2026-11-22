@@ -239,6 +239,8 @@ export const updateBusinessSchema = z.object({
   visibleModules: z.array(traderModuleSchema).optional(),
   /** simple: one person records and takes payment. desk: sales person, then cashier, then store keeper (ADR-016). */
   salesFlow: z.enum(["simple", "desk"]).optional(),
+  /** products: only products from the list. typed: any item typed in, remembered. both (ADR-041). */
+  salesItems: z.enum(["products", "typed", "both"]).optional(),
 });
 
 export const updateBranchSchema = z.object({

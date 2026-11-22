@@ -719,12 +719,45 @@
       "gpu": "graphics chip",
       "cpu": "processor",
       "evicted": "Your phone removed offline voice to free space. Download it again when you have a network.",
-      "missing": "Not set up. One download of about {size}; use Wi-Fi if you can.",
+      "missing": "Not set up. One download of about {size}; use Wi-Fi if you can. Choosing the other model later replaces this one.",
       "free": "Room left for Bizora on this phone: about {size}.",
       "downloading": "Downloading: {percent}%",
       "download": "Download offline voice",
       "remove": "Remove offline voice",
-      "failed": "The download stopped. Check your connection and try again."
+      "failed": "The download stopped. Check your connection and try again.",
+      "tierTitle": "Which voice model",
+      "tier": {
+        "standard": "Standard (about {size})",
+        "best": "Best accuracy (about {size})"
+      },
+      "tierHint": {
+        "standard": "Works on most phones. Much better with Nigerian and other accents than before.",
+        "best": "Hears accents and noisy markets best, but is a bigger download and takes a few seconds longer to read."
+      },
+      "bestTooBig": "This phone may not have enough memory for Best accuracy. Standard is safer.",
+      "gpuNote": "This phone has a graphics chip that speeds up reading."
+    },
+    "salesItems": "What staff can sell",
+    "salesItemsOption": {
+      "products": "Only products in my list",
+      "typed": "Any item, typed in",
+      "both": "Both"
+    },
+    "salesItemsHint": {
+      "products": "Staff pick from your products. Stock is checked and counted.",
+      "typed": "Staff type the item and its price. Bizora remembers it so they can pick it next time. No stock is counted.",
+      "both": "Pick from your products, or type an item that is not in your list. Typed items are remembered; only products count stock."
+    },
+    "savedItems": {
+      "title": "Typed items remembered",
+      "lead": "Picked from the list next time an item is sold. Remove one that is misspelt or no longer sold; it comes back if it is sold again.",
+      "empty": "None yet. Items typed in at a sale show here.",
+      "detail": "Last sold at {price} per {unit} · sold {count, plural, one {once} other {# times}}",
+      "noPrice": "no price yet",
+      "remove": "Remove",
+      "removeNamed": "Remove {name}",
+      "loadFailed": "The typed items could not be loaded. Check your connection.",
+      "removeFailed": "{name} could not be removed. Try again."
     }
   },
   "address": {
@@ -1543,7 +1576,9 @@
         "paid_more_than_total": "Received {paid} is more than the total {total}. Check the amounts.",
         "payment_unclear": "The amount paid and the balance you said do not add up to the total. Check the amount received.",
         "no_payment": "How was it paid? Enter the amount received.",
-        "currency_mismatch": "You said an amount in {said}, but this business uses {expected}. Check the prices."
+        "currency_mismatch": "You said an amount in {said}, but this business uses {expected}. Check the prices.",
+        "new_item": "{name} is not in your products. It will be sold as a typed item and remembered for next time. Check the price.",
+        "product_unknown_list": "\"{name}\" is not in your products. Choose one, or ask the owner to allow typed items in Settings."
       },
       "errors": {
         "noRoom": "This phone does not have room for offline voice ({size} needed). Free some space and try again.",
@@ -1552,10 +1587,12 @@
         "downloadFailed": "The download stopped. Check your connection and try again; it continues where it can.",
         "offlineDownload": "You are offline. Connect to download offline voice.",
         "microphone": "Bizora could not use the microphone. Allow the microphone for this site in your browser, then try again.",
-        "transcribe": "Bizora could not write down what you said. Try again, or type the sale."
+        "transcribe": "Bizora could not write down what you said. Try again, or type the sale.",
+        "nothingHeard": "Bizora did not hear anything. Hold the phone closer, speak a little louder, and tap the microphone again."
       },
       "savedVoice": "Recorded by voice.",
-      "heard": "Heard: “{words}”"
+      "heard": "Heard: “{words}”",
+      "newItem": "New: {name} (typed item)"
     },
     "waiting": {
       "title": "{count, plural, one {# sale} other {# sales}} on this phone, not yet confirmed",
@@ -1565,6 +1602,9 @@
       "pending": "Waiting to sync",
       "needsReview": "Needs review",
       "dismiss": "I have seen the {count, plural, one {refused sale} other {# refused sales}}"
+    },
+    "typed": {
+      "sell": "Sell “{name}” (typed item, remembered for next time)"
     }
   },
   "imports": {

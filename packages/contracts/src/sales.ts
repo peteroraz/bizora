@@ -24,7 +24,29 @@ export const saleOtherLineSchema = z.object({
   description: z.string().trim().min(1).max(160),
   quantity: quantity.default("1"),
   unitPriceMinor: minorAmount,
+  /** How it was sold ("bag", "carton"); a piece when left out. */
+  unit: z.enum(UNIT_CODES).optional(),
+  /**
+   * An item typed in at the counter and remembered for next time (ADR-041): sold as goods, no stock kept. Needs the
+   * shop to allow typed items. Left out: a service or other income (ADR-035).
+   */
+  saved: z.boolean().optional(),
 });
+
+/** What staff can sell (ADR-041): only products from the list, any item typed in (remembered), or both. */
+export const SALES_ITEMS = ["products", "typed", "both"] as const;
+export type SalesItems = (typeof SALES_ITEMS)[number];
+export const sellsProducts = (setting: SalesItems | string | null | undefined) => setting !== "typed";
+export const sellsTyped = (setting: SalesItems | string | null | undefined) => setting === "typed" || setting === "both";
+
+/** The same name however it is typed: "Agege  bread" and "agege bread" are one saved item. */
+export function savedItemKey(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase().slice(0, 160);
+}
+
+/** A saved item as the app gets it: name, unit, the last price sold at, and how often it sells. */
+export type SavedItem = { id: string; name: string; unit: string; lastPriceMinor: string | null; timesSold: number; lastSoldAt: string | null };
+export const SAVED_ITEMS_LIMIT = 2000;
 
 export const saleLineInputSchema = z.union([saleProductLineSchema, saleOtherLineSchema]);
 

@@ -84,4 +84,31 @@ describe("checking a spoken sale against the shop", () => {
   it("tells a similar-sounding product from the right one", () => {
     expect(review("three tins of pick milk, cash").lines[0]).toMatchObject({ product: { id: "peak" } });
   });
+
+  it("sells an item not in the products as a new typed item when the shop allows it (ADR-041)", () => {
+    const sale = parseSpokenSale("Sold two bags of beans at 40k each and three loaves of Agege bread at 1500, cash.", { currency: "NGN" });
+    const withTyped = buildReview(sale, products, customers, { canChangePrice: false, canGiveCredit: true, typedItems: true });
+    const beans = withTyped.lines[0]!;
+    expect(beans.product).toMatchObject({ name: "Beans", typed: true, isNew: true, baseUnit: "bag" });
+    // A cashier may set a typed item's price: it is not a discount on a list price.
+    expect(beans.priceMinor).toBe(4_000_000n);
+    expect(withTyped.warnings.map((warning) => warning.code)).toContain("new_item");
+    expect(blocking(withTyped)).toEqual([]);
+    // Products only: the same words stop until a product is chosen.
+    const listOnly = buildReview(sale, products, customers, { canChangePrice: false, canGiveCredit: true });
+    expect(blocking(listOnly).map((warning) => warning.code)).toContain("product_unknown");
+  });
+
+  it("matches a saved typed item and uses its last price as a suggestion only", () => {
+    const saved = { id: "typed:agege bread", name: "Agege bread", baseUnit: "piece", priceMinor: "150000", packs: [], typed: true };
+    const sale = parseSpokenSale("Three Agege bread, cash.", { currency: "NGN" });
+    const review = buildReview(sale, [...products, saved], customers, { canChangePrice: false, canGiveCredit: true, typedItems: true });
+    expect(review.lines[0]).toMatchObject({ priceMinor: 150_000n, priceSource: "list", totalMinor: 450_000n });
+    expect(review.lines[0]!.product).toMatchObject({ id: "typed:agege bread" });
+    expect(review.warnings.map((warning) => warning.code)).not.toContain("new_item");
+    // A different price said is fine for a typed item, even for a cashier.
+    const dearer = buildReview(parseSpokenSale("Three Agege bread at 1700 each, cash.", { currency: "NGN" }), [...products, saved], customers, { canChangePrice: false, canGiveCredit: true, typedItems: true });
+    expect(dearer.lines[0]!.priceMinor).toBe(170_000n);
+    expect(blocking(dearer)).toEqual([]);
+  });
 });

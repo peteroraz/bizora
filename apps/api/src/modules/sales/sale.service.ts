@@ -18,6 +18,8 @@ import {
   whatsAppHref,
   type SaleCreateInput,
   type SaleStatus,
+  savedItemKey,
+  sellsTyped,
 } from "@bizora/contracts";
 import { aliasedTable, and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
@@ -25,7 +27,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, stockBalances, users } from "../../db/schema.js";
+import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, users } from "../../db/schema.js";
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
 import { DB } from "../../tokens.js";
@@ -103,11 +105,19 @@ export class SaleService {
       const branch = await resolveBranch(tx, tenant, business.id);
       const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
       const lines = await this.priceLines(tx, tenant, business, payload);
+      // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.
+      const typedAt = lines.findIndex((line) => line.saved);
+      if (typedAt >= 0 && source === "pos" && !sellsTyped(business.salesItems)) {
+        throw new ApiError("TYPED_ITEMS_OFF", "This shop sells only products from its list. The owner can allow typed items in Settings.", 403, [
+          { field: `lines.${typedAt}.description`, message: "Choose a product from the list." },
+        ]);
+      }
       // Imports are past records, so they are never sent to a cashier.
       const desk = business.salesFlow === "desk" && source !== "import" && source !== "capture";
 
       const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0n);
-      const otherSubtotal = lines.reduce((sum, line) => sum + (line.other ? line.lineTotal : 0n), 0n);
+      // Services and other income; typed items are goods and count as sales (ADR-041).
+      const otherSubtotal = lines.reduce((sum, line) => sum + (line.other && !line.saved ? line.lineTotal : 0n), 0n);
       const discount = payload.discountMinor ? BigInt(payload.discountMinor) : 0n;
       if (discount > 0n && !tenant.permissions.includes(Permission.SALES_DISCOUNT)) {
         throw new ApiError("FORBIDDEN", "Ask a manager to give a discount.", 403, [{ field: "discountMinor", message: "Remove the discount." }]);
@@ -181,6 +191,7 @@ export class SaleService {
         actorType: tenant.actorType ?? "HUMAN",
       });
       await this.insertLines(tx, tenant, business.id, id, lines, []);
+      if (typedAt >= 0) await this.rememberTyped(tx, tenant, business.id, lines, soldAt);
       if (settled) {
         await this.insertPayments(tx, tenant, business.id, id, payload.payments, settled.transfersWait);
         if (settled.transfersWait) await this.askToCheckTransfer(tx, tenant, business.id, id);
@@ -1252,7 +1263,8 @@ export class SaleService {
         if (unitPrice === 0n && !canDiscount) {
           throw new ApiError("FORBIDDEN", `Ask a manager to give "${line.description}" free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
         }
-        return { product: null, unit: "piece", entered, quantity: entered, unitPrice, lineTotal: round(unitPrice * entered, 1000n), reduction: 0n, description: line.description, other: true };
+        const description = line.description.replace(/\s+/g, " ");
+        return { product: null, unit: line.unit ?? "piece", entered, quantity: entered, unitPrice, lineTotal: round(unitPrice * entered, 1000n), reduction: 0n, description, other: true, saved: line.saved === true };
       }
       const product = byId.get(line.productId);
       if (!product || product.archivedAt) {
@@ -1279,8 +1291,61 @@ export class SaleService {
       }
       const lineTotal = round(unitPrice * entered, 1000n);
       const reduction = listPrice !== null && unitPrice < listPrice ? round((listPrice - unitPrice) * entered, 1000n) : 0n;
-      return { product, unit: line.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name, other: false };
+      return { product, unit: line.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name, other: false, saved: false };
     });
+  }
+
+  /**
+   * Remembers items typed in at a sale, so staff can pick them next time (ADR-041): the name as first typed, the unit
+   * and price of the latest sale, and how often it sells. An item removed from the list comes back when sold again.
+   */
+  private async rememberTyped(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    businessId: string,
+    lines: { saved: boolean; description: string; unit: string; unitPrice: bigint }[],
+    soldAt: Date,
+  ) {
+    const byKey = new Map<string, { name: string; unit: string; price: bigint; count: number }>();
+    for (const line of lines) {
+      if (!line.saved) continue;
+      const key = savedItemKey(line.description);
+      const seen = byKey.get(key);
+      byKey.set(key, { name: seen?.name ?? line.description.trim(), unit: line.unit, price: line.unitPrice, count: (seen?.count ?? 0) + 1 });
+    }
+    // Typed explicitly: Postgres cannot work out the type of a bare parameter inside CASE or GREATEST.
+    const when = sql`${soldAt.toISOString()}::timestamptz`;
+    for (const [key, item] of byKey) {
+      const price = sql`${item.price.toString()}::bigint`;
+      await tx
+        .insert(savedItems)
+        .values({
+          id: newId(),
+          tenantId: tenant.tenantId,
+          businessId,
+          name: item.name.slice(0, 160),
+          nameKey: key,
+          unit: item.unit,
+          lastPriceMinor: item.price,
+          timesSold: item.count,
+          lastSoldAt: soldAt,
+          createdBy: tenant.userId,
+          updatedBy: tenant.userId,
+        })
+        .onConflictDoUpdate({
+          target: [savedItems.tenantId, savedItems.businessId, savedItems.nameKey],
+          set: {
+            unit: item.unit,
+            // An older offline sale arriving late does not replace a newer price.
+            lastPriceMinor: sql`CASE WHEN ${savedItems.lastSoldAt} IS NULL OR ${savedItems.lastSoldAt} <= ${when} THEN ${price} ELSE ${savedItems.lastPriceMinor} END`,
+            lastSoldAt: sql`GREATEST(coalesce(${savedItems.lastSoldAt}, ${when}), ${when})`,
+            timesSold: sql`${savedItems.timesSold} + ${item.count}::integer`,
+            archivedAt: null,
+            updatedAt: new Date(),
+            updatedBy: tenant.userId,
+          },
+        });
+    }
   }
 
   private async insertLines(
