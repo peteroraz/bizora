@@ -131,6 +131,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       // The shop goes with the owner, so work saved offline keeps the shop it was done in (ADR-044).
       owner: tenantId && membershipId ? { tenantId, membershipId, ...(profile.tenant?.branchId ? { branchId: profile.tenant.branchId } : {}) } : null,
       branchId: profile.tenant?.branchId ?? null,
+      membershipBranchId: profile.membership?.branchId ?? null,
       salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
       salesItems: currentBusiness?.salesItems ?? "products",
       ...(currentBusiness?.countryCode ? { country: currentBusiness.countryCode.trim() } : {}),

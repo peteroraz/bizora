@@ -109,6 +109,10 @@ export class SaleService {
     await this.db.transaction(async (tx) => {
       const business = await requireBusiness(tx, tenant);
       const branch = await resolveBranch(tx, tenant, business.id);
+      // A warehouse keeps stock but does not sell at the counter (ADR-047). Sales already made elsewhere still count.
+      if (branch.kind === "warehouse" && source === "pos") {
+        throw new ApiError("WAREHOUSE_NO_SALES", `${branch.name} is a warehouse. Choose a shop to sell from, or move the stock to a shop first.`, 409);
+      }
       const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
       const lines = await this.priceLines(tx, tenant, business, payload, source === "pos");
       // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.

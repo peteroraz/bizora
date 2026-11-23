@@ -356,6 +356,7 @@ export class OnboardingService {
       .set({
         ...(payload.name ? { name: payload.name } : {}),
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
+        ...(payload.kind ? { kind: payload.kind } : {}),
         updatedBy: tenant.userId,
       })
       .where(and(eq(branches.id, branchId), eq(branches.tenantId, tenant.tenantId)))

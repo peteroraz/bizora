@@ -21,7 +21,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { branches, memberships, products, shopDevices, stockBalances, stockCounts, stockMovements, stockRequests, users } from "../../db/schema.js";
+import { branches, memberships, products, shopDevices, stockBalances, stockCounts, stockMovements, stockRequests, stockTransferLines, stockTransfers, users } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
@@ -417,7 +417,7 @@ export class StockService {
       documentType: "stock_transfer",
     });
     // The receiving shop takes over exactly the cost value that left, so total stock value is unchanged.
-    await this.applyMovement(tx, to, {
+    const arrived = await this.applyMovement(tx, to, {
       type: "transfer_in",
       quantity: amount,
       enteredQuantity: entered,
@@ -425,6 +425,42 @@ export class StockService {
       note: payload.note ?? null,
       transferId,
       valueMinor: -out.valueMinor,
+    });
+    // The quick way (sent and received at once) is kept as a transfer too, so every transfer has one history (ADR-047).
+    const now = new Date();
+    await tx.insert(stockTransfers).values({
+      id: transferId,
+      tenantId: tenant.tenantId,
+      businessId: from.business.id,
+      fromBranchId: from.branch.id,
+      toBranchId: to.branch.id,
+      status: "received",
+      documentNumber: out.documentNumber,
+      note: payload.note ?? null,
+      requestedBy: tenant.userId,
+      requestedMembershipId: tenant.membershipId,
+      requestedAt: now,
+      approvedBy: tenant.userId,
+      approvedAt: now,
+      dispatchedBy: tenant.userId,
+      dispatchedAt: now,
+      receivedBy: tenant.userId,
+      receivedAt: now,
+    });
+    await tx.insert(stockTransferLines).values({
+      id: newId(),
+      tenantId: tenant.tenantId,
+      businessId: from.business.id,
+      transferId,
+      lineNo: 1,
+      productId: from.product.id,
+      quantity: amount,
+      enteredQuantity: entered,
+      enteredUnit: payload.unit,
+      valueMinor: -out.valueMinor,
+      receivedQuantity: amount,
+      outMovementId: out.id,
+      inMovementId: arrived.id,
     });
     await this.record(tx, tenant, "stock.transferred", out.id, from, { note: payload.note ?? null, toBranchId: payload.toBranchId, quantity: payload.quantity, unit: payload.unit });
     return this.presentResult(tenant, out);

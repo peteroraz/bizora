@@ -34,7 +34,7 @@ type Detail = ProductView & {
   item?: { id: string; name: string; itemType: string; categoryPath: string | null; brandName: string | null; variants: { id: string; name: string; variantLabel: string | null }[] } | null;
   sku?: string | null;
   currency: string;
-  shops: { branchId: string; branchName: string; quantity: string; belowZero: boolean; valueMinor?: string }[];
+  shops: { branchId: string; branchName: string; quantity: string; belowZero: boolean; valueMinor?: string; inTransitIn?: string; inTransitOut?: string }[];
 };
 type ProductChange = {
   id: string;
@@ -268,7 +268,11 @@ function ProductScreen() {
         <ul className="mt-3 space-y-2 text-sm">
           {(product.shops.length > 0 ? product.shops : [{ branchId: "here", branchName: "", quantity: "0", belowZero: false }]).map((shop) => (
             <li key={shop.branchId} className="flex flex-wrap items-center justify-between gap-2">
-              <span>{shop.branchName}</span>
+              <span>
+                {shop.branchName}
+                {shop.inTransitIn && shop.inTransitIn !== "0" ? <span className="block text-xs text-muted">{t("onTheWayIn", { quantity: stockText(shop.inTransitIn, product.baseUnit, product.packs) })}</span> : null}
+                {shop.inTransitOut && shop.inTransitOut !== "0" ? <span className="block text-xs text-muted">{t("onTheWayOut", { quantity: stockText(shop.inTransitOut, product.baseUnit, product.packs) })}</span> : null}
+              </span>
               <span className="flex items-center gap-2 font-medium">
                 {stockText(shop.quantity, product.baseUnit, product.packs)}
                 {shop.belowZero ? <Badge tone="danger">{t("belowZero")}</Badge> : null}
