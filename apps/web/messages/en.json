@@ -1599,7 +1599,8 @@
       },
       "savedVoice": "Recorded by voice.",
       "heard": "Heard: “{words}”",
-      "newItem": "New: {name} (typed item)"
+      "newItem": "New: {name} (typed item)",
+      "checkEverything": "Check every quantity, price and name against what you said before confirming. Voice can mishear numbers."
     },
     "waiting": {
       "title": "{count, plural, one {# sale} other {# sales}} on this phone, not yet confirmed",

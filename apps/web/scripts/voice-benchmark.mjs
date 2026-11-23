@@ -140,10 +140,6 @@ function saleScore(reference, hypothesis) {
   };
 }
 
-function saleRight(reference, hypothesis) {
-  return saleScore(reference, hypothesis).right;
-}
-
 async function modelBytes(id, dtype) {
   const response = await globalThis.fetch(`https://huggingface.co/api/models/${id}/tree/main/onnx`);
   if (!response.ok) return null;

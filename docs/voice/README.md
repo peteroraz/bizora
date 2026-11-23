@@ -28,6 +28,20 @@ microphone ─► recorder.ts (≤30 s, 16 kHz mono, memory only)
 | Screens | `apps/web/src/components/voice-sale.tsx`, `waiting-sales.tsx`, `voice-settings.tsx` |
 | Customer names for the phone | `GET /api/v1/customers/directory`, `apps/web/src/lib/offline/customers.ts` |
 
+## Pilot status (ADR-044)
+
+**Experimental.** Offline voice is offered in the pilot, but it must not be trusted without checking:
+
+- **Accuracy.** It is measured on robot voices and read-out Nigerian English, not real market sales. With Best accuracy, about one wrong sale in three comes back without a question (see [benchmark.md](benchmark.md), round 3).
+- **Review is mandatory.** Nothing is ever saved from speech until the trader taps **Confirm sale**, and every value can be edited first.
+- **Typing is the fallback.** "Type the sale in words" works on every phone and is suggested on phones that report under 2 GB of memory, or that can't run the model.
+- **Explicit download.** The model downloads only when the person taps Download, after seeing the size (Standard about 95 MB, Best accuracy about 265 MB). The download can be stopped and resumed, and removed in Settings.
+- **Requirements:**
+  - a browser with WebAssembly SIMD, Web Workers, the Cache API, IndexedDB and microphone access over HTTPS;
+  - about 1 GB of free memory while reading for Best accuracy, and roughly half that for Standard (estimates, not measured on phones);
+  - storage of about 100 MB (Standard) or 270 MB (Best accuracy).
+- **Model versions:** Standard is `onnx-community/whisper-base.en` at `51eefc0a`; Best accuracy is `onnx-community/whisper-small.en` at `482fb8ba`; the runtime is ONNX Runtime Web 1.31.0-dev. Every file is pinned by SHA-256.
+
 ## Models (ADR-041)
 
 Chosen on a benchmark of Nigerian English recordings and spoken sales; see [benchmark.md](benchmark.md).

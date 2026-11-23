@@ -465,6 +465,10 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
 
       {stage === "review" && review ? (
         <div className="space-y-4" data-testid="voice-review">
+          {/* Voice can mishear a number and still look complete (benchmark round 3), so every review says so. */}
+          <p className="rounded-control border border-warning bg-warning-bg px-3 py-2 text-sm text-warning" data-testid="voice-check-notice">
+            {t("checkEverything")}
+          </p>
           <FormField id="voice-heard" label={t("heardLabel")} hint={t("heardHint")}>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Textarea id="voice-heard" value={transcript} rows={2} maxLength={600} onChange={(event) => setTranscript(event.target.value)} data-testid="voice-transcript" />

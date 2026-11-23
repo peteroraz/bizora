@@ -130,7 +130,14 @@ test("a sale saved offline stays in its shop even if the owner switches shop bef
   await page.unroute("**/api/v1/sync/push");
   await page.getByTestId("sync-now").click({ timeout: 3000 }).catch(() => undefined);
   await expect(page.getByTestId("sync-now")).toHaveCount(0, { timeout: 20_000 });
-  const sales = (await (await request.get("/api/v1/sales", { headers })).json()).data.items as { id: string }[];
+  await expect(page.getByText(/could not be saved/)).toHaveCount(0);
+  let sales: { id: string }[] = [];
+  await expect
+    .poll(async () => {
+      sales = (await (await request.get("/api/v1/sales", { headers })).json()).data.items as { id: string }[];
+      return sales.length;
+    })
+    .toBe(1);
   const sale = (await (await request.get(`/api/v1/sales/${sales[0]!.id}`, { headers })).json()).data.sale as { branchName: string };
   expect(sale.branchName).toBe("Main");
 });
