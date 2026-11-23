@@ -23,11 +23,9 @@ import { SentenceInput } from "../../../../components/typing";
 import { asProduct } from "../../../../lib/offline/typed-product";
 
 import type { Line } from "../../../../components/quick-sale-lines";
+import type { ListPrices } from "../../../../components/sale-price-list";
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";
-type Tier = { min: bigint; price: bigint };
-/** Prices from a price list (ADR-048), by product and unit, largest minimum quantity first. */
-type ListPrices = { id: string; name: string; tiers: Map<string, Tier[]> };
-const tierPrice = (tiers: Tier[] | undefined, entered: bigint | null) => (entered === null ? null : (tiers?.find((tier) => entered >= tier.min)?.price ?? null));
+const tierPrice = (tiers: { min: bigint; price: bigint }[] | undefined, entered: bigint | null) => (entered === null ? null : (tiers?.find((tier) => entered >= tier.min)?.price ?? null));
 
 /** Quantities are thousandths (ADR-014); the stepper shows them as people type them: "3", "2.5". */
 const quantityText = (thousandths: bigint) =>
@@ -47,6 +45,8 @@ const SaleMoneyExtras = lazy(extrasModule);
 const linesModule = () => import("../../../../components/quick-sale-lines");
 const QuickSaleLines = lazy(linesModule);
 const savedItemsModule = () => import("../../../../lib/offline/saved-items");
+const priceListModule = () => import("../../../../components/sale-price-list");
+const SalePriceList = lazy(priceListModule);
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -98,8 +98,7 @@ function QuickSaleScreen() {
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
-  // Price lists (ADR-048): those staff may choose here, the one chosen, and the prices the sale will use.
-  const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
+  // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
   const [chosenList, setChosenList] = useState("");
   const [fromList, setFromList] = useState<ListPrices | null>(null);
   const typedOk = sellsTyped(access.salesItems);
@@ -140,7 +139,7 @@ function QuickSaleScreen() {
     })();
     warmOfflineCopy();
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
-    const preload = () => void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule()]).catch(() => undefined);
+    const preload = () => void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule(), priceListModule()]).catch(() => undefined);
     if (document.readyState === "complete") window.setTimeout(preload, 0);
     else window.addEventListener("load", () => window.setTimeout(preload, 0), { once: true });
     if (typedOk) {
@@ -153,40 +152,6 @@ function QuickSaleScreen() {
       })();
     }
   }, [access.owner, access.branchId, typedOk]);
-
-  useEffect(() => {
-    void api("/api/v1/pricing/lists")
-      .then(async (response) => (response.ok ? ((await response.json()) as { data: { lists: { id: string; name: string; active: boolean }[] } }) : null))
-      .then((payload) => setLists((payload?.data.lists ?? []).filter((list) => list.active)))
-      .catch(() => undefined);
-  }, []);
-
-  // The same rule as the sale: the list chosen here, else the customer's. Offline, the everyday prices are used.
-  useEffect(() => {
-    if (!chosenList && !customer?.id) {
-      setFromList(null);
-      return;
-    }
-    let live = true;
-    const query = new URLSearchParams({ ...(chosenList ? { priceListId: chosenList } : {}), ...(customer?.id ? { customerId: customer.id } : {}) });
-    void api(`/api/v1/pricing/for-sale?${query.toString()}`)
-      .then(async (response) => (response.ok ? ((await response.json()) as { data: { priceList: { id: string; name: string } | null; prices: { productId: string; unitCode: string; minQuantity: string; priceMinor: string }[] } }) : null))
-      .then((payload) => {
-        if (!live) return;
-        const list = payload?.data.priceList;
-        if (!list) return setFromList(null);
-        const tiers = new Map<string, Tier[]>();
-        for (const price of payload.data.prices) {
-          const key = `${price.productId}:${price.unitCode}`;
-          tiers.set(key, [...(tiers.get(key) ?? []), { min: parseQuantity(price.minQuantity) ?? 1000n, price: BigInt(price.priceMinor) }].sort((a, b) => (b.min > a.min ? 1 : -1)));
-        }
-        setFromList({ id: list.id, name: list.name, tiers });
-      })
-      .catch(() => live && setFromList(null));
-    return () => {
-      live = false;
-    };
-  }, [chosenList, customer?.id]);
 
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
@@ -487,27 +452,9 @@ function QuickSaleScreen() {
             </Suspense>
           ) : null}
         </fieldset>
-        {lists.length > 0 ? (
-          <FormField id="sale-price-list" label={t("priceList")} hint={fromList && !chosenList ? t("customerPrices", { name: fromList.name }) : undefined}>
-            <select
-              id="sale-price-list"
-              className="h-11 w-full rounded-control border border-border bg-input px-2 text-sm"
-              value={chosenList}
-              onChange={(event) => setChosenList(event.target.value)}
-            >
-              <option value="">{t("everydayPrices")}</option>
-              {lists.map((list) => (
-                <option key={list.id} value={list.id}>
-                  {list.name}
-                </option>
-              ))}
-            </select>
-          </FormField>
-        ) : fromList ? (
-          <p className="text-sm text-muted" role="status">
-            {t("customerPrices", { name: fromList.name })}
-          </p>
-        ) : null}
+        <Suspense fallback={null}>
+          <SalePriceList customerId={customer?.id ?? null} chosen={chosenList} onChosen={setChosenList} onPrices={setFromList} />
+        </Suspense>
         {findsCustomers ? (
           <Card className="p-4">
             <p className="text-sm font-medium">{balance > 0n || mode === "credit" ? t("customer") : t("customerOptional")}</p>
