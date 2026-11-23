@@ -76,6 +76,7 @@ export class JobController {
   }
 
   @Post(":id/cancel")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.SALES_CREATE)
   async cancel(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {

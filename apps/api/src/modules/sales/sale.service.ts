@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { customerPath, handleOf } from "../../common/handles.js";
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
@@ -30,7 +31,10 @@ import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, users } from "../../db/schema.js";
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
-import { DB } from "../../tokens.js";
+import { APP_ENV, DB, EMAIL } from "../../tokens.js";
+import { publicWebOrigin, type AppEnv } from "@bizora/config/env";
+import type { EmailPort } from "../email/email.port.js";
+import { renderEmail } from "../email/templates.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor, type BusinessRow, type ProductRow } from "../inventory/inventory-scope.js";
@@ -88,6 +92,8 @@ export class SaleService {
     @Inject(NotificationService) private readonly notifications: NotificationService,
     @Inject(BrandingService) private readonly branding: BrandingService,
     @Inject(ReturnService) private readonly returns: ReturnService,
+    @Inject(EMAIL) private readonly email: EmailPort,
+    @Inject(APP_ENV) private readonly env: AppEnv,
   ) {}
 
   async create(tenant: TenantContext, raw: unknown, options: { source?: SaleSource; soldAt?: Date; allowOlder?: boolean } = {}) {
@@ -686,6 +692,35 @@ export class SaleService {
       creditMinor: BigInt(totals?.credit ?? 0).toString(),
       byMethod: Object.fromEntries(methods.map((row) => [row.method, BigInt(row.amount).toString()])),
     };
+  }
+
+  /**
+   * Sends the customer a link to their receipt or invoice by email (ADR-042): the same page as the WhatsApp link, never
+   * the PDF itself. Only someone who can see the sale may send it; the address is not stored, only its domain is logged.
+   */
+  async emailReceipt(tenant: TenantContext, id: string, raw: unknown) {
+    const { to } = z.object({ to: z.string().trim().toLowerCase().email().max(254) }).parse(raw);
+    const sale = await this.get(tenant, id);
+    if (sale.view !== "full") throw new ApiError("FORBIDDEN", "Only the full sale can be sent.", 403);
+    const rendered = renderEmail({
+      title: `Your ${sale.documents.includes("receipt") ? "receipt" : "invoice"} from ${sale.businessName ?? "the shop"}`,
+      paragraphs: [`Thank you for buying from ${sale.businessName ?? "us"}. Open the link to see it, or save it as a PDF.`],
+      actionLabel: "Open it",
+      actionUrl: `${publicWebOrigin(this.env)}${sale.receiptPath}`,
+    });
+    await this.email.send({ to, subject: `Your ${sale.businessName ?? "Bizora"} receipt`, kind: "receipt", correlationId: tenant.correlationId, ...rendered });
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "sale.receipt_emailed",
+      entityType: "sale",
+      entityId: id,
+      correlationId: tenant.correlationId,
+      businessId: tenant.businessId ?? null,
+      actorType: tenant.actorType ?? "HUMAN",
+      metadata: { toDomain: to.split("@")[1] ?? "" },
+    });
+    return { sent: true };
   }
 
   async get(tenant: TenantContext, id: string) {

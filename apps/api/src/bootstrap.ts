@@ -28,7 +28,7 @@ export async function createApp(env: AppEnv, db: AppDatabase, logger: Logger) {
     bodyParser: false,
   });
   if (env.TRUST_PROXY) {
-    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+    app.getHttpAdapter().getInstance().set("trust proxy", env.TRUST_PROXY_HOPS ?? 1);
   }
   app.use(CUSTOMER_IMPORT_PATH, json({ limit: CUSTOMER_IMPORT_BODY_LIMIT }));
   // Product and sales imports (up to 2,000 rows) get the same larger limit; every other route keeps the small one.

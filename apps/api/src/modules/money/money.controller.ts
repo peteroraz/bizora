@@ -47,6 +47,7 @@ export class MoneyController {
   }
 
   @Post("expenses/:id/approve")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.EXPENSES_APPROVE)
   async approve(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
@@ -54,6 +55,7 @@ export class MoneyController {
   }
 
   @Post("expenses/:id/void")
+  @Idempotent()
   @HttpCode(200)
   @RequireAnyPermission(Permission.EXPENSES_RECORD, Permission.EXPENSES_APPROVE)
   async voidExpense(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
@@ -76,6 +78,7 @@ export class MoneyController {
   }
 
   @Post("movements/:id/void")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.EXPENSES_APPROVE)
   async voidMove(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {

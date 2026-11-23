@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
@@ -67,7 +67,9 @@ export class CustomersController {
 
   @Get("customers/:id/followups")
   @RequirePermissions(Permission.CUSTOMERS_READ)
-  async customerFollowups(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+  async customerFollowups(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    // The customer must be this business's (ADR-043): another business's id is "not found", not an empty list.
+    await this.customers.get(tenant, id);
     const items = (await this.customers.listFollowups(tenant, "today"))
       .concat(await this.customers.listFollowups(tenant, "overdue"))
       .concat(await this.customers.listFollowups(tenant, "upcoming"))

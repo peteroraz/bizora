@@ -54,6 +54,9 @@ const envSchema = z
     THROTTLE_AUTH_LIMIT: z.coerce.number().int().positive().default(20),
     INVITE_TOKEN_EXPOSE: booleanFromEnv,
     TRUST_PROXY: booleanFromEnv,
+    // How many proxies sit in front of the API (ADR-043): Google's front end, plus the web app when it forwards /api.
+    // Rate limits key on the client address found this many hops back; check it on staging (pilot runbook).
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(5).default(1),
     // Plan given to new organizations (Addendum v1.2 §12). Must match a row in the plans table.
     DEFAULT_PLAN_CODE: z.enum(["starter", "business"]).optional(),
     // Lifetime of a staff PIN session's refresh token on a shop device.
@@ -89,6 +92,13 @@ const envSchema = z
     if (value.AI_PROVIDER === "vertex" && !value.VERTEX_PROJECT) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["VERTEX_PROJECT"], message: "is required when AI_PROVIDER is vertex" });
     }
+    // Real businesses (ADR-042): invitations and resets must arrive by email, and their tokens never leave the server.
+    if (value.NODE_ENV === "production" && value.EMAIL_PROVIDER === "console") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_PROVIDER"], message: "must be a real email provider in production" });
+    }
+    if (value.NODE_ENV === "production" && value.INVITE_TOKEN_EXPOSE === true) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["INVITE_TOKEN_EXPOSE"], message: "must be off in production; invitations are sent by email" });
+    }
     if (value.AI_PROVIDER === "fake" && value.NODE_ENV === "production") {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["AI_PROVIDER"], message: "fake is for tests only" });
     }
@@ -102,6 +112,7 @@ export type AppEnv = Omit<
   | "COOKIE_SECURE"
   | "INVITE_TOKEN_EXPOSE"
   | "TRUST_PROXY"
+  | "TRUST_PROXY_HOPS"
   | "DATABASE_SOCKET_DIR"
   | "EMAIL_PROVIDER"
   | "EMAIL_API_KEY"
@@ -128,6 +139,7 @@ export type AppEnv = Omit<
   COOKIE_SECURE: boolean;
   INVITE_TOKEN_EXPOSE: boolean;
   TRUST_PROXY: boolean;
+  TRUST_PROXY_HOPS?: number;
   DATABASE_SOCKET_DIR?: string;
   EMAIL_PROVIDER?: "console" | "resend";
   EMAIL_API_KEY?: string;
