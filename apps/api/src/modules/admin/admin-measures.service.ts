@@ -53,10 +53,16 @@ export class AdminMeasuresService {
           (SELECT count(*) FROM sales x WHERE x.tenant_id = o.id AND x.voided_at >= ${sinceText}::timestamptz) AS voided_sales,
           (SELECT count(*) FROM sales x WHERE x.tenant_id = o.id AND x.created_at >= ${sinceText}::timestamptz AND x.balance_minor > 0) AS credit_sales,
           (SELECT count(*) FROM customer_payments p WHERE p.tenant_id = o.id AND p.created_at >= ${sinceText}::timestamptz) AS debt_payments,
-          (SELECT count(*) FROM customers c WHERE c.tenant_id = o.id AND c.archived_at IS NULL) AS customers
+          (SELECT count(*) FROM customers c WHERE c.tenant_id = o.id AND c.archived_at IS NULL) AS customers,
+          o.onboarding_completed_at::text AS onboarded_at,
+          (SELECT min(p.created_at)::text FROM products p WHERE p.tenant_id = o.id) AS first_product_at,
+          (SELECT min(m.created_at)::text FROM stock_movements m WHERE m.tenant_id = o.id) AS first_stock_at,
+          (SELECT min(x.created_at)::text FROM sales x WHERE x.tenant_id = o.id AND NOT x.history_only) AS first_sale_at,
+          (SELECT min(x.created_at)::text FROM sales x WHERE x.tenant_id = o.id AND NOT x.history_only AND (x.due_date IS NOT NULL OR x.balance_minor > 0)) AS first_credit_sale_at,
+          (SELECT min(p.created_at)::text FROM customer_payments p WHERE p.tenant_id = o.id) AS first_debt_payment_at,
+          (SELECT min(x.created_at)::text FROM sales x WHERE x.tenant_id = o.id AND x.source = 'offline') AS first_offline_sale_at
         FROM organizations o
-        ORDER BY o.created_at DESC
-        LIMIT 500`),
+        ORDER BY o.created_at DESC`),
     );
     const events = rowsOf(
       await this.db.execute(sql`
@@ -83,11 +89,23 @@ export class AdminMeasuresService {
         creditSales: count(business.credit_sales),
         debtPayments: count(business.debt_payments),
         customers: count(business.customers),
+        firstSteps: {
+          registered: text(business.created_at),
+          onboarded: text(business.onboarded_at),
+          product: text(business.first_product_at),
+          stock: text(business.first_stock_at),
+          sale: text(business.first_sale_at),
+          creditSale: text(business.first_credit_sale_at),
+          debtPayment: text(business.first_debt_payment_at),
+          offlineSale: text(business.first_offline_sale_at),
+        },
         salesValue: values.filter((value) => value.tenant_id === id).map((value) => ({ currency: String(value.currency_code).trim(), totalMinor: String(value.total_minor) })),
         events: counted,
       };
     });
     const real = rows.filter((row) => !row.sample);
+    const reached = (step: keyof (typeof rows)[number]["firstSteps"]) => real.filter((row) => row.firstSteps[step] !== null).length;
+    const sinceTime = since.getTime();
     return {
       days,
       since: since.toISOString(),
@@ -100,8 +118,21 @@ export class AdminMeasuresService {
         voiceConfirmed: real.reduce((sum, row) => sum + (row.events["voice.sale_confirmed"] ?? 0), 0),
         voiceShown: real.reduce((sum, row) => sum + (row.events["voice.review_shown"] ?? 0), 0),
         voiceDownloadsFailed: real.reduce((sum, row) => sum + (row.events["voice.download_failed"] ?? 0), 0),
+        registeredInPeriod: real.filter((row) => row.createdAt !== null && new Date(row.createdAt).getTime() >= sinceTime).length,
       },
-      businesses: rows,
+      /** How many real businesses have ever reached each first step (not limited to the period). */
+      firstSteps: {
+        registered: real.length,
+        onboarded: reached("onboarded"),
+        product: reached("product"),
+        stock: reached("stock"),
+        sale: reached("sale"),
+        creditSale: reached("creditSale"),
+        debtPayment: reached("debtPayment"),
+        offlineSale: reached("offlineSale"),
+      },
+      // Totals count every business; the list shows the 500 newest.
+      businesses: rows.slice(0, 500),
     };
   }
 

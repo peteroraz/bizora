@@ -84,11 +84,34 @@ Accepted on 23 Nov 2026, as part of the pre-pilot readiness sprint (items 14, 17
   - sale value per currency in minor units;
   - event counts.
   - Totals leave out sample businesses.
+- **First steps.** Counted from the records themselves, not from events, so they are complete and need no phone to be online:
+  - signed up;
+  - finished setup;
+  - first product;
+  - first stock recorded;
+  - first sale;
+  - first credit sale (first debtor);
+  - first debt payment;
+  - first offline sale.
+
+  The page shows how many businesses ever reached each step, and every business's dates. Totals count every business; the list shows the 500 newest.
 - **Admin portal, business page: Last 7 days panel.**
   - Sync refusals by code, and voice problems.
   - Open sessions and shop phones signed in.
   - Last activity and last offline sync.
   - App errors stay in Cloud Logging and Error Reporting (ADR-036); the panel says where to look.
+
+### What Google Cloud already measures
+
+The rest of the brief's item 17 comes from Cloud Run and Error Reporting, which already collect it without any personal data being added:
+
+| Measure | Where to look |
+| --- | --- |
+| Crashes in the app | Error Reporting, service `bizora-web-browser` (ADR-036) |
+| API errors | Error Reporting, service `bizora-api`. Alert: more than 5 server errors in 5 minutes (`monitoring.tf`). |
+| Slow requests | Logs Explorer: `resource.type="cloud_run_revision" resource.labels.service_name="bizora-api" httpRequest.latency>"2s"` |
+| Failed sign-ins | Logs Explorer: `resource.labels.service_name="bizora-api" httpRequest.requestUrl:"/api/v1/auth/login" (httpRequest.status=401 OR httpRequest.status=429)` |
+| Voice switched on by a phone | `voice.download_finished` in the pilot measures |
 
 ### Sample business
 
@@ -131,5 +154,6 @@ The home screen's setup checklist already uses business words: add products, the
 - **Gaps:**
   - Voice downloads started from Settings are not yet counted, and a stopped download is not counted as cancelled. Those screens are changed in the offline and mobile pull request; the events follow once both are merged.
   - Measures from phones undercount when a page closes offline.
-  - The measures page lists the 500 newest businesses.
+  - The measures page lists the 500 newest businesses; the totals count all.
+  - Failed sign-ins are counted from request logs, not per business: a failed sign-in has no business.
   - PGlite does not show every difference from the real driver: raw queries with JavaScript `Date` values failed only on Postgres. The measures queries now pass times as text, and were run against a real Postgres database.

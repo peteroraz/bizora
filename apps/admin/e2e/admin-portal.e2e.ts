@@ -107,6 +107,7 @@ test("Bizora staff sign in with Google, find a business and help it, and every s
   // Pilot measures: counts per business, nothing anyone typed.
   await page.getByRole("link", { name: "Pilot measures" }).click();
   await expect(page.getByTestId("measures-totals")).toBeVisible();
+  await expect(page.getByTestId("measures-first-steps")).toContainText("Made a sale");
   await expect(page.getByRole("link", { name: shopName })).toBeVisible();
   await expect(page.getByText("Akosua Mensah")).toHaveCount(0);
   await page.getByRole("link", { name: shopName }).click();

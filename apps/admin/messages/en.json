@@ -383,7 +383,8 @@
       "refused": "Offline changes refused",
       "voice": "Voice sales confirmed",
       "voiceValue": "{confirmed} of {shown} reviewed",
-      "downloads": "Voice downloads that failed"
+      "downloads": "Voice downloads that failed",
+      "registered": "New businesses in this period"
     },
     "sampleNote": "Sample businesses are listed but not counted in the totals. Voice measures come from phones and are lost if a phone closes while offline, so they undercount.",
     "columns": {
@@ -399,7 +400,19 @@
     },
     "voiceCell": "{confirmed} / {shown}",
     "sample": "Sample",
-    "never": "Never"
+    "never": "Never",
+    "firstSteps": {
+      "title": "First steps",
+      "lead": "How many businesses have ever done each of these, counted from their records. Sample businesses are left out.",
+      "registered": "Signed up",
+      "onboarded": "Finished setup",
+      "product": "Added a product",
+      "stock": "Recorded stock",
+      "sale": "Made a sale",
+      "creditSale": "Sold on credit",
+      "debtPayment": "Took a debt payment",
+      "offlineSale": "Made a sale offline"
+    }
   },
   "health": {
     "title": "Last 7 days",

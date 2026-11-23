@@ -230,6 +230,10 @@ describe("ADR-045: running the pilot", () => {
       expect(kano).toMatchObject({ name: "Kano Corner Shop", sample: false, sales: 1, customers: 2, salesValue: [{ currency: "NGN", totalMinor: "15000000" }] });
       expect(kano.events).toMatchObject({ "voice.review_shown": 1, "voice.sale_confirmed": 1, "voice.download_failed": 1, "sync.applied": 1, "sync.rejected": 1, "sync.duplicate": 1 });
       expect(overview.body.data.totals).toMatchObject({ businesses: 2, sales: 1, voiceConfirmed: 1 });
+      // First steps (item 17): from the records themselves.
+      expect(kano.firstSteps).toMatchObject({ registered: expect.any(String), product: expect.any(String), stock: expect.any(String), sale: expect.any(String), creditSale: null, debtPayment: null });
+      expect(overview.body.data.firstSteps).toMatchObject({ registered: 2, product: 1, sale: 1, creditSale: 0 });
+      expect(overview.body.data.totals.registeredInPeriod).toBe(2);
       expect(JSON.stringify(overview.body.data)).not.toMatch(/HYPERLINK|Okoro|0803/);
 
       const health = await request(http).get(`/api/admin/v1/businesses/${a.tenantId}/health`).set("cookie", watcher).expect(200);

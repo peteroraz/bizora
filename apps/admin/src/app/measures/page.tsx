@@ -24,11 +24,14 @@ type Business = {
 };
 type Measures = {
   days: number;
-  totals: { businesses: number; activeBusinesses: number; sales: number; offlineSales: number; syncRejected: number; voiceConfirmed: number; voiceShown: number; voiceDownloadsFailed: number };
+  firstSteps: Record<(typeof STEPS)[number], number>;
+  totals: { registeredInPeriod: number; businesses: number; activeBusinesses: number; sales: number; offlineSales: number; syncRejected: number; voiceConfirmed: number; voiceShown: number; voiceDownloadsFailed: number };
   businesses: Business[];
 };
 
 const PERIODS = [7, 14, 30, 90];
+/** First steps, in the order a new business usually takes them (item 17). */
+const STEPS = ["registered", "onboarded", "product", "stock", "sale", "creditSale", "debtPayment", "offlineSale"] as const;
 
 /** Pilot measures (ADR-045): counts per business, no customer names, nothing anyone typed. */
 export default function MeasuresPage() {
@@ -48,6 +51,7 @@ export default function MeasuresPage() {
   const totals = data?.totals;
   const tiles = totals
     ? [
+        { label: t("tiles.registered"), value: String(totals.registeredInPeriod) },
         { label: t("tiles.active"), value: t("tiles.activeValue", { active: totals.activeBusinesses, total: totals.businesses }) },
         { label: t("tiles.sales"), value: String(totals.sales) },
         { label: t("tiles.offline"), value: String(totals.offlineSales) },
@@ -87,6 +91,20 @@ export default function MeasuresPage() {
               </div>
             ))}
           </dl>
+          <section className="space-y-2" aria-labelledby="first-steps">
+            <h2 id="first-steps" className="text-lg font-semibold">
+              {t("firstSteps.title")}
+            </h2>
+            <p className="text-sm text-muted">{t("firstSteps.lead")}</p>
+            <ol className="grid gap-2 sm:grid-cols-4" data-testid="measures-first-steps">
+              {STEPS.map((step) => (
+                <li key={step} className="rounded-card border border-border p-3">
+                  <p className="text-sm text-muted">{t(`firstSteps.${step}`)}</p>
+                  <p className="text-xl font-semibold tabular-nums">{data.firstSteps[step]}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
           <p className="text-xs text-muted">{t("sampleNote")}</p>
           <Table>
             <TableHeader>
