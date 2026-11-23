@@ -24,6 +24,7 @@ import type { CachedProduct } from "../lib/offline/catalog";
 import { readCustomerDirectory, refreshCustomerDirectory, type DirectoryCustomer } from "../lib/offline/customers";
 import type { OutboxOwner } from "../lib/offline/outbox";
 import { cleanUp, tidyWords } from "../lib/voice/clean";
+import { track } from "../lib/pilot-events";
 import { cancelInstall, detectSupport, downloadSize, engine, install, installState, lowMemory, prepare, VoiceError, type InstallState, type Support } from "../lib/voice/engine";
 import { MAX_SECONDS, startRecording, type Recording } from "../lib/voice/recorder";
 import { CaptureBar } from "./capture-bar";
@@ -163,6 +164,12 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     setComment("");
     setProblem(null);
     setStage("review");
+    track("voice.review_shown");
+  }
+
+  function close() {
+    if (stage === "review") track("voice.review_closed");
+    onClose();
   }
 
   /** Words heard by Bizora AI on the server, read here the same way as words heard on the phone. */
@@ -174,8 +181,11 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     setProblem(null);
     setProgress({ loaded: 0, total: size ?? 0 });
     try {
+      track("voice.download_started");
       setState(await install((loaded, total) => setProgress({ loaded, total })));
+      track("voice.download_finished");
     } catch (error) {
+      track("voice.download_failed", error instanceof VoiceError ? error.code : navigator.onLine ? "failed" : "offline");
       setProblem(installProblem(error));
     } finally {
       setProgress(null);
@@ -223,6 +233,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
       // Trim silence, remove hum, level quiet speech (ADR-041). Nothing said: say so instead of guessing.
       const cleaned = cleanUp(recorded);
       if (!cleaned.heard) {
+        track("voice.read_failed", "nothing_heard");
         setProblem(t("errors.nothingHeard"));
         setStage("start");
         return;
@@ -238,6 +249,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
       }
       read(words);
     } catch {
+      track("voice.read_failed", "transcribe");
       setProblem(t("errors.transcribe"));
       setStage("start");
     }
@@ -310,6 +322,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     else if (paid.length === 0) mode = "credit";
     else if (paid.length === 1 && paidTotal === totalMinor) mode = paid[0]!.method as VoiceResult["mode"];
     const text = (method: string) => (by(method) ? amountText(by(method), currency) : "");
+    track("voice.sale_confirmed");
     onDone(
       {
         lines,
@@ -344,7 +357,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
             </span>
           </div>
         </div>
-        <button type="button" className="min-h-11 px-2 text-sm text-muted underline underline-offset-2" onClick={onClose}>
+        <button type="button" className="min-h-11 px-2 text-sm text-muted underline underline-offset-2" onClick={close}>
           {t("close")}
         </button>
       </div>
@@ -446,6 +459,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
+            track("voice.typed_used");
             read(typed);
           }}
         >
@@ -688,7 +702,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
             <Button type="button" variant="ghost" onClick={() => (ready ? void startListening() : setStage("typing"))}>
               {ready ? t("recordAgain") : t("typeAgain")}
             </Button>
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={close}>
               {t("cancel")}
             </Button>
           </div>

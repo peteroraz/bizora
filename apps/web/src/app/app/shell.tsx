@@ -71,7 +71,7 @@ export type ShellBranch = { id: string; name: string; businessId: string };
 
 export type ShellProfile = {
   user?: { displayName: string; email: string | null; emailVerifiedAt?: string | null; kind?: string } | null;
-  organization?: { name: string } | null;
+  organization?: { name: string; isSample?: boolean } | null;
   /** Changes when the company logo changes (ADR-021); null when there is no logo. */
   logoVersion?: string | null;
   tenant?: {
@@ -86,6 +86,8 @@ export type ShellProfile = {
     membershipId?: string;
   };
   onboardingCompleted?: boolean;
+  /** Switches for this business (ADR-045). Missing: as before. */
+  features?: Partial<Record<"offline_voice" | "photo_reads" | "support_view", boolean>>;
   membership?: { businessId: string | null; branchId: string | null; defaultBranchId?: string | null } | null;
   businesses: ShellBusiness[];
   branches: ShellBranch[];
@@ -134,6 +136,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       ...(currentBusiness?.countryCode ? { country: currentBusiness.countryCode.trim() } : {}),
       ...(currentBusiness?.baseCurrencyCode ? { currency: currentBusiness.baseCurrencyCode.trim() } : {}),
       ...(currentBusiness?.timezone ? { timezone: currentBusiness.timezone } : {}),
+      offlineVoice: profile.features?.offline_voice !== false,
     }),
     [
       profile.tenant?.permissions,
@@ -147,6 +150,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       currentBusiness?.countryCode,
       currentBusiness?.baseCurrencyCode,
       currentBusiness?.timezone,
+      profile.features?.offline_voice,
     ],
   );
   const [outbox, setOutbox] = useState<{ pending: number; retrying: number; rejected: { id: string; error: { message: string } | null; meta?: { summary: string } }[] }>({
@@ -529,6 +533,11 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
           </div>
         ) : null}
         {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email && pathname === "/app" ? <EmailVerificationBanner /> : null}
+        {profile.organization?.isSample ? (
+          <p className="border-b border-info bg-info-bg px-4 py-2 text-sm text-info" role="note" data-testid="sample-banner">
+            {t("sampleBusiness")}
+          </p>
+        ) : null}
         {banner}
         <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">
           <AccessProvider value={access}>{children}</AccessProvider>

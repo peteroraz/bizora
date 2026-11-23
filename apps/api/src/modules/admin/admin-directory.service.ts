@@ -176,6 +176,7 @@ export class AdminDirectoryService {
       id: organization.id,
       name: organization.name,
       handle: organization.handle,
+      sample: organization.isSample,
       phone: organization.phoneE164,
       signedUpAt: organization.createdAt.toISOString(),
       setUpAt: organization.onboardingCompletedAt?.toISOString() ?? null,

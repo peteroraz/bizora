@@ -22,6 +22,30 @@ export class ApiError extends HttpException {
   }
 }
 
+/** Words people see (pilot readiness, item 21): what happened and what to do, never a framework's own message. */
+export const VALIDATION_MESSAGE = "Some details are missing or not right. Check them and try again.";
+const STATUS_MESSAGES: Record<number, string> = {
+  400: VALIDATION_MESSAGE,
+  401: "Sign in again to continue.",
+  403: "You do not have permission to do this. Ask the business owner.",
+  404: "This could not be found. It may have been removed.",
+  405: "This could not be done.",
+  409: "This was changed by someone else. Refresh and try again.",
+  413: "This is too big to send. Use a smaller photo or file.",
+  429: "Too many tries. Wait a minute, then try again.",
+};
+/** Messages from the framework itself, not written for people: replaced by the plain words above. */
+const FRAMEWORK_MESSAGE = /^(Bad Request|Unauthorized|Forbidden( resource)?|Not Found|Cannot (GET|POST|PUT|PATCH|DELETE) |ThrottlerException|Too Many Requests|Validation failed|Method Not Allowed|Conflict|Payload Too Large|Internal Server Error|Unexpected token|Http Exception)/i;
+
+export function plainMessage(status: number, message: string) {
+  if (message && !FRAMEWORK_MESSAGE.test(message)) return message;
+  return STATUS_MESSAGES[status] ?? (status >= 500 ? unexpectedMessage() : "This could not be done. Try again.");
+}
+
+function unexpectedMessage(reference?: string) {
+  return `Something went wrong on our side. Try again in a moment.${reference ? ` If it keeps happening, tell Bizora support this code: ${reference.slice(0, 8)}.` : ""}`;
+}
+
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
   constructor(private readonly logger?: Pick<Logger, "error">) {}
@@ -56,7 +80,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       response.status(HttpStatus.BAD_REQUEST).json({
         error: {
           code: "VALIDATION_ERROR",
-          message: "Request validation failed.",
+          message: VALIDATION_MESSAGE,
           fieldErrors: exception.issues.map((issue) => ({
             field: issue.path.join("."),
             message: issue.message,
@@ -91,7 +115,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       response.status(status).json({
         error: {
           code: status === 401 ? "UNAUTHENTICATED" : status === 429 ? "RATE_LIMITED" : "HTTP_ERROR",
-          message,
+          message: status >= 500 ? unexpectedMessage(correlationId) : plainMessage(status, message),
           fieldErrors: [],
           correlationId,
         },
@@ -111,7 +135,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       response.status(parserError.status).json({
         error: {
           code: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_REQUEST_BODY",
-          message: tooLarge ? "The request is too large." : "The request body could not be read.",
+          message: tooLarge ? STATUS_MESSAGES[413] : "The details could not be read. Try again.",
           fieldErrors: [],
           correlationId,
         },
@@ -124,7 +148,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: {
         code: "INTERNAL_ERROR",
-        message: "An unexpected error occurred.",
+        message: unexpectedMessage(correlationId),
         fieldErrors: [],
         correlationId,
       },

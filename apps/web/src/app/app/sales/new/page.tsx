@@ -98,6 +98,8 @@ function QuickSaleScreen() {
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
   const [voice, setVoice] = useState(false);
+  // Bizora operations can switch voice off for a business in the pilot (ADR-045).
+  const voiceOn = access.offlineVoice !== false;
   // A sale confirmed on the voice screen is saved once its fields are in place (ADR-040).
   const [autoSave, setAutoSave] = useState(false);
   const spoken = useRef(false);
@@ -112,13 +114,13 @@ function QuickSaleScreen() {
     const params = new URLSearchParams(window.location.search);
     const customerId = params.get("customer");
     const swap = params.get("swap");
-    if (params.get("voice") === "1") setVoice(true);
+    if (params.get("voice") === "1" && voiceOn) setVoice(true);
     if (customerId) setCustomer({ id: customerId, name: params.get("name") ?? "" });
     if (swap) {
       setNote(t("swapNote", { number: swap }));
       setExtras(true);
     }
-  }, [t]);
+  }, [t, voiceOn]);
 
   useEffect(() => {
     const owner = access.owner;
@@ -133,7 +135,7 @@ function QuickSaleScreen() {
     warmOfflineCopy();
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
     const preload = () => {
-      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule()]).catch(() => undefined);
+      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : [])]).catch(() => undefined);
       // Customer names for finding a customer with no network; refreshed at most every few hours.
       if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
     };
@@ -148,7 +150,7 @@ function QuickSaleScreen() {
         if (fresh) setSavedList(fresh.items.map(asProduct));
       })();
     }
-  }, [access.owner, access.branchId, typedOk]);
+  }, [access.owner, access.branchId, typedOk, voiceOn]);
 
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
@@ -349,7 +351,7 @@ function QuickSaleScreen() {
         </p>
       ) : null}
       {!catalog ? <p className="text-sm text-muted">{t("noCatalog")}</p> : null}
-      {voice && catalog ? (
+      {voice && voiceOn && catalog ? (
         <Suspense fallback={null}>
           <VoiceSale
             products={[...(listOk ? Object.values(catalog.products) : []), ...savedList]}
@@ -376,7 +378,7 @@ function QuickSaleScreen() {
           />
         </Suspense>
       ) : null}
-      {!voice && catalog ? (
+      {!voice && voiceOn && catalog ? (
         <button type="button" className="flex min-h-14 w-full items-center justify-center gap-2 rounded-card border-2 border-primary text-base font-semibold text-primary" onClick={() => setVoice(true)} data-testid="say-sale">
           {t("voice.open")}
         </button>

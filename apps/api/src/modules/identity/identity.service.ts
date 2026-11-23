@@ -1,4 +1,5 @@
 import { EntitlementService } from "../entitlements/entitlement.service.js";
+import { FeatureService } from "../entitlements/feature.service.js";
 import { Inject, Injectable } from "@nestjs/common";
 import { hashPassword, verifyPassword } from "@bizora/auth";
 import type { AppEnv } from "@bizora/config/env";
@@ -56,6 +57,7 @@ export class IdentityService {
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
     @Inject(EntitlementService) private readonly entitlements: EntitlementService,
+    @Inject(FeatureService) private readonly features: FeatureService,
   ) {}
 
   async register(input: RegisterRequest, meta: AuthMeta): Promise<AuthPayload> {
@@ -386,6 +388,8 @@ export class IdentityService {
       membership,
       workspaces: await this.listWorkspaces(userId),
       onboardingCompleted: Boolean(organization?.onboardingCompletedAt),
+      // Switches for this business (ADR-045); the app hides what is off.
+      features: await this.features.all(tenantId),
       // Owners must accept the current Terms of use before using the app (ADR-039).
       termsVersion: TERMS_VERSION,
       termsRequired: user?.kind === "person" && membership?.role === "OWNER" && !(await this.hasAcceptedTerms(userId)),

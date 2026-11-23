@@ -21,6 +21,7 @@ import { InventoryModule } from "./modules/inventory/inventory.module.js";
 import { SalesModule } from "./modules/sales/sales.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { CaptureModule } from "./modules/capture/capture.module.js";
+import { ExportsModule } from "./modules/exports/exports.module.js";
 import { DebtorsModule } from "./modules/debtors/debtors.module.js";
 import { MoneyModule } from "./modules/money/money.module.js";
 import { ShopsModule } from "./modules/shops/shops.module.js";
@@ -77,6 +78,7 @@ export class AppModule {
         SalesModule,
         NotificationsModule,
         CaptureModule,
+        ExportsModule,
         DebtorsModule,
         MoneyModule,
         ShopsModule,

@@ -9,6 +9,7 @@ import type { AppDatabase } from "../../db/database.js";
 import { aiUsage, branches, products } from "../../db/schema.js";
 import { APP_ENV, DB } from "../../tokens.js";
 import { EntitlementService } from "../entitlements/entitlement.service.js";
+import { FeatureService } from "../entitlements/feature.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { requireBusiness } from "../inventory/inventory-scope.js";
 import { CAPTURE_MODEL, type CaptureModel } from "./capture-model.js";
@@ -45,6 +46,7 @@ export class CaptureService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CAPTURE_MODEL) private readonly model: CaptureModel | null,
     @Inject(EntitlementService) private readonly entitlements: EntitlementService,
+    @Inject(FeatureService) private readonly features: FeatureService,
   ) {}
 
   /** Reads a shop a day: the plan's allowance (100 for now, ADR-033), never above the server's own limit. */
@@ -71,8 +73,9 @@ export class CaptureService {
     const business = await requireBusiness(this.db, tenant);
     const used = await this.used(tenant.tenantId, await this.shopFor(tenant, business.id), localDate(new Date(), business.timezone));
     const limit = await this.limitFor(tenant.tenantId);
+    const switchedOn = await this.features.isOn(tenant.tenantId, "photo_reads");
     return {
-      enabled: this.model !== null && limit > 0,
+      enabled: this.model !== null && limit > 0 && switchedOn,
       limit,
       remainingToday: Math.max(0, limit - used),
       targets: (Object.keys(TARGET_PERMISSION) as CaptureTarget[]).filter((target) => tenant.permissions.includes(TARGET_PERMISSION[target] as never)),
@@ -86,6 +89,7 @@ export class CaptureService {
       throw new ApiError("FORBIDDEN", "You cannot add these records.", 403);
     }
     if (!this.model || limit === 0) throw new ApiError("AI_OFF", "Reading photos and voice notes is not switched on for this organization.", 503);
+    await this.features.assertOn(tenant.tenantId, "photo_reads");
     const business = await requireBusiness(this.db, tenant);
     const today = localDate(new Date(), business.timezone);
     const shopId = await this.shopFor(tenant, business.id);
