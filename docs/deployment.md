@@ -13,7 +13,7 @@ Bizora runs on Cloud Run and Cloud SQL in `europe-west1`.
 | Point-in-time recovery | off | on |
 | API min instances | 0 | 1 |
 | Web min instances | 0 | 1 |
-| `INVITE_TOKEN_EXPOSE` | `true` | `false` |
+| `INVITE_TOKEN_EXPOSE` | `false` (from #44; was `true`) | `false` |
 
 Terraform lives in `infra/terraform/modules/bizora`. Each environment is a root module under `infra/terraform/envs`. GitHub Actions is `.github/workflows/deploy.yml`. Images are tagged with the full git SHA. Nothing is tagged `latest`.
 
@@ -420,9 +420,22 @@ Apply after the Resend key version and the Google client-secret version exist. C
 ## Known limitations
 
 - Staging's public web origin is `https://bizora-staging.baseportals.app` once its DNS record and managed certificate are in place. The run.app host keeps serving. Production does not have a custom domain or a load balancer yet.
-- Staging sends mail with Resend from `no-reply@mail.baseportals.app` after the domain is verified and `bizora-email-api-key` has a version. Production stays on the console provider. Staging still sets `INVITE_TOKEN_EXPOSE=true` so invite tokens are also returned by the API. Production leaves that flag false.
-- PostgreSQL row-level security is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
-- Debtor payments, money in and out, and Ask Zora are not implemented. Sales are (ADR-015, ADR-016); AI capture from photos and voice is in ADR-018 (switched on per environment, see below).
+- Staging sends mail with Resend from `no-reply@mail.baseportals.app`. From #44 (ADR-042):
+  - production refuses the console provider, so production needs the Resend key before it starts;
+  - invitation links are no longer returned by the API on staging (`INVITE_TOKEN_EXPOSE=false`, set by the deploy and in `terraform.tfvars`).
+- PostgreSQL row-level security is not enabled. ADR-043 gates it before general availability, with a blocking isolation matrix instead (issue #43).
+- Built:
+  - sales (ADR-015, ADR-016);
+  - debtor payments (ADR-019);
+  - money in and out, cash and expenses (ADR-028 onwards);
+  - AI capture from photos and voice (ADR-018, switched on per environment and per business, ADR-045);
+  - offline voice (ADR-040, ADR-041, ADR-044).
+
+  Not built: "Ask Zora" (an AI assistant), and payment gateways.
+- Pilot operations (ADR-045):
+  - switches per business, records export and pilot measures, all in the Admin portal and Settings;
+  - a sample business script (`pnpm --filter @bizora/api sample`);
+  - the pilot runbook is `docs/PILOT_DEPLOYMENT_RUNBOOK.md`.
 - There is no billing. Every organization starts on the `starter` plan (1 branch, 2 staff, 2 shop devices). To move one to `business`, run in Cloud SQL Studio: `UPDATE organization_plans SET plan_code = 'business' WHERE tenant_id = '<organization id>';`. `DEFAULT_PLAN_CODE` changes the plan given to new organizations only.
 - Plan limits are checked before the insert. Two requests at the same moment could both pass the last free place.
 - Shop staff auto-lock after 5 minutes without input in the browser, with a warning 30 seconds before. It cannot be changed per business yet. The server limit is the 12-hour staff refresh lifetime (`STAFF_SESSION_TTL`), counted from the last use.

@@ -8,6 +8,23 @@ Bizora's books live in one Cloud SQL Postgres instance, `bizora-pg` (ADR-005).
 - **Point-in-time recovery** is on in production, with 7 days of logs. It is off on staging.
 - **Deletion protection** is on at both the Terraform level and the Cloud SQL level.
 
+These are the settings in Terraform. Check them in Google Cloud and write a line here each time (pilot runbook, step 5):
+
+| Date | Project | Backups on | Last backup (UTC) and status | Point-in-time recovery | By |
+|---|---|---|---|---|---|
+| | | | | | |
+
+## Recovery point and recovery time
+
+- **Recovery point** (how much could be lost), by design:
+  - production: about 5 minutes, with point-in-time recovery;
+  - staging: up to 24 hours, the daily backup.
+- **Recovery time:** unknown until the drill below has been run.
+
+Do not promise either figure to a business until a drill has measured them.
+
+**The records export is not a backup.** An owner's records export (Settings › Download your records, ADR-045) is a copy for the owner, not a way to restore Bizora.
+
 ## When something has gone wrong
 
 1. **Stop writes if data is being damaged.** Set `bizora-api` to 0 instances, or lock the shops affected (ADR-034).
