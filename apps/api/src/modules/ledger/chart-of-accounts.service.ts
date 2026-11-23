@@ -17,8 +17,10 @@ export class ChartOfAccountsService {
   constructor(@Inject(DB) private readonly db: AppDatabase) {}
 
   async ensure(executor: DbExecutor, tenantId: string, businessId: string, actorUserId: string | null = null) {
-    // Lock the business so two requests cannot create the same accounts at once.
-    await executor.execute(sql`SELECT id FROM businesses WHERE tenant_id = ${tenantId} AND id = ${businessId} FOR UPDATE`);
+    // One request at a time creates this business's accounts. An advisory lock, not `FOR UPDATE` on the business row:
+    // every insert that refers to the business holds a key-share lock on that row, so a row lock here deadlocked with
+    // another request that had already taken a document number (5 products with stock at once, performance baseline).
+    await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`chart:${businessId}`}, 0))`);
     const [business] = await executor
       .select({ industryCode: businesses.industryCode })
       .from(businesses)

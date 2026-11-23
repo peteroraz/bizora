@@ -1,8 +1,10 @@
 # Bizora
 
-AI-native, multi-tenant business operating platform. This repository currently contains **Sprint 1–2.5**: monorepo foundation, PWA shell, NestJS API, tenant model, authentication, onboarding/RBAC, session and tenancy hardening, isolation tests, CI and Cloud Run/SQL configuration.
+A multi-tenant business platform for small traders: sales at the counter and offline, customers and what they owe, stock, suppliers, jobs, expenses and cash, double-entry books behind every record, invoices and receipts, staff with roles and shop phones, and an Admin portal for Bizora's own staff.
 
-Later sprints add CRM, catalog, sales documents, payments, inventory and Ask Zora. Do not implement those until the current gates remain green.
+**Status: pre-pilot.** It is being made ready for a controlled pilot with a few Nigerian businesses. It is not generally available and holds no security or data protection certification. Where each part stands: `docs/PILOT_READINESS_STATUS.md`. The verdict: `docs/PILOT_READINESS_REPORT.md`. How to deploy and run the pilot: `docs/PILOT_DEPLOYMENT_RUNBOOK.md`.
+
+Not built: card or online payment gateways, automatic WhatsApp messages, AI agents ("Ask Zora"), PostgreSQL row-level security (ADR-043), billing.
 
 ## Prerequisites
 
@@ -38,7 +40,9 @@ pnpm build
 pnpm audit --prod
 ```
 
-Tenant isolation tests in `apps/api/src/tenant-isolation.test.ts` are blocking. CI also runs Gitleaks.
+Tenant isolation tests (`apps/api/src/tenant-isolation.test.ts`, and the route-by-route matrix `tenant-matrix.test.ts` from ADR-043) are blocking. CI also runs the browser tests (`apps/web/e2e`, `apps/admin/e2e`), Gitleaks and Terraform validation.
+
+Pilot checks: `node --experimental-strip-types scripts/pilot-readiness-check.ts` (add `--url <staging>` to check a running environment). Performance: `scripts/perf-baseline.ts` (`docs/PILOT_PERFORMANCE_BASELINE.md`).
 
 The remaining `pnpm audit` exception is documented in `docs/adr/ADR-004-pnpm-audit-exception.md`.
 
@@ -54,13 +58,16 @@ See `docs/deployment.md` for the first-time runbook: state buckets, Terraform, t
 
 Images are built from `apps/api/Dockerfile`, `apps/web/Dockerfile` and `apps/admin/Dockerfile` and deployed by `.github/workflows/deploy.yml`. Do not apply `infra/cloudrun/*.yaml`.
 
-Set `TRUST_PROXY=true` in production. The API trusts **1 hop** (`X-Forwarded-For` from Cloud Run). If a Google external HTTPS load balancer is placed in front of Cloud Run, set trust to **2 hops**.
+Set `TRUST_PROXY=true` in production. The API trusts `TRUST_PROXY_HOPS` hops (default 1). Check the right number on staging before the pilot (runbook, step 4): requests reach the API through the web service.
 
 ## Known limitations
 
-- Sign-in limits (`@nestjs/throttler`) are kept in Postgres (ADR-036), so every `bizora-api` instance counts the same attempts. Terraform allows up to `api_max_instances` (4 by default).
-- There is no custom domain yet. The public URLs are the Cloud Run `run.app` hosts.
-- There is no email delivery yet. Invite tokens are returned by the API only when `INVITE_TOKEN_EXPOSE=true` (staging). Production leaves that off.
-- PostgreSQL RLS is not enabled yet (`docs/adr/ADR-002-postgres-rls.md`).
-- CRM, catalog, sales, payments, inventory, and Ask Zora are not implemented.
-- Offline voice sales (ADR-040, ADR-041, `docs/voice/README.md`) are English only. They were measured on read-out Nigerian English (`docs/voice/benchmark.md`), not on real market sales or physical phones. The speech models (Standard about 77 MB, Best accuracy about 249 MB) are fetched at build time from Hugging Face and checked against `apps/web/src/lib/voice/models.lock.json`.
+- **Row-level security** is not enabled in PostgreSQL. Isolation between businesses is enforced in the API from the signed-in session, and is tested route by route (ADR-043). It is required before general availability (issue #43).
+- **Email** is sent by Resend on staging. Production refuses the console provider. Invitation links are never returned by the API in staging or production (ADR-042).
+- **Offline voice sales** are experimental (ADR-040, ADR-041, ADR-044, `docs/voice/README.md`):
+  - English only, measured on read-out Nigerian English and a few Pidgin-influenced sentences (`docs/voice/benchmark.md`), not on real market sales or physical phones;
+  - every sale is reviewed before it is saved;
+  - the models (Standard about 77 MB, Best accuracy about 249 MB) are fetched at build time and checked against `apps/web/src/lib/voice/models.lock.json`.
+- **Sign-in limits** (`@nestjs/throttler`) are kept in Postgres (ADR-036), so every `bizora-api` instance counts the same attempts.
+- **Restores** are documented (`docs/runbooks/restore.md`), but the drill has not been run yet, so no recovery time is promised.
+- More limits, by area: `docs/deployment.md`, Known limitations.
