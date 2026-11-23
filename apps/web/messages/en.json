@@ -474,7 +474,8 @@
     "lockSoon": "This screen locks in 30 seconds. Tap anywhere to keep working.",
     "keepWorking": "Keep working",
     "opensHere": "Bizora opens in this shop when you sign in.",
-    "openHere": "Always open Bizora in this shop"
+    "openHere": "Always open Bizora in this shop",
+    "syncRetrying": "{count, plural, one {# change not synced yet. Last try failed: tap to try again} other {# changes not synced yet. Last try failed: tap to try again}}"
   },
   "nav": {
     "home": "Home",
@@ -735,7 +736,9 @@
         "best": "Hears accents and noisy markets best, but is a bigger download and takes a few seconds longer to read."
       },
       "bestTooBig": "This phone may not have enough memory for Best accuracy. Standard is safer.",
-      "gpuNote": "This phone has a graphics chip that speeds up reading."
+      "gpuNote": "This phone has a graphics chip that speeds up reading.",
+      "stop": "Stop download",
+      "stopped": "Download stopped. What was already downloaded is kept for next time."
     },
     "salesItems": "What staff can sell",
     "salesItemsOption": {
@@ -1499,7 +1502,11 @@
         "download": "Download offline voice",
         "progress": "{done} of {total}",
         "offline": "Offline voice is not set up on this phone yet. Connect to the internet once to download it, or type the sale in words.",
-        "evictedOffline": "Your phone removed offline voice to free space. Connect to the internet to download it again, or type the sale in words."
+        "evictedOffline": "Your phone removed offline voice to free space. Connect to the internet to download it again, or type the sale in words.",
+        "cancel": "Stop download",
+        "cancelled": "Download stopped. What was already downloaded is kept; tap to carry on later.",
+        "retry": "Try the download again",
+        "lowMemory": "This phone may not have enough memory to run voice smoothly. Typing the sale in words works just as well."
       },
       "serverChoice": "Or use Bizora AI now (needs network, counts towards today's reads):",
       "typeInstead": "Type the sale in words instead",
@@ -1605,7 +1612,9 @@
     },
     "typed": {
       "sell": "Sell “{name}” (typed item, remembered for next time)"
-    }
+    },
+    "customerOffline": "No network: showing customers saved on this phone.",
+    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online."
   },
   "imports": {
     "chooseFile": "Choose a CSV file",

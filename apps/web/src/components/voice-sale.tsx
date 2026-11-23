@@ -24,7 +24,7 @@ import type { CachedProduct } from "../lib/offline/catalog";
 import { readCustomerDirectory, refreshCustomerDirectory, type DirectoryCustomer } from "../lib/offline/customers";
 import type { OutboxOwner } from "../lib/offline/outbox";
 import { cleanUp, tidyWords } from "../lib/voice/clean";
-import { detectSupport, downloadSize, engine, install, installState, prepare, VoiceError, type InstallState, type Support } from "../lib/voice/engine";
+import { cancelInstall, detectSupport, downloadSize, engine, install, installState, lowMemory, prepare, VoiceError, type InstallState, type Support } from "../lib/voice/engine";
 import { MAX_SECONDS, startRecording, type Recording } from "../lib/voice/recorder";
 import { CaptureBar } from "./capture-bar";
 import { useUnitName } from "./stock-quantity";
@@ -184,6 +184,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
 
   function installProblem(error: unknown) {
     if (error instanceof VoiceError) {
+      if (error.code === "cancelled") return t("setup.cancelled");
       if (error.code === "no_room") return t("errors.noRoom", { size: megabytes(Number(error.message)) });
       if (error.code === "not_published") return t("errors.notPublished");
       if (error.code === "unsupported") return t("errors.unsupported");
@@ -384,11 +385,18 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
                     <div className="h-full bg-primary transition-[width]" style={{ width: `${percent(progress)}%` }} />
                   </div>
                   <p className="text-xs text-muted">{t("setup.progress", { done: megabytes(progress.loaded), total: megabytes(progress.total || size || 0) })}</p>
+                  {/* Stopping keeps what is already saved, so trying again carries on (ADR-044). */}
+                  <Button variant="secondary" onClick={() => cancelInstall()} data-testid="voice-download-cancel">
+                    {t("setup.cancel")}
+                  </Button>
                 </div>
               ) : (
-                <Button onClick={() => void download()} data-testid="voice-download">
-                  {t("setup.download")}
-                </Button>
+                <>
+                  {lowMemory() ? <p className="text-sm text-warning">{t("setup.lowMemory")}</p> : null}
+                  <Button onClick={() => void download()} data-testid="voice-download">
+                    {problem ? t("setup.retry") : t("setup.download")}
+                  </Button>
+                </>
               )}
             </div>
           ) : (

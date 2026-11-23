@@ -270,7 +270,7 @@ export default function AppHomePage() {
             ) : (id === "sales" || id === "mySales") && sells ? (
               <>
                 <p className="mt-2 text-sm">{t("noSalesToday")}</p>
-                <Link href="/app/sales/new" className="mt-2 inline-block text-sm font-medium text-primary">
+                <Link href="/app/sales/new" className="mt-1 inline-flex min-h-11 items-center text-sm font-medium text-primary">
                   {t("recordSale")}
                 </Link>
               </>
@@ -347,7 +347,7 @@ export default function AppHomePage() {
               ))}
             </ul>
             {overdue > 0 ? <p className="mt-3 text-sm text-warning">{t("overdue", { count: overdue })}</p> : null}
-            <Link href="/app/customers/follow-ups" className="mt-3 inline-block text-sm font-medium text-primary">
+            <Link href="/app/customers/follow-ups" className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-primary">
               {t("seeFollowups")}
             </Link>
           </Card>

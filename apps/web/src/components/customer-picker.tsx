@@ -7,6 +7,8 @@ import { lazy, Suspense, useState } from "react";
 import { can } from "../lib/access";
 import { useAccess } from "../lib/access-context";
 import { api } from "../lib/api";
+// Imported directly (not loaded on demand) so it is already on the phone when the network drops (ADR-044).
+import { readCustomerDirectory } from "../lib/offline/customers";
 
 // The add-customer form (name and phone boxes, the country's phone rules) loads when it is opened (JS budget).
 const CustomerQuickAdd = lazy(() => import("./customer-quick-add"));
@@ -30,6 +32,18 @@ export function CustomerPicker({ id, value, onChange }: { id: string; value: Pic
     if (!query.trim()) return;
     const response = await api(`/api/v1/customers?q=${encodeURIComponent(query.trim())}`).catch(() => null);
     const payload = response ? await response.json().catch(() => null) : null;
+    // No network: search the customer names saved on this phone (ADR-044), so a sale on credit can still be recorded.
+    if (!response && access.owner) {
+      const saved = await readCustomerDirectory(access.owner).catch(() => null);
+      const asked = query.trim().toLowerCase();
+      const items = (saved?.items ?? [])
+        .filter((item) => item.name.toLowerCase().includes(asked))
+        .slice(0, 6)
+        .map((item) => ({ id: item.id, name: item.name, credit: { allowed: item.creditAllowed, limitMinor: null } }));
+      setResults(items);
+      setMessage(saved ? (items.length === 0 ? t("noCustomerOffline") : t("customerOffline")) : t("customerSearchFailed"));
+      return;
+    }
     if (!response?.ok) {
       setResults([]);
       setMessage(payload?.error?.message ?? t("customerSearchFailed"));
@@ -77,7 +91,7 @@ export function CustomerPicker({ id, value, onChange }: { id: string; value: Pic
       {canAdd && !adding ? (
         <button
           type="button"
-          className="mt-2 text-sm font-medium text-primary"
+          className="mt-1 min-h-11 text-sm font-medium text-primary"
           onClick={() => {
             setAdding(true);
             // What was searched for starts the new customer: a name, or a phone number.
