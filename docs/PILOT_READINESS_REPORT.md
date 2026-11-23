@@ -41,9 +41,9 @@ Four pull requests against `main`, each independent and each green in CI when op
 | #44 | Email delivery, tenant isolation matrix, money integrity, idempotency on voids and approvals, security review | ADR-042, ADR-043 | none |
 | #45 | Offline hardening, small screens, voice download control, voice pilot status, mobile test matrix | ADR-044 | none |
 | #46 | Switches per business, records export, pilot measures, support panel, sample business, plain error words | ADR-045 | 0039 |
-| this PR | Documents, readiness check script, performance baseline, deadlock fix | none | none |
+| #47 | Documents, readiness check script, performance baseline, deadlock fix | none | none |
 
-- **Merge order:** #44, #45, #46, then this one. Each merge deploys staging.
+- **Merge order:** #44, #45, #46, then #47. Each merge deploys staging.
 - **After both #44 and #46 are in:** add #46's two new routes to the isolation matrix's route map; its coverage gate will name them.
 
 ## 4. What changed, by area
@@ -72,7 +72,7 @@ These were bugs, not hypotheses. Each has a test.
 5. **Follow-ups answered 200 for another business's customer** (#44). Empty, but it should have been refused.
 6. **Invitation links were returned by the API on staging** (#44).
 7. **Sign-in and reset tokens could appear in console logs** (#44).
-8. **A deadlock when a new business's first products were added at once**: 4 of 5 failed (this PR). Found by the performance baseline, fixed with an advisory lock, and covered by a real-Postgres browser test.
+8. **A deadlock when a new business's first products were added at once**: 4 of 5 failed (#47). Found by the performance baseline, fixed with an advisory lock, and covered by a real-Postgres browser test.
 9. **Measures queries failed on real Postgres** (#46): the driver does not take JavaScript dates in raw SQL. Caught before merge by running the queries against Postgres; PGlite had passed them.
 10. **Framework messages shown to traders** (#46). For example "ThrottlerException: Too Many Requests", and "Request validation failed." in the list of refused offline sales.
 
@@ -82,7 +82,7 @@ Measured in this sprint:
 
 | Suite | Result |
 | --- | --- |
-| API unit and integration tests (Vitest, PGlite) | #46 branch: 294 passed in 48 files. `main` with this PR: 280 in 46 files. |
+| API unit and integration tests (Vitest, PGlite) | #46 branch: 294 passed in 48 files. `main` with #47: 280 in 46 files. |
 | Contracts and web unit tests | Passed on every branch (contracts 91, web 47 on #45) |
 | Web browser tests (Playwright, real Postgres) | #46: 34 passed. This PR: 34 passed. #45: 36 passed, with one known flaky test (shop mode) that passes on retry. |
 | Admin portal browser tests | #46: 2 passed |
@@ -192,7 +192,7 @@ Staging has not been measured.
 
 | # | Condition | Gate | Runbook step |
 | --- | --- | --- | --- |
-| C1 | Merge #44, #45, #46 and this PR; `main` green; add #46's routes to the isolation matrix | G1–G3 | 0 |
+| C1 | Merge #44, #45, #46 and #47; `main` green; add #46's routes to the isolation matrix | G1–G3 | 0 |
 | C2 | Staging passes `pilot-readiness-check.ts --url … --write` | G6 | 3 |
 | C3 | S-3: sign-in limits see real addresses | G7 | 4 |
 | C4 | Backups confirmed in Google Cloud | G9 | 5 |

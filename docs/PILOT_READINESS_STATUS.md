@@ -9,7 +9,7 @@ Status of every item in the pre-pilot readiness sprint, as of **23 Nov 2026**.
 | #44 | A: email delivery, tenant isolation matrix, money integrity, idempotency, security review (ADR-042, ADR-043) |
 | #45 | B: offline, small screens, low bandwidth, voice pilot status (ADR-044) |
 | #46 | C: business switches, records export, pilot measures, sample business, error wording (ADR-045) |
-| this PR | D: documents, readiness checks, performance baseline, a deadlock fix |
+| #47 | D: documents, readiness checks, performance baseline, a deadlock fix |
 
 Until they merge, `main` does not have their work.
 
@@ -25,8 +25,8 @@ Until they merge, `main` does not have their work.
 
 | # | Item | Status | Where | What is true |
 | --- | --- | --- | --- | --- |
-| 1 | Documents match the product | IMPLEMENTED | this PR | README, architecture overview, deployment guide and the specification pointer no longer say sales, payments or email are missing; new pilot documents in `docs/`. |
-| 2 | Readiness checklist and check script | IMPLEMENTED | this PR | `PILOT_READINESS_CHECKLIST.md` (gates G1–G19); `scripts/pilot-readiness-check.ts` checks the repository and, with `--url`, a running environment. |
+| 1 | Documents match the product | IMPLEMENTED | #47 | README, architecture overview, deployment guide and the specification pointer no longer say sales, payments or email are missing; new pilot documents in `docs/`. |
+| 2 | Readiness checklist and check script | IMPLEMENTED | #47 | `PILOT_READINESS_CHECKLIST.md` (gates G1–G19); `scripts/pilot-readiness-check.ts` checks the repository and, with `--url`, a running environment. |
 | 3 | Email provider, production-ready | IMPLEMENTED · NEEDS PILOT VALIDATION | #44 | Details below the table. |
 | 4 | Password reset | IMPLEMENTED · NEEDS PILOT VALIDATION | existing + #44 | Single-use link that expires in 30 minutes; every session is signed out on reset; "password changed" email (#44). Delivery to a real inbox not yet checked. |
 | 5 | PostgreSQL row-level security | NOT IMPLEMENTED (formally gated) | #44, ADR-043, issue #43 | Details below the table. |
@@ -46,13 +46,13 @@ Until they merge, `main` does not have their work.
 | 19 | Demo or seed data | IMPLEMENTED | #46 | `sample create / list / remove`; marked everywhere; left out of the measures. Only a sample's records can be deleted, and only by the script. |
 | 20 | Onboarding in business language | IMPLEMENTED | existing | Home screen setup checklist: products, shop address, first customer, staff, first sale, each with a link. |
 | 21 | User-facing error messages | IMPLEMENTED | #46 | Framework messages replaced with plain words; a support code on server faults; messages written for people kept. |
-| 22 | Staging validation and deployment runbook | PARTIAL | this PR | **Runbook written** (`PILOT_DEPLOYMENT_RUNBOOK.md`). **Staging not validated:** this session has no Google Cloud access, and its network cannot reach staging. Runbook steps 1–9 are for the team. |
+| 22 | Staging validation and deployment runbook | PARTIAL | #47 | **Runbook written** (`PILOT_DEPLOYMENT_RUNBOOK.md`). **Staging not validated:** this session has no Google Cloud access, and its network cannot reach staging. Runbook steps 1–9 are for the team. |
 | 23 | No external payment gateways | IMPLEMENTED (by design) | #46 | None exist; payments are recorded as cash, transfer or POS. The switch is locked off. |
 | 24 | No AI agents | NOT REQUIRED (confirmed absent) | existing | No agent acts on anyone's behalf. Photo reads and voice only fill drafts that a person checks and confirms. "Ask Zora" is not built. |
-| 25 | Pilot terms and privacy | PARTIAL | this PR | Privacy notice updated (measures, export). Proposed pilot section for the Terms of use in `PILOT_TERMS_AND_PRIVACY.md`, waiting for counsel. Adding it needs a new terms version. |
+| 25 | Pilot terms and privacy | PARTIAL | #47 | Privacy notice updated (measures, export). Proposed pilot section for the Terms of use in `PILOT_TERMS_AND_PRIVACY.md`, waiting for counsel. Adding it needs a new terms version. |
 | 26 | Security review | IMPLEMENTED | #44 | `PILOT_SECURITY_REVIEW.md`: no unresolved Critical or High finding in code; S-3 (Medium) needs a staging check. |
-| 27 | Dependency and supply-chain review | IMPLEMENTED | this PR | Details below the table. |
-| 28 | Performance baseline (20 and 50 people, 5,000 customers, 10,000 sales) | PARTIAL | this PR | Details below the table. |
+| 27 | Dependency and supply-chain review | IMPLEMENTED | #47 | Details below the table. |
+| 28 | Performance baseline (20 and 50 people, 5,000 customers, 10,000 sales) | PARTIAL | #47 | Details below the table. |
 | 29 | Support tooling | IMPLEMENTED | #46 + existing | Admin portal: find a business or person, resend invitations and verification, sign out everywhere, stop a phone, support view, limits, switches, Last 7 days (refusals, voice problems, sessions, last sync). |
 | 30 | Tag `v0.9.0-pilot` | NOT DONE (gates not met) | — | Gates G7–G10, G12 and G17 need staging, Google Cloud or real phones. No tag. |
 

@@ -26,6 +26,6 @@ Pilot readiness, item 2. Every gate must pass before `v0.9.0-pilot` is tagged (i
 | G16 | Pilot measures and support tools in the Admin portal | ADR-045 (#46) | Done |
 | G17 | Performance on staging within targets (20 people: 95th percentile under 2 s, a sale under 3 s) | Runbook step 8 | Local baseline only (`PILOT_PERFORMANCE_BASELINE.md`) |
 | G18 | Pilot terms and privacy wording reviewed | `docs/PILOT_TERMS_AND_PRIVACY.md` | Privacy updated; the pilot section of the terms waits for counsel |
-| G19 | Documents match the product | README, architecture, deployment, this folder | Done in this PR |
+| G19 | Documents match the product | README, architecture, deployment, this folder | Done in #47 |
 
 **Tag rule.** Tag `v0.9.0-pilot` only when G1 to G19 all pass. Until then no tag is made and the verdict cannot be READY. Never call the result production or general availability.
