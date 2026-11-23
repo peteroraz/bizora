@@ -20,6 +20,8 @@ export type Access = {
   currency?: string;
   /** The business's time zone, for showing when things happened. */
   timezone?: string;
+  /** Saying a sale on the phone (ADR-040); Bizora operations can switch it off for a business (ADR-045). */
+  offlineVoice?: boolean;
 };
 
 export const noAccess: Access = { permissions: [], staffSession: false };

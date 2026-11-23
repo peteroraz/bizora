@@ -474,7 +474,8 @@
     "lockSoon": "This screen locks in 30 seconds. Tap anywhere to keep working.",
     "keepWorking": "Keep working",
     "opensHere": "Bizora opens in this shop when you sign in.",
-    "openHere": "Always open Bizora in this shop"
+    "openHere": "Always open Bizora in this shop",
+    "sampleBusiness": "Sample business: made for demonstrations and training. Its sales, customers and money are not real."
   },
   "nav": {
     "home": "Home",
@@ -758,6 +759,15 @@
       "removeNamed": "Remove {name}",
       "loadFailed": "The typed items could not be loaded. Check your connection.",
       "removeFailed": "{name} could not be removed. Try again."
+    },
+    "export": {
+      "title": "Download your records",
+      "lead": "Get every sale, customer, debt, product, stock movement, expense and supplier record as spreadsheet files (CSV in a ZIP). Keep a copy somewhere safe. Passwords, PINs and pictures are not included.",
+      "download": "Download records",
+      "working": "Preparing…",
+      "failed": "The download could not be prepared. Try again in a minute.",
+      "tooOften": "You have downloaded several times in the last few minutes. Try again in 10 minutes.",
+      "offline": "You are offline. Connect to the internet to download your records."
     }
   },
   "address": {
@@ -2548,7 +2558,8 @@
       "device_stopped": "Stopped a shop phone",
       "person_signed_out_everywhere": "Signed someone out everywhere",
       "business_limits_changed": "Changed your limits",
-      "other": "Bizora support"
+      "other": "Bizora support",
+      "business_feature_changed": "Switched a part of Bizora on or off for your business"
     },
     "pages": {
       "sales": "sales",

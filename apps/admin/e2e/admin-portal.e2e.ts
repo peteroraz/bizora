@@ -89,6 +89,28 @@ test("Bizora staff sign in with Google, find a business and help it, and every s
   await expect(page.getByText("The support view is closed.")).toBeVisible();
   await page.getByRole("link", { name: "Back to the business" }).click();
 
+  // Switches for this business only (ADR-045): voice off, with a reason the owner can see; gateways cannot be switched on.
+  const voice = page.getByTestId("feature-offline_voice");
+  await expect(voice).toContainText("On");
+  await expect(page.getByTestId("feature-payment_gateways")).toContainText("Not available");
+  await expect(page.getByTestId("feature-payment_gateways").getByRole("button")).toHaveCount(0);
+  await voice.getByRole("button", { name: "Switch off" }).click();
+  const off = page.getByRole("dialog", { name: /Switch off: Say a sale/ });
+  await off.getByLabel("Why are you doing this?").fill("Pilot: typing only for now");
+  await off.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Switched off")).toBeVisible();
+  await expect(voice).toContainText("Off");
+  await expect(voice).toContainText("Pilot: typing only for now");
+  expect(((await (await api.get("/api/v1/auth/me", { headers: bearer })).json()).data.features as Record<string, boolean>).offline_voice).toBe(false);
+  await expect(page.getByTestId("health-summary")).toBeVisible();
+
+  // Pilot measures: counts per business, nothing anyone typed.
+  await page.getByRole("link", { name: "Pilot measures" }).click();
+  await expect(page.getByTestId("measures-totals")).toBeVisible();
+  await expect(page.getByRole("link", { name: shopName })).toBeVisible();
+  await expect(page.getByText("Akosua Mensah")).toHaveCount(0);
+  await page.getByRole("link", { name: shopName }).click();
+
   // Super admins keep the staff list.
   await page.getByRole("link", { name: "Staff", exact: true }).click();
   await page.getByLabel("Google email").fill(`helper-${stamp}@bizora.test`);

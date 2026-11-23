@@ -18,6 +18,7 @@ import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { SupportActivity } from "../../../components/support-activity";
 import { VoiceSettings } from "../../../components/voice-settings";
+import { ExportRecords } from "../../../components/export-records";
 import { SavedItemsList } from "../../../components/saved-items-list";
 import { WorkRulesSettings } from "../../../components/work-rules-settings";
 import { BrandSettings } from "../../../components/brand-settings";
@@ -457,6 +458,7 @@ function SettingsScreen() {
               </SubmitButton>
             </SafeForm>
           </Card>
+          {can(access, Permission.TENANT_MANAGE) ? <ExportRecords /> : null}
         </TabPanel>
         <TabPanel value="brand">
           <BrandSettings />
@@ -790,7 +792,7 @@ function SettingsScreen() {
               </Select>
             </FormField>
           </Card>
-          <VoiceSettings />
+          {access.offlineVoice !== false ? <VoiceSettings /> : null}
         </TabPanel>
         <TabPanel value="security">
           <SecurityPanel />

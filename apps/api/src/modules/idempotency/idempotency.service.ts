@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, lt, sql } from "drizzle-orm";
-import { ApiError } from "../../common/errors.js";
+import { ApiError, VALIDATION_MESSAGE } from "../../common/errors.js";
 import type { AppDatabase } from "../../db/database.js";
 import { idempotencyKeys } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
@@ -22,7 +22,7 @@ export function asRefusal(error: unknown): ApiError | null {
   if (error instanceof ZodError) {
     return new ApiError(
       "VALIDATION_ERROR",
-      "Request validation failed.",
+      VALIDATION_MESSAGE,
       400,
       error.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })),
     );

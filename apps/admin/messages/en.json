@@ -5,7 +5,8 @@
     "nav": {
       "find": "Find",
       "staff": "Staff",
-      "audit": "Staff log"
+      "audit": "Staff log",
+      "measures": "Pilot measures"
     },
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
@@ -142,7 +143,35 @@
     "supportView": "Support view",
     "supportViewLead": "See this business's sales, stock, customers and money, read-only, for one hour. The owner agreed to this in the Terms of use and sees every page you open.",
     "openSupportView": "Open support view",
-    "continueSupportView": "Continue support view (closes {time})"
+    "continueSupportView": "Continue support view (closes {time})",
+    "features": "Switches for this business",
+    "featuresLead": "Switch a part of Bizora off for this business only, for example during the pilot. The owner sees every change and its reason.",
+    "featureColumns": {
+      "what": "What",
+      "state": "Now",
+      "why": "Last reason"
+    },
+    "featureNames": {
+      "offline_voice": "Say a sale (on the phone)",
+      "photo_reads": "Bizora AI reads photos and voice notes",
+      "support_view": "Support view",
+      "advanced_accounting": "Advanced accounting",
+      "payment_gateways": "Card and online payments"
+    },
+    "featureHints": {
+      "offline_voice": "Experimental. The phone turns speech into a sale for the trader to check. A phone that already downloaded voice keeps the files until it is removed in Settings.",
+      "photo_reads": "Photos and voice notes are sent to Google Cloud and come back as drafts to check.",
+      "support_view": "Bizora support may open a read-only view of this business's records, with a reason.",
+      "advanced_accounting": "Not built. Off for every business.",
+      "payment_gateways": "Not built. Off for every business; payments are recorded as cash, transfer or POS."
+    },
+    "featureOn": "On",
+    "featureOff": "Off",
+    "featureLocked": "Not available",
+    "featureDefault": "As standard",
+    "switchOn": "Switch on",
+    "switchOff": "Switch off",
+    "sample": "Sample business, made for demonstrations. Not counted in pilot measures. Remove it with the sample-business script (see the pilot runbook)."
   },
   "person": {
     "back": "Back to search",
@@ -212,6 +241,16 @@
       "title": "Change limits",
       "description": "Leave a box empty to use the plan's number. The owner sees this change.",
       "done": "Limits saved"
+    },
+    "featureOff": {
+      "title": "Switch off: {name}",
+      "description": "It stops for everyone in this business straight away.",
+      "done": "Switched off"
+    },
+    "featureOn": {
+      "title": "Switch on: {name}",
+      "description": "It is available to this business straight away.",
+      "done": "Switched on"
     }
   },
   "staff": {
@@ -266,7 +305,8 @@
       "support_view_opened": "Opened a support view",
       "support_view_closed": "Closed a support view",
       "support_viewed": "Looked at records",
-      "business_limits_changed": "Changed limits"
+      "business_limits_changed": "Changed limits",
+      "business_feature_changed": "Changed a switch"
     }
   },
   "errors": {
@@ -329,5 +369,55 @@
     "system": "System",
     "totalStock": "{count, plural, one {# product} other {# products}}, worth {value} at selling price",
     "totalOwed": "{count, plural, one {# customer owes} other {# customers owe}} {amount}"
+  },
+  "measures": {
+    "title": "Pilot measures",
+    "lead": "How each business is using Bizora. Counts only: no customer names, no amounts per sale, nothing anyone typed or said.",
+    "period": "Period",
+    "days": "Last {count} days",
+    "tiles": {
+      "active": "Businesses using Bizora",
+      "activeValue": "{active} of {total}",
+      "sales": "Sales",
+      "offline": "Sales made offline",
+      "refused": "Offline changes refused",
+      "voice": "Voice sales confirmed",
+      "voiceValue": "{confirmed} of {shown} reviewed",
+      "downloads": "Voice downloads that failed"
+    },
+    "sampleNote": "Sample businesses are listed but not counted in the totals. Voice measures come from phones and are lost if a phone closes while offline, so they undercount.",
+    "columns": {
+      "business": "Business",
+      "lastActive": "Last active",
+      "people": "People active",
+      "sales": "Sales",
+      "offline": "Offline",
+      "credit": "On credit",
+      "voided": "Cancelled",
+      "refused": "Refused",
+      "voice": "Voice confirmed"
+    },
+    "voiceCell": "{confirmed} / {shown}",
+    "sample": "Sample",
+    "never": "Never"
+  },
+  "health": {
+    "title": "Last 7 days",
+    "lastActive": "Last active",
+    "lastSync": "Last offline sync",
+    "sessions": "Signed-in sessions",
+    "devices": "Shop phones signed in",
+    "never": "Never",
+    "none": "No refused offline changes or voice problems in the last 7 days.",
+    "refused": "Offline change refused",
+    "downloadFailed": "Voice download failed",
+    "readFailed": "Voice could not read",
+    "columns": {
+      "what": "What",
+      "code": "Code",
+      "times": "Times",
+      "last": "Last"
+    },
+    "logsHint": "App errors are in Cloud Logging and Error Reporting (search by the business's ID). See the pilot runbook."
   }
 }

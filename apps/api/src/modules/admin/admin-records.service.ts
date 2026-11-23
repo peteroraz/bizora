@@ -14,6 +14,7 @@ import { PaymentService } from "../debtors/payment.service.js";
 import { ProductService } from "../inventory/product.service.js";
 import { MoneyService } from "../money/money.service.js";
 import { SaleService } from "../sales/sale.service.js";
+import { FeatureService } from "../entitlements/feature.service.js";
 import { AdminAuditService } from "./admin-audit.service.js";
 import type { AdminStaffMember } from "./admin-session.service.js";
 
@@ -70,9 +71,12 @@ export class AdminRecordsService {
     @Inject(CustomerService) private readonly customers: CustomerService,
     @Inject(PaymentService) private readonly payments: PaymentService,
     @Inject(MoneyService) private readonly money: MoneyService,
+    @Inject(FeatureService) private readonly features: FeatureService,
   ) {}
 
   async open(staff: AdminStaffMember, tenantId: string, actor: SupportActor) {
+    if (!uuidSchema.safeParse(tenantId).success) throw new ApiError("NOT_FOUND", "Business was not found.", 404);
+    await this.features.assertOn(tenantId, "support_view");
     const owner = await this.owner(tenantId);
     const expiresAt = new Date(Date.now() + SUPPORT_VIEW_MINUTES * 60_000);
     const [view] = await this.db
@@ -100,6 +104,8 @@ export class AdminRecordsService {
   async read(staff: AdminStaffMember, tenantId: string, page: SupportPage, params: { businessId?: string | undefined; branchId?: string | undefined; id?: string | undefined; date?: string | undefined; q?: string | undefined; page?: string | undefined }, meta: { correlationId: string; ip: string | null; userAgent: string | null }) {
     const view = await this.openView(staff, tenantId);
     if (!view) throw new ApiError("SUPPORT_VIEW_CLOSED", "Open the support view first. It closes after an hour.", 403);
+    // Switched off while a view was open: reading stops at once (ADR-045).
+    await this.features.assertOn(tenantId, "support_view");
     const tenant = await this.context(tenantId, params.businessId, meta.correlationId);
     const pageNumber = Number.parseInt(params.page ?? "1", 10) || 1;
     const day = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : undefined;

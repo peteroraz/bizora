@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useCan } from "@/components/admin-shell";
+import { FeaturesPanel } from "@/components/features-panel";
+import { HealthPanel } from "@/components/health-panel";
 import { LimitsPanel } from "@/components/limits-panel";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Section } from "@/components/section";
@@ -16,6 +18,7 @@ type Profile = {
   id: string;
   name: string;
   handle: string;
+  sample?: boolean;
   phone: string | null;
   signedUpAt: string;
   setUpAt: string | null;
@@ -82,6 +85,7 @@ export default function BusinessPage() {
           {t("back")}
         </Link>
         <h1 className="text-3xl font-semibold tracking-tight">{profile.name}</h1>
+        {profile.sample ? <p className="text-sm text-info" data-testid="sample-business">{t("sample")}</p> : null}
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
           <span>{t("link", { handle: profile.handle })}</span>
           <span>{profile.plan ? t("plan", { plan: profile.plan.name }) : t("noPlan")}</span>
@@ -121,6 +125,10 @@ export default function BusinessPage() {
       </Section>
 
       <LimitsPanel tenantId={profile.id} />
+
+      <FeaturesPanel tenantId={profile.id} />
+
+      <HealthPanel tenantId={profile.id} />
 
       <Section title={t("businesses")}>
         <Table>

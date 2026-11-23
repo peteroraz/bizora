@@ -89,6 +89,8 @@ export const organizations = pgTable(
     addressId: uuid("address_id"),
     phoneE164: varchar("phone_e164", { length: 20 }),
     traderProfile: jsonb("trader_profile"),
+    /** A sample business for demonstrations (migration 0039, ADR-045): marked everywhere, removable with a script. */
+    isSample: boolean("is_sample").notNull().default(false),
     ...timestamps,
   },
   (table) => [
@@ -426,6 +428,37 @@ export const organizationPlans = pgTable("organization_plans", {
   /** Limits set for this business in the Admin portal (ADR-039); missing keys use the plan. */
   limitOverrides: jsonb("limit_overrides").$type<Partial<Record<"max_branches" | "max_staff" | "max_devices" | "ai_daily_reads", number>>>().notNull().default({}),
 });
+
+/** Switches for one business (migration 0039, ADR-045). No row: the product default. */
+export const businessFeatures = pgTable(
+  "business_features",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => organizations.id),
+    feature: varchar("feature", { length: 32 }).notNull(),
+    enabled: boolean("enabled").notNull(),
+    reason: varchar("reason", { length: 500 }).notNull(),
+    changedByStaffId: uuid("changed_by_staff_id"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.feature] })],
+);
+
+/** Pilot measures (migration 0039, ADR-045): what happened, never who or what was said. */
+export const pilotEvents = pgTable(
+  "pilot_events",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => organizations.id),
+    event: varchar("event", { length: 48 }).notNull(),
+    detail: varchar("detail", { length: 48 }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("pilot_events_time_idx").on(table.occurredAt, table.event), index("pilot_events_tenant_idx").on(table.tenantId, table.occurredAt)],
+);
 
 export const sessions = pgTable(
   "sessions",
