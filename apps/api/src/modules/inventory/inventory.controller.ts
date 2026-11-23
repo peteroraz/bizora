@@ -37,6 +37,7 @@ export class InventoryController {
   }
 
   @Post("stock/requests/:id/reject")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.STOCK_ADJUST)
   async rejectRequest(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
@@ -196,6 +197,7 @@ export class InventoryController {
   }
 
   @Post("stock/counts/:id/approve")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.STOCK_ADJUST)
   async approve(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
@@ -203,6 +205,7 @@ export class InventoryController {
   }
 
   @Post("stock/counts/:id/reject")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.STOCK_ADJUST)
   async reject(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {

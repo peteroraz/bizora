@@ -13,6 +13,8 @@ import { createApp } from "./bootstrap.js";
 import { schema } from "./db/schema.js";
 import { loadMigrationSql } from "./db/sql.js";
 import { createLogger } from "./logging.js";
+import type { ConsoleEmailAdapter } from "./modules/email/console-email.adapter.js";
+import { EMAIL } from "./tokens.js";
 
 const password = "LocalOnly!Passw0rd";
 const ADMIN = "http://admin.bizora.test";
@@ -271,6 +273,13 @@ describe("ADR-039: Terms of use, support view, limits per business, owner sees B
     expect(logged.rows.map((row) => row.actor_type)).toEqual(["BIZORA_SUPPORT", "BIZORA_SUPPORT"]);
   });
 
+  it("tells the owner by email when support opens their records (ADR-042)", async () => {
+    const mails = (app.get(EMAIL) as ConsoleEmailAdapter).delivered.filter((sent) => sent.kind === "support_access");
+    expect(mails.length).toBeGreaterThanOrEqual(1);
+    expect(mails[0]!.text).toContain("Owner says yesterday's cash is wrong");
+    expect(mails[0]!.text).toContain("read-only");
+  });
+
   it("shows the owner what Bizora staff looked at and did, with who and why", async () => {
     const seen = await request(http).get("/api/v1/support-activity").set(auth(owner.access)).expect(200);
     const items = seen.body.data.items as { staffEmail: string; action: string; reason: string | null; page: string | null }[];
@@ -278,6 +287,27 @@ describe("ADR-039: Terms of use, support view, limits per business, owner sees B
     expect(items.filter((item) => item.action === "support.viewed").map((item) => item.page)).toContain("customers");
     expect(items.some((item) => item.action === "business.limits_changed")).toBe(true);
     await request(http).get("/api/v1/support-activity").set(auth(cashier)).expect(403);
+  });
+
+  it("keeps support inside one business, read-only, and refuses forged or business sign-ins (ADR-043)", async () => {
+    // A support view for one business does not open another's records.
+    const other = await request(http).post("/api/v1/auth/register").send({ email: "second-owner@part2.test", password: "LocalOnly!Passw0rd", displayName: "Second", organizationName: "Second Shop", countryCode: "NG", acceptTerms: true }).expect(201);
+    const otherTenant = other.body.data.tenant.tenantId as string;
+    await request(http).post(`/api/admin/v1/businesses/${tenantId}/support-view`).set(as(helper)).send({ reason: "Checking a refund for the owner" }).expect(201);
+    const crossed = await request(http).get(`/api/admin/v1/businesses/${otherTenant}/records/sales`).set("cookie", helper).expect(403);
+    expect(crossed.body.error.code).toBe("SUPPORT_VIEW_CLOSED");
+    // Support cannot change business records: there are no write routes, and business routes ignore the portal cookie.
+    for (const page of ["customers", "sales", "stock", "money"]) {
+      expect((await request(http).post(`/api/admin/v1/businesses/${tenantId}/records/${page}`).set(as(helper)).send({ name: "x" })).status).toBe(404);
+      expect((await request(http).patch(`/api/admin/v1/businesses/${tenantId}/records/${page}`).set(as(helper)).send({ name: "x" })).status).toBe(404);
+    }
+    await request(http).post("/api/v1/customers").set("cookie", helper).send({ name: "Support hack" }).expect(401);
+    await request(http).get("/api/v1/sales").set("cookie", boss).expect(401);
+    // A business owner's sign-in never opens the portal, and a made-up portal cookie is refused.
+    await request(http).get("/api/admin/v1/businesses").set(auth(owner.access)).expect(401);
+    await request(http).get("/api/admin/v1/businesses").set("cookie", `bizora_admin=${randomBytes(32).toString("base64url")}`).expect(401);
+    const tampered = helper.replace(/=(.)/, (_, first: string) => `=${first === "A" ? "B" : "A"}`);
+    await request(http).get("/api/admin/v1/businesses").set("cookie", tampered).expect(401);
   });
 
   it("shows usage counts on the business page", async () => {

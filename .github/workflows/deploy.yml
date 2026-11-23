@@ -139,9 +139,12 @@ jobs:
       - name: Deploy API
         run: |
           set -euo pipefail
+          # Invitation tokens are never returned by the API in a deployed service (ADR-042); the API refuses to start
+          # otherwise. Set here too, so a service created before Terraform changed it keeps starting.
           gcloud run services update bizora-api \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ vars.GCP_REGION }}" \
+            --update-env-vars=INVITE_TOKEN_EXPOSE=false \
             --image="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/bizora/api:${{ github.sha }}"
 
       - name: Deploy web

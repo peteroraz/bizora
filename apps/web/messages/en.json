@@ -1605,6 +1605,13 @@
     },
     "typed": {
       "sell": "Sell “{name}” (typed item, remembered for next time)"
+    },
+    "emailReceipt": {
+      "open": "Email it to the customer",
+      "label": "Customer's email",
+      "send": "Send",
+      "sent": "Sent to {to}.",
+      "failed": "It was not sent. Check the address and your connection, then try again."
     }
   },
   "imports": {

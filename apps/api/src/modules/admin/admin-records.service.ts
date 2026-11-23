@@ -7,7 +7,10 @@ import { supportAuditFields, type SupportActor } from "../../common/support-acto
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase } from "../../db/database.js";
 import { adminSupportViews, auditEvents, branches, businesses, memberships, users } from "../../db/schema.js";
-import { DB } from "../../tokens.js";
+import { APP_ENV, DB, EMAIL } from "../../tokens.js";
+import { publicWebOrigin, type AppEnv } from "@bizora/config/env";
+import type { EmailPort } from "../email/email.port.js";
+import { renderEmail } from "../email/templates.js";
 import { AuditService } from "../audit/audit.service.js";
 import { CustomerService } from "../customers/customer.service.js";
 import { PaymentService } from "../debtors/payment.service.js";
@@ -70,6 +73,8 @@ export class AdminRecordsService {
     @Inject(CustomerService) private readonly customers: CustomerService,
     @Inject(PaymentService) private readonly payments: PaymentService,
     @Inject(MoneyService) private readonly money: MoneyService,
+    @Inject(EMAIL) private readonly email: EmailPort,
+    @Inject(APP_ENV) private readonly env: AppEnv,
   ) {}
 
   async open(staff: AdminStaffMember, tenantId: string, actor: SupportActor) {
@@ -81,6 +86,7 @@ export class AdminRecordsService {
       .returning();
     await this.adminAudit.record({ staffId: staff.staffId, staffEmail: staff.email, action: "support.view_opened", targetType: "business", targetId: tenantId, tenantId, reason: actor.reason, metadata: { minutes: SUPPORT_VIEW_MINUTES }, ip: actor.ip ?? null });
     await this.audit.record({ ...supportAuditFields(actor), tenantId, action: "support.view_opened", entityType: "organization", entityId: tenantId, businessId: owner.businessId });
+    await this.tellOwner(owner.userId, actor.reason, expiresAt);
     return this.present(view!);
   }
 
@@ -176,6 +182,30 @@ export class AdminRecordsService {
       .orderBy(desc(adminSupportViews.openedAt))
       .limit(1);
     return view ?? null;
+  }
+
+  /**
+   * The owner is told by email whenever Bizora staff open their records (ADR-042), as well as seeing it in Settings
+   * › Bizora support. Sending never blocks the support view.
+   */
+  private async tellOwner(userId: string, reason: string, expiresAt: Date) {
+    try {
+      const [user] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+      if (!user?.email) return;
+      const rendered = renderEmail({
+        title: "Bizora support is looking at your records",
+        paragraphs: [
+          `A member of Bizora support opened your business records, read-only, until ${expiresAt.toUTCString()}.`,
+          `Reason given: ${reason}`,
+          "Every page they open is listed in Settings › Bizora support. If you did not expect this, reply to Bizora support.",
+        ],
+        actionLabel: "See what support looked at",
+        actionUrl: `${publicWebOrigin(this.env)}/app/settings`,
+      });
+      await this.email.send({ to: user.email, subject: "Bizora support opened your records", kind: "support_access", ...rendered });
+    } catch {
+      // The view is still logged for the owner in Settings.
+    }
   }
 
   private async owner(tenantId: string) {

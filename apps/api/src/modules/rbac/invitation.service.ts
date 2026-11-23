@@ -432,7 +432,7 @@ export class InvitationService {
       actionUrl: link,
     });
     try {
-      await this.email.send({ to: email, subject: "Join a Bizora workspace", ...rendered });
+      await this.email.send({ to: email, subject: "Join a Bizora workspace", kind: "invitation", ...rendered });
     } catch (error) {
       this.logger.error({ email, err: error }, "invitation email was not sent");
     }

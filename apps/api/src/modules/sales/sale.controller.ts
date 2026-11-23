@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import { Permission, success } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
@@ -69,6 +70,15 @@ export class SaleController {
     return pdfFile(pdf, fileName);
   }
 
+  /** Emails the customer a link to their receipt or invoice (ADR-042). Limited, like other sends. */
+  @Post(":id/email")
+  @HttpCode(200)
+  @UseGuards(ThrottlerGuard)
+  @RequireAnyPermission(...SEE_SALES)
+  async email(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.sales.emailReceipt(tenant, id, body), tenant.correlationId);
+  }
+
   /** Cashier: take the money, or give credit to an approved customer. */
   @Post(":id/collect")
   @HttpCode(200)
@@ -97,6 +107,7 @@ export class SaleController {
 
   /** Managers cancel any sale; a sales person may cancel their own while it still waits for payment. */
   @Post(":id/void")
+  @Idempotent()
   @HttpCode(200)
   @RequireAnyPermission(Permission.SALES_VOID, Permission.SALES_CREATE)
   async void(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {

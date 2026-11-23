@@ -19,7 +19,7 @@ export class EmailModule {
             if (env.EMAIL_PROVIDER === "resend" && env.EMAIL_API_KEY && env.EMAIL_FROM) {
               return new ResendEmailAdapter(env.EMAIL_API_KEY, env.EMAIL_FROM, logger);
             }
-            return new ConsoleEmailAdapter(logger);
+            return new ConsoleEmailAdapter(logger, env.NODE_ENV === "development");
           },
         },
       ],

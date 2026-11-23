@@ -41,7 +41,7 @@ export class AccountRecoveryService {
         actionLabel: "Verify email",
         actionUrl: link,
       });
-      await this.email.send({ to: address, subject: "Verify your Bizora email", ...rendered });
+      await this.email.send({ to: address, subject: "Verify your Bizora email", kind: "verify_email", ...rendered });
     } catch (error) {
       this.logger.error({ userId, err: error }, "verification email was not sent");
     }
@@ -86,7 +86,7 @@ export class AccountRecoveryService {
         actionLabel: "Choose a new password",
         actionUrl: link,
       });
-      await this.email.send({ to: user.email, subject: "Reset your Bizora password", ...rendered });
+      await this.email.send({ to: user.email, subject: "Reset your Bizora password", kind: "password_reset", ...rendered });
     } catch (error) {
       this.logger.error({ userId: user.id, err: error }, "password reset email was not sent");
     }
@@ -118,7 +118,28 @@ export class AccountRecoveryService {
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
+    await this.tellPasswordChanged(userId, meta.correlationId);
     return accepted;
+  }
+
+  /** A security notice after a reset (ADR-042): if it was not them, they know at once and can reset again. */
+  private async tellPasswordChanged(userId: string, correlationId: string) {
+    const user = await this.findUser(userId);
+    if (!user?.email) return;
+    try {
+      const rendered = renderEmail({
+        title: "Your Bizora password was changed",
+        paragraphs: [
+          "Your password was just changed, and you were signed out on every phone and computer.",
+          "If this was not you, choose a new password now with “Forgot password” on the sign-in page, and tell the business owner.",
+        ],
+        actionLabel: "Sign in",
+        actionUrl: `${publicWebOrigin(this.env)}/login`,
+      });
+      await this.email.send({ to: user.email, subject: "Your Bizora password was changed", kind: "password_changed", correlationId, ...rendered });
+    } catch (error) {
+      this.logger.error({ userId, err: error }, "password changed notice was not sent");
+    }
   }
 
   private async findUser(userId: string) {

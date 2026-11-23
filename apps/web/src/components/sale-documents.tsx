@@ -94,6 +94,40 @@ export function SaleDocuments({
           ) : null}
         </p>
       ) : null}
+      <EmailReceipt saleId={saleId} />
+    </div>
+  );
+}
+
+/** Emails the customer a link to this receipt or invoice (ADR-042). The address is not saved. */
+function EmailReceipt({ saleId }: { saleId: string }) {
+  const t = useTranslations("sales.emailReceipt");
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  async function send() {
+    setState("sending");
+    const response = await api(`/api/v1/sales/${saleId}/email`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ to }) }).catch(() => null);
+    setState(response?.ok ? "sent" : "failed");
+  }
+  if (!open) {
+    return (
+      <button type="button" className="min-h-11 text-sm font-medium text-primary" onClick={() => setOpen(true)}>
+        {t("open")}
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+        {t("label")}
+        <input type="email" inputMode="email" autoComplete="email" className="h-11 rounded-control border border-border bg-input px-3" value={to} onChange={(event) => setTo(event.target.value)} />
+      </label>
+      <Button onClick={() => void send()} disabled={state === "sending" || !to.includes("@")}>
+        {t("send")}
+      </Button>
+      {state === "sent" ? <p role="status" className="w-full text-sm text-success">{t("sent", { to })}</p> : null}
+      {state === "failed" ? <p role="alert" className="w-full text-sm text-danger">{t("failed")}</p> : null}
     </div>
   );
 }

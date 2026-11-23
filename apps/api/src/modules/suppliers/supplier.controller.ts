@@ -68,6 +68,7 @@ export class SupplierController {
   }
 
   @Post("entries/:entryId/void")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.EXPENSES_APPROVE)
   async voidEntry(@CurrentTenant() tenant: TenantContext, @Param("entryId", ParseUUIDPipe) entryId: string, @Body() body: unknown) {

@@ -65,6 +65,7 @@ export class PaymentController {
   }
 
   @Post("payments/:id/void")
+  @Idempotent()
   @HttpCode(200)
   @RequirePermissions(Permission.DEBTORS_MANAGE)
   async void(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
