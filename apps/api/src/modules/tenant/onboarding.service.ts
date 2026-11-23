@@ -302,6 +302,8 @@ export class OnboardingService {
         ...(payload.phoneE164 !== undefined ? { phoneE164: payload.phoneE164 || null } : {}),
         ...(payload.salesFlow ? { salesFlow: payload.salesFlow } : {}),
         ...(payload.salesItems ? { salesItems: payload.salesItems } : {}),
+        ...(payload.rememberItems !== undefined ? { rememberItems: payload.rememberItems } : {}),
+        ...(payload.quickCatalog !== undefined ? { quickCatalog: payload.quickCatalog } : {}),
         ...(setup
           ? {
               businessType: payload.businessType ?? business.businessType,

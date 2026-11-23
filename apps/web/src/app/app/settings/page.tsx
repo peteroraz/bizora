@@ -48,6 +48,8 @@ type Business = {
   visibleModules: string[];
   salesFlow?: "simple" | "desk";
   salesItems?: "products" | "typed" | "both";
+  rememberItems?: boolean;
+  quickCatalog?: boolean;
 };
 type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null; kind?: "shop" | "warehouse" };
 type BranchDraft = { name: string; phone: string; address: AddressValue; kind: "shop" | "warehouse" };
@@ -136,6 +138,8 @@ function SettingsScreen() {
   }, []);
   const [savedFlow, setSavedFlow] = useState<"simple" | "desk">("simple");
   const [salesItems, setSalesItems] = useState<"products" | "typed" | "both">("products");
+  const [rememberItems, setRememberItems] = useState(true);
+  const [quickCatalog, setQuickCatalog] = useState(true);
   const [savedItemsSetting, setSavedItemsSetting] = useState<"products" | "typed" | "both">("products");
   const [modules, setModules] = useState<string[]>([...TRADER_MODULES]);
 
@@ -192,6 +196,8 @@ function SettingsScreen() {
       setSavedFlow(current.salesFlow === "desk" ? "desk" : "simple");
       setSalesItems(current.salesItems ?? "products");
       setSavedItemsSetting(current.salesItems ?? "products");
+      setRememberItems(current.rememberItems !== false);
+      setQuickCatalog(current.quickCatalog !== false);
       setModules(current.visibleModules);
     }
     const loadedBranches: Branch[] = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
@@ -281,6 +287,8 @@ function SettingsScreen() {
           visibleModules: visible,
           salesFlow,
           salesItems,
+          rememberItems,
+          quickCatalog,
         }),
       });
       const payload = await response.json();
@@ -587,6 +595,20 @@ function SettingsScreen() {
                     </span>
                   </label>
                 ))}
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={rememberItems} onChange={(event) => setRememberItems(event.target.checked)} />
+                  <span>
+                    <span className="block font-medium">{t("rememberItems")}</span>
+                    <span className="block text-muted">{t("rememberItemsHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={quickCatalog} onChange={(event) => setQuickCatalog(event.target.checked)} />
+                  <span>
+                    <span className="block font-medium">{t("quickCatalog")}</span>
+                    <span className="block text-muted">{t("quickCatalogHint")}</span>
+                  </span>
+                </label>
                 {savedItemsSetting !== "products" ? <SavedItemsList /> : null}
               </fieldset>
               <fieldset className="space-y-2">

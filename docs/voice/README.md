@@ -62,7 +62,7 @@ Chosen on a benchmark of Nigerian English recordings and spoken sales; see [benc
 When the shop allows typed items (Settings › Setup › What staff can sell):
 
 - **A new item.** An item said that is not in the products or saved items is sold as a **new typed item**, at the price said. It is remembered for next time.
-- **A saved item.** An item said that matches a saved typed item uses its last price as a suggestion; any price may be set.
+- **A saved item.** An item said that matches a saved typed item, or another name (an alias) of that item or of a product, uses the item. The last price is a suggestion; any price may be set. Market units such as cup and mudu stay as that unit (ADR-049).
 
 When the shop sells products only, an unknown item stops the sale until a product is chosen, and the message says the owner can allow typed items.
 

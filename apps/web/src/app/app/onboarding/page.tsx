@@ -100,6 +100,7 @@ export default function OnboardingPage() {
     return true;
   }
 
+  const nextHref = useRef("/app");
   async function finish() {
     const skipped = skipSell.current;
     skipSell.current = false;
@@ -125,7 +126,7 @@ export default function OnboardingPage() {
     });
     const body = await response.json().catch(() => null);
     if (response.ok) {
-      window.location.href = "/app";
+      window.location.href = nextHref.current;
       return;
     }
     const field = body?.error?.fieldErrors?.[0]?.message;
@@ -265,6 +266,19 @@ export default function OnboardingPage() {
               <SentenceInput id="sell" value={whatYouSell} onChange={(event) => setWhatYouSell(event.target.value)} />
             </FormField>
             <p className="text-sm text-muted">{t("sellNext")}</p>
+            <div className="grid gap-2">
+              {(
+                [
+                  ["/app/sales/new", "startNow"],
+                  ["/app/stock/names", "addList"],
+                  ["/app/stock/new", "setupStock"],
+                ] as const
+              ).map(([href, key]) => (
+                <Button key={key} type="submit" variant="outline" className="min-h-11 w-full" onClick={() => (nextHref.current = href)}>
+                  {t(key)}
+                </Button>
+              ))}
+            </div>
             <div className="flex flex-wrap gap-3 pt-2">
               <Button type="button" variant="ghost" onClick={() => setStep(4)}>
                 {common("back")}

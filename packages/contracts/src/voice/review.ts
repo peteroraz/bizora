@@ -20,6 +20,8 @@ export type ReviewProduct = {
   typed?: boolean;
   /** Not seen before: it will be added to the saved items when the sale is saved. */
   isNew?: boolean;
+  /** Other names for the same item, such as "Igbogbono" for Ogbono (ADR-049). */
+  aliases?: string[];
 };
 export type ReviewCustomer = { id: string; name: string; creditAllowed: boolean };
 
@@ -106,7 +108,7 @@ export function listPriceOf(product: ReviewProduct, unit: string): bigint | null
 }
 
 function reviewLine(spoken: SpokenLine, products: ReviewProduct[], lexicon: VoiceLexicon, typedItems: boolean): ReviewLine {
-  const found = decide(rank(spoken.productText, products, (product) => [product.name], { lexicon }));
+  const found = decide(rank(spoken.productText, products, (product) => [product.name, ...(product.aliases ?? [])], { lexicon }));
   // Not found at all, and the shop sells typed items: sell it as said, and it is remembered for next time.
   const fresh = found.status === "none" && typedItems && spoken.productText.trim().length >= 2;
   const product = found.status === "sure" ? found.best : fresh ? newTypedItem(spoken.productText, spoken.unit) : null;

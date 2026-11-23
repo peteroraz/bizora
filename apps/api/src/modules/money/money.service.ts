@@ -29,6 +29,8 @@ import {
   journalLines,
   ledgerAccounts,
   moneyMovements,
+  saleLines,
+  sales,
   users,
 } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
@@ -760,19 +762,95 @@ export class MoneyService {
           ...(shop ? [eq(expenses.branchId, shop)] : []),
         ),
       );
+    const figures = view(all);
+    const coverage = await this.costCoverage(tenant, business, from, to, shop);
+    const goods = BigInt(coverage.goods);
+    const uncosted = BigInt(coverage.uncosted);
+    const profitStatus = goods === 0n || uncosted === 0n ? "known" : uncosted === goods ? "unknown" : "partial";
+    const knownProfit = BigInt(figures.profitMinor) - uncosted;
+    const estimatedProfit = coverage.estimatedCost === null ? null : knownProfit + BigInt(coverage.covered) - BigInt(coverage.estimatedCost);
     return {
       currency: business.baseCurrencyCode.trim(),
       today,
       from,
       to,
       branchId: shop ?? null,
-      ...view(all),
+      ...figures,
+      /** known: every goods line has a cost. partial: some do. unknown: none do. Profit is not invented (ADR-049). */
+      profitStatus,
+      uncostedSalesMinor: uncosted.toString(),
+      costCoverageBps: goods === 0n ? 10000 : Number(((goods - uncosted) * 10000n) / goods),
+      knownProfitMinor: knownProfit.toString(),
+      estimatedProfitMinor: estimatedProfit?.toString() ?? null,
       expenses: [...byExpense.values()]
         .filter((entry) => entry.amount !== 0n)
         .sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0))
         .map((entry) => ({ name: entry.name, amountMinor: entry.amount.toString() })),
       expensesAwaitingApproval: waiting?.count ?? 0,
       days,
+    };
+  }
+
+  /**
+   * How much of the period's goods sales have a cost on the line, and any cost the owner estimated later.
+   * Estimates never change the ledger. A line with no cost and no estimate stays out of estimated profit.
+   */
+  private async costCoverage(tenant: TenantContext, business: Business, from: string, to: string, shop?: string) {
+    const filters = [
+      eq(saleLines.tenantId, tenant.tenantId),
+      eq(sales.businessId, business.id),
+      inArray(sales.status, ["completed", "awaiting_release"]),
+      sql`(${sales.soldAt} AT TIME ZONE ${business.timezone})::date >= ${from}::date`,
+      sql`(${sales.soldAt} AT TIME ZONE ${business.timezone})::date <= ${to}::date`,
+      ...(shop ? [eq(sales.branchId, shop)] : []),
+    ];
+    const [row] = await this.db
+      .select({
+        goods: sql<string>`coalesce(sum(case when ${saleLines.lineKind} <> 'service' then ${saleLines.lineTotalMinor} else 0 end), 0)::text`,
+        uncosted: sql<string>`coalesce(sum(case when ${saleLines.lineKind} <> 'service' and ${saleLines.costMinor} is null then ${saleLines.lineTotalMinor} else 0 end), 0)::text`,
+      })
+      .from(saleLines)
+      .innerJoin(sales, and(eq(sales.tenantId, saleLines.tenantId), eq(sales.id, saleLines.saleId)))
+      .where(and(...filters));
+    const shopSql = shop ? sql`AND s.branch_id = ${shop}` : sql``;
+    const estimated = await this.db.execute(sql`
+      SELECT coalesce(sum(covered), 0)::text AS covered, coalesce(sum(cost), 0)::text AS cost, count(cost)::int AS hits
+      FROM (
+        SELECT sl.line_total_minor AS covered,
+          (
+            SELECT ce.estimated_cost_minor * sl.entered_quantity / 1000
+            FROM cost_estimates ce
+            LEFT JOIN saved_items si ON si.tenant_id = ce.tenant_id AND si.business_id = ce.business_id
+              AND (si.id = ce.saved_item_id OR (ce.product_id IS NOT NULL AND si.product_id = ce.product_id))
+            WHERE ce.tenant_id = sl.tenant_id AND ce.business_id = sl.business_id
+              AND (s.sold_at AT TIME ZONE ${business.timezone})::date BETWEEN ce.period_start AND ce.period_end
+              AND (
+                (ce.product_id IS NOT NULL AND ce.product_id = sl.product_id)
+                OR si.name_key = lower(btrim(regexp_replace(regexp_replace(sl.description, '\\s+', ' ', 'g'), '[.,;:!?]+$', '')))
+              )
+            ORDER BY ce.created_at DESC
+            LIMIT 1
+          ) AS cost
+        FROM sale_lines sl
+        JOIN sales s ON s.tenant_id = sl.tenant_id AND s.id = sl.sale_id
+        WHERE sl.tenant_id = ${tenant.tenantId} AND s.business_id = ${business.id}
+          AND s.status IN ('completed', 'awaiting_release')
+          AND sl.line_kind <> 'service' AND sl.cost_minor IS NULL
+          AND (s.sold_at AT TIME ZONE ${business.timezone})::date >= ${from}::date
+          AND (s.sold_at AT TIME ZONE ${business.timezone})::date <= ${to}::date
+          ${shopSql}
+      ) lines
+      WHERE cost IS NOT NULL
+    `);
+    const estimateRow = (Array.isArray(estimated) ? estimated[0] : (estimated as { rows?: { covered: string; cost: string; hits: number }[] }).rows?.[0]) as
+      | { covered: string; cost: string; hits: number }
+      | undefined;
+    const hits = Number(estimateRow?.hits ?? 0);
+    return {
+      goods: row?.goods ?? "0",
+      uncosted: row?.uncosted ?? "0",
+      covered: hits > 0 ? (estimateRow?.covered ?? "0") : "0",
+      estimatedCost: hits > 0 ? (estimateRow?.cost ?? "0") : null,
     };
   }
 

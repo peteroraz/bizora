@@ -1,6 +1,6 @@
 # Catalog
 
-What a business sells, and how it is organised. Decisions: ADR-014 (products and stock), ADR-046 (items, variants, categories, brands, codes and units).
+What a business sells, and how it is organised. Decisions: ADR-014 (products and stock), ADR-046 (items, variants, categories, brands, codes and units), ADR-049 (record a sale first, organise the list later — `QUICK_CATALOG.md`).
 
 ## The model
 

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
 import { PAYMENT_METHODS } from "./sales.js";
-import { parseQuantity, UNIT_CODES } from "./stock-units.js";
+import { parseQuantity } from "./stock-units.js";
+import { unitCodeSchema } from "./stock.js";
 
 /**
  * Jobs (ADR-035): work done for a customer, as a mechanic, tailor, electrician, plumber or any service business
@@ -50,7 +51,7 @@ export const jobLineInputSchema = z.discriminatedUnion("kind", [
     kind: z.literal("part"),
     productId: z.string().uuid(),
     quantity,
-    unit: z.enum(UNIT_CODES),
+    unit: unitCodeSchema,
     /** Left out: the product's price. */
     unitPriceMinor: minorAmount.optional(),
   }),
@@ -60,7 +61,7 @@ export const jobLineInputSchema = z.discriminatedUnion("kind", [
     /** Bought before: the product it was saved as. */
     productId: z.string().uuid().optional(),
     quantity,
-    unit: z.enum(UNIT_CODES).default("piece"),
+    unit: unitCodeSchema.default("piece"),
     /** What was paid for all of them. */
     costMinor: positiveAmount,
     /** Charged to the customer for all of them. Left out: what it cost. */

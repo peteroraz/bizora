@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
-import { UNIT_CODES, parseQuantity } from "./stock-units.js";
+import { parseQuantity } from "./stock-units.js";
+import { unitCodeSchema } from "./stock.js";
 
 /**
  * Price lists, suppliers per product and landed cost (ADR-048). Money is a string of minor units (kobo); quantities
@@ -27,7 +28,7 @@ export const priceListPriceSchema = z
   .object({
     productId: z.string().uuid(),
     /** The product's base unit or one of its packs. */
-    unitCode: z.enum(UNIT_CODES),
+    unitCode: unitCodeSchema,
     /** From how many of that unit this price applies. "1" by default. */
     minQuantity: quantity.optional(),
     priceMinor: minorAmount,
@@ -49,7 +50,7 @@ export const supplierProductWriteSchema = z.object({
   preferred: z.boolean().optional(),
   leadTimeDays: z.number().int().min(0).max(365).optional().nullable(),
   minimumOrderQuantity: quantity.optional().nullable(),
-  purchaseUnit: z.enum(UNIT_CODES).optional().nullable(),
+  purchaseUnit: unitCodeSchema.optional().nullable(),
 });
 
 /** What a delivery cost besides the goods. Paid in cash or from the bank; spread over the goods by their value. */
@@ -75,7 +76,7 @@ export const stockReceiptCreateSchema = z.object({
       z.object({
         productId: z.string().uuid(),
         quantity,
-        unit: z.enum(UNIT_CODES),
+        unit: unitCodeSchema,
         /** What the goods on this line cost, before charges. */
         totalCostMinor: positiveAmount,
       }),

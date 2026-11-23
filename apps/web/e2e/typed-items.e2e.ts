@@ -10,7 +10,10 @@ async function allowTypedItems(page: Page, option: "Both" | "Only products in my
   await page.waitForLoadState("networkidle");
   await page.getByRole("tab", { name: "Setup" }).click();
   const setting = page.getByTestId("sales-items-setting");
-  await setting.getByRole("radio", { name: new RegExp(`^${option}`) }).check();
+  const radio = setting.getByRole("radio", { name: new RegExp(`^${option}`) });
+  // A new shop already allows typed items, so saving "Both" again does not reload.
+  if (await radio.isChecked()) return;
+  await radio.check();
   // Changing what staff can sell loads the app again.
   await Promise.all([page.waitForEvent("framenavigated"), page.getByRole("button", { name: "Save", exact: true }).click()]);
   await page.waitForLoadState("load");
@@ -22,7 +25,8 @@ test("typed items are sold, remembered and picked next time, also with no networ
   const { email, headers } = await shop(request);
   await signIn(page, email);
 
-  // Products only (the default): no way to type an item.
+  // A new shop can type an item straight away. Products only is a choice the owner turns on.
+  await allowTypedItems(page, "Only products in my list");
   await page.goto("/app/sales/new");
   await page.getByLabel("Find a product").fill("Agege bread");
   await expect(page.getByText("No product matches that.")).toBeVisible();

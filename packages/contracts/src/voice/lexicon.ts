@@ -1,4 +1,4 @@
-import { unitFromText, type UnitCode } from "../stock-units.js";
+import { unitFromText } from "../stock-units.js";
 
 /**
  * The words a spoken sale is read with (ADR-040). One pack per language; only English is tested today. A new language
@@ -17,8 +17,8 @@ export type VoiceLexicon = {
   one: string[];
   half: string[];
   point: string[];
-  /** A unit a product is sold in, as a unit code, or a market unit with no code ("tray", "mudu"). */
-  unit: (word: string) => UnitCode | "other" | null;
+  /** A unit a product is sold in, including a market unit such as cup or mudu (ADR-049). */
+  unit: (word: string) => string | null;
   /** Words that come between a quantity and a product: "five bags OF rice". */
   of: string[];
   /** Price markers: "AT 75k", "FOR 36k", "@ 500". */
@@ -53,12 +53,6 @@ export type VoiceLexicon = {
   minorCoins: string[];
 };
 
-const MARKET_UNITS = new Set([
-  "tray", "trays", "keg", "kegs", "gallon", "gallons", "jerrycan", "jerrycans", "basket", "baskets", "tuber", "tubers",
-  "heap", "heaps", "bunch", "bunches", "derica", "dericas", "mudu", "mudus", "congo", "congos", "cup", "cups", "plate",
-  "plates", "wrap", "wraps", "ball", "balls", "drum", "drums", "loaf", "loaves", "packets", "pallet", "pallets",
-]);
-
 export const ENGLISH: VoiceLexicon = {
   code: "en",
   units: {
@@ -72,12 +66,7 @@ export const ENGLISH: VoiceLexicon = {
   one: ["a", "an"],
   half: ["half"],
   point: ["point", "dot"],
-  unit: (word) => {
-    if (word === "each") return null;
-    const code = unitFromText(word);
-    if (code) return code;
-    return MARKET_UNITS.has(word) ? "other" : null;
-  },
+  unit: (word) => (word === "each" ? null : unitFromText(word)),
   of: ["of"],
   at: ["at", "@", "price", "priced", "costing", "cost"],
   forTotal: ["for"],

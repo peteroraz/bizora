@@ -177,6 +177,8 @@ function StockScreen() {
                 <>
                   <ActionLink href="/app/stock/categories">{t("categoriesLink")}</ActionLink>
                   <ActionLink href="/app/stock/import">{t("import")}</ActionLink>
+                  <ActionLink href="/app/stock/names">{t("names")}</ActionLink>
+                  <ActionLink href="/app/stock/organize">{t("organize")}</ActionLink>
                   <ActionLink href="/app/stock/new" variant="primary">
                     {t("add")}
                   </ActionLink>
