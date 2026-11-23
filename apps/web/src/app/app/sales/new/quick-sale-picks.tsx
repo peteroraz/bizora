@@ -1,9 +1,10 @@
 "use client";
 
-import { capitaliseFirst, savedItemKey } from "@bizora/contracts";
+import { capitaliseFirst, matchSaleItems, savedItemKey } from "@bizora/contracts";
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { useUnitName } from "../../../../components/stock-quantity";
-import type { CachedProduct } from "../../../../lib/offline/catalog";
+import { searchCatalog, type CachedProduct, type Catalog } from "../../../../lib/offline/catalog";
 import { asProduct } from "../../../../lib/offline/typed-product";
 
 type PickProduct = CachedProduct & { quantity: string };
@@ -14,28 +15,69 @@ type PickProduct = CachedProduct & { quantity: string };
  */
 export function QuickSalePicks({
   query,
-  matches,
-  tiles,
-  catalogReady,
+  catalog,
+  savedList,
+  productAliases,
+  recent,
+  listOk,
   typedOk,
-  asked,
   onAdd,
   money,
   stockText,
 }: {
   query: string;
-  matches: PickProduct[];
-  tiles: PickProduct[];
-  catalogReady: boolean;
+  catalog: Catalog | null;
+  savedList: PickProduct[];
+  productAliases: Record<string, string[]>;
+  recent: string[];
+  listOk: boolean;
   typedOk: boolean;
-  asked: string;
   onAdd: (product: CachedProduct) => void;
   money: (minor: bigint) => string;
   stockText: (quantity: string, baseUnit: string, packs: CachedProduct["packs"]) => string;
 }) {
   const t = useTranslations("sales");
   const unitName = useUnitName();
+  const asked = query.trim().toLowerCase();
   const askedKey = savedItemKey(query);
+  // Ranked after the screen has opened, so this search is not part of the first script (ADR-049).
+  const matches = useMemo(() => {
+    if (!asked) return [];
+    const remembered = new Map(savedList.map((item) => [savedItemKey(item.name), item]));
+    const inputs = [
+      ...(listOk && catalog
+        ? Object.values(catalog.products)
+            .filter((product) => !product.archived)
+            .map((product) => {
+              const memory = remembered.get(savedItemKey(product.name));
+              const aliases = [...(productAliases[product.id] ?? []), ...(memory?.aliases ?? []), ...(product.category ? [product.category] : [])];
+              return {
+                item: { ...product, quantity: catalog.quantities[product.id] ?? "0", aliases, timesSold: memory?.timesSold, lastSoldAt: memory?.lastSoldAt ?? null },
+                name: product.name,
+                aliases,
+                codes: [product.barcode],
+                timesSold: memory?.timesSold ?? 0,
+                lastSoldAt: memory?.lastSoldAt,
+                managed: true,
+              };
+            })
+        : []),
+      ...savedList
+        .filter((item) => !item.productId && !(listOk && catalog && Object.values(catalog.products).some((product) => !product.archived && savedItemKey(product.name) === savedItemKey(item.name))))
+        .map((item) => ({ item: { ...item, quantity: "0" }, name: item.name, aliases: item.aliases, timesSold: item.timesSold, lastSoldAt: item.lastSoldAt, managed: false })),
+    ];
+    return matchSaleItems(query, inputs, 8).map((hit) => hit.item);
+  }, [catalog, query, asked, listOk, savedList, productAliases]);
+  const tiles = useMemo(() => {
+    const remembered = savedList.filter((item) => !item.productId).slice(0, 8);
+    if (!listOk) return remembered.slice(0, 12);
+    if (!catalog) return remembered;
+    const all = searchCatalog(catalog, "");
+    const byId = new Map(all.map((product) => [product.id, product]));
+    const first = recent.map((id) => byId.get(id)).filter((product): product is NonNullable<typeof product> => Boolean(product));
+    const seen = new Set([...remembered.map((item) => savedItemKey(item.name)), ...first.map((product) => product.id)]);
+    return [...remembered, ...first, ...all.filter((product) => !seen.has(product.id) && !seen.has(savedItemKey(product.name)))].slice(0, 12);
+  }, [catalog, recent, listOk, savedList]);
   const taken = Boolean(askedKey) && matches.some((item) => savedItemKey(item.name) === askedKey || item.aliases?.some((alias) => savedItemKey(alias) === askedKey));
   return (
     <>
@@ -57,7 +99,7 @@ export function QuickSalePicks({
             </li>
           ))}
         </ul>
-      ) : query.trim() && catalogReady && !typedOk ? (
+      ) : query.trim() && catalog && !typedOk ? (
         <p className="text-sm text-muted">{t("noMatches")}</p>
       ) : !asked && tiles.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label={t("quickPicks")} data-testid="product-tiles">

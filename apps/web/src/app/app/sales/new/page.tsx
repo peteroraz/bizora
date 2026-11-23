@@ -1,9 +1,9 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, matchSaleItems, parseAmount, parseQuantity, savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, parseAmount, parseQuantity, sellsProducts, sellsTyped, unitPriceFromTotal, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { PickedCustomer } from "../../../../components/customer-picker";
 import { RequireAccess } from "../../../../components/require-access";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
@@ -11,7 +11,7 @@ import { formatCurrency } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
 import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
-import { type CachedProduct, readCatalog, searchCatalog } from "../../../../lib/offline/catalog";
+import { type CachedProduct, readCatalog } from "../../../../lib/offline/catalog";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { warmOfflineCopy } from "../../../../lib/offline/sw-client";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
@@ -180,47 +180,6 @@ function QuickSaleScreen() {
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
   const money = (minor: bigint) => formatCurrency(minor, currency, locale);
-  const asked = query.trim().toLowerCase();
-  // Products, remembered items and other names, ranked the same way on the phone and the server (ADR-049).
-  const matches = useMemo(() => {
-    if (!asked) return [];
-    const remembered = new Map(savedList.map((item) => [savedItemKey(item.name), item]));
-    const inputs = [
-      ...(listOk && catalog
-        ? Object.values(catalog.products)
-            .filter((product) => !product.archived)
-            .map((product) => {
-              const memory = remembered.get(savedItemKey(product.name));
-              const aliases = [...(productAliases[product.id] ?? []), ...(memory?.aliases ?? []), ...(product.category ? [product.category] : [])];
-              return {
-                item: { ...product, quantity: catalog.quantities[product.id] ?? "0", aliases, timesSold: memory?.timesSold, lastSoldAt: memory?.lastSoldAt ?? null },
-                name: product.name,
-                aliases,
-                codes: [product.barcode],
-                timesSold: memory?.timesSold ?? 0,
-                lastSoldAt: memory?.lastSoldAt,
-                managed: true,
-              };
-            })
-        : []),
-      ...savedList
-        .filter((item) => !item.productId && !(listOk && catalog && Object.values(catalog.products).some((product) => !product.archived && savedItemKey(product.name) === savedItemKey(item.name))))
-        .map((item) => ({ item: { ...item, quantity: "0" }, name: item.name, aliases: item.aliases, timesSold: item.timesSold, lastSoldAt: item.lastSoldAt, managed: false })),
-    ];
-    return matchSaleItems(query, inputs, 8).map((hit) => hit.item);
-  }, [catalog, query, asked, listOk, savedList, productAliases]);
-  // Quick tiles: remembered items and what this phone sold recently, 12 at most.
-  const tiles = useMemo(() => {
-    const remembered = savedList.filter((item) => !item.productId).slice(0, 8);
-    if (!listOk) return remembered.slice(0, 12);
-    if (!catalog) return remembered;
-    const all = searchCatalog(catalog, "");
-    const byId = new Map(all.map((product) => [product.id, product]));
-    const first = recent.map((id) => byId.get(id)).filter((product): product is NonNullable<typeof product> => Boolean(product));
-    const seen = new Set([...remembered.map((item) => savedItemKey(item.name)), ...first.map((product) => product.id)]);
-    return [...remembered, ...first, ...all.filter((product) => !seen.has(product.id) && !seen.has(savedItemKey(product.name)))].slice(0, 12);
-  }, [catalog, recent, listOk, savedList]);
-
   /** Each line's price and total, worked out the way the server will. Problems are shown before saving. */
   const priced = lines.map((line) => {
     const entered = parseQuantity(line.quantity);
@@ -448,11 +407,12 @@ function QuickSaleScreen() {
       {Picks ? (
         <Picks
           query={query}
-          matches={matches}
-          tiles={tiles}
-          catalogReady={Boolean(catalog)}
+          catalog={catalog}
+          savedList={savedList}
+          productAliases={productAliases}
+          recent={recent}
+          listOk={listOk}
           typedOk={typedOk}
-          asked={asked}
           onAdd={addProduct}
           money={money}
           stockText={stockText}
