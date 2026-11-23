@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchSaleItems, namesFromText, savedItemKey, unitPriceFromTotal } from "./index.js";
+import { isExactListedName, matchSaleItems, namesFromText, saleCreateSchema, savedItemKey, unitPriceFromTotal } from "./index.js";
 
 describe("quick catalog names and search", () => {
   it("treats spacing, case and a trailing dot as the same name, and keeps sizes apart", () => {
@@ -28,10 +28,31 @@ describe("quick catalog names and search", () => {
     expect(matchSaleItems("ogbono", items, 8, now)[0]).toMatchObject({ item: "ogbono", via: "exact" });
     expect(matchSaleItems("Peak tin", items, 8, now)[0]).toMatchObject({ item: "other", via: "alias" });
     expect(matchSaleItems("Uziza", items, 8, now)).toEqual([]);
+    const mixed = [
+      { item: "prefix", name: "Rice 50kg special", timesSold: 80, managed: true, lastSoldAt: "2026-11-22T12:00:00Z" },
+      { item: "rice", name: "Bag of rice", aliases: ["Rice 50kg"], timesSold: 0 },
+    ];
+    expect(matchSaleItems("Rice 50kg", mixed, 8, now)[0]).toMatchObject({ item: "rice", via: "alias" });
+    expect(isExactListedName("rice 50kg", "Rice 50kg")).toBe(true);
+    expect(isExactListedName("big rice", "Rice 50kg", ["Big rice"])).toBe(true);
+    expect(isExactListedName("rice", "Rice 50kg")).toBe(false);
   });
 
-  it("turns a line total into a unit price", () => {
+  it("shows a unit price for a typed line total, and does not treat that figure as the total", () => {
     expect(unitPriceFromTotal(200_000n, 2000n)).toBe(100_000n);
+    // 3 cups for ₦2,000 is ₦666.66 on screen. The sale sends 200000, not 199998.
+    expect(unitPriceFromTotal(200_000n, 3000n)).toBe(66_666n);
+    const typed = saleCreateSchema.parse({
+      lines: [{ description: "Ogbono", quantity: "3", unit: "cup", unitPriceMinor: "66666", lineTotalMinor: "200000", saved: true }],
+      payments: [{ method: "cash", amountMinor: "200000" }],
+    });
+    expect(typed.lines[0]).toMatchObject({ lineTotalMinor: "200000" });
+    expect(() =>
+      saleCreateSchema.parse({
+        lines: [{ productId: "018f1b3a-7c2d-7a11-8b22-123456789abc", quantity: "1", unit: "bag", lineTotalMinor: "200000" }],
+        payments: [{ method: "cash", amountMinor: "200000" }],
+      }),
+    ).toThrow();
   });
 
   it("ranks ten thousand names quickly", () => {

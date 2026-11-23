@@ -16,6 +16,7 @@ const KINDS = [
   "sale.released",
   "sale.comment",
   "sale.voided",
+  "sale.below_price",
   "transfer.waiting",
   "transfer.not_received",
   "stock.request",

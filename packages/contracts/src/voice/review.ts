@@ -1,4 +1,4 @@
-import { savedItemKey } from "../sales.js";
+import { savedItemKey } from "../sale-light.js";
 import { capitaliseFirst } from "../typing.js";
 import { ENGLISH, type VoiceLexicon } from "./lexicon.js";
 import { decide, rank } from "./match.js";

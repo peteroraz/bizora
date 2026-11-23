@@ -41,7 +41,7 @@ import { renderEmail } from "../email/templates.js";
 import { choosePriceList, listPrices, tierPrice } from "../pricing/price-selection.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
-import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor, type BusinessRow, type ProductRow } from "../inventory/inventory-scope.js";
+import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor, type BusinessRow, type ProductRow, type ProductUnitRow } from "../inventory/inventory-scope.js";
 import { StockService } from "../inventory/stock.service.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
@@ -71,6 +71,17 @@ type Payment = { method: "cash" | "transfer" | "pos"; amountMinor: string; refer
 const SEVEN_DAYS_MS = 7 * 86_400_000;
 
 const round = (numerator: bigint, denominator: bigint) => (numerator * 2n + denominator) / (denominator * 2n);
+
+/** "Rice 50kg is sold by the bag. Choose bag." One unit, or "the bag or carton" when there are two. */
+function soldBy(name: string, units: string[]) {
+  const unique = [...new Set(units)];
+  if (unique.length <= 1) {
+    const unit = unique[0] ?? "piece";
+    return `${name} is sold by the ${unit}. Choose ${unit}.`;
+  }
+  const last = unique[unique.length - 1];
+  return `${name} is sold by the ${unique.slice(0, -1).join(", ")} or ${last}. Choose one of those.`;
+}
 
 /** Job functions that give out goods but do not see every sale: they are told when goods are ready (store keepers). */
 const RELEASE_ROLES = Object.entries(ROLE_PERMISSIONS)
@@ -127,7 +138,7 @@ export class SaleService {
         customerListId: customer?.priceListId ?? null,
         live: source === "pos",
       });
-      const lines = await this.priceLines(
+      const priced = await this.priceLines(
         tx,
         tenant,
         business,
@@ -135,6 +146,7 @@ export class SaleService {
         priceList ? { id: priceList.id, day: localDate(soldAt, business.timezone) } : null,
         source === "pos",
       );
+      const lines = priced.lines;
       // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.
       const typedAt = lines.findIndex((line) => line.saved);
       if (typedAt >= 0 && source === "pos" && !sellsTyped(business.salesItems)) {
@@ -249,6 +261,7 @@ export class SaleService {
         },
         tx,
       );
+      if (priced.belowPrice.length > 0) await this.flagBelowPrice(tx, tenant, business.id, branch.id, id, priced.belowPrice);
     });
     return this.get(tenant, id);
   }
@@ -1360,8 +1373,135 @@ export class SaleService {
   }
 
   /**
+   * A typed name that is one product in this business (the product's name, another name, or a remembered item
+   * already linked to it). Two products for the same name are left alone, so stock is not taken from the wrong one.
+   */
+  private async productsForTypedNames(tx: DbExecutor, tenantId: string, businessId: string, keys: string[]) {
+    const found = new Map<string, string>();
+    if (keys.length === 0) return found;
+    const wanted = new Set(keys);
+    const named = await tx
+      .select({ id: products.id, name: products.name })
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), eq(products.businessId, businessId), isNull(products.archivedAt)));
+    const liveIds = new Set(named.map((product) => product.id));
+    const idsFor = new Map<string, Set<string>>();
+    const add = (key: string, id: string | null) => {
+      if (!id || !wanted.has(key) || !liveIds.has(id)) return;
+      const set = idsFor.get(key) ?? new Set<string>();
+      set.add(id);
+      idsFor.set(key, set);
+    };
+    for (const product of named) add(savedItemKey(product.name), product.id);
+    const aliases = await tx
+      .select({ aliasKey: itemAliases.aliasKey, productId: itemAliases.productId })
+      .from(itemAliases)
+      .where(and(eq(itemAliases.tenantId, tenantId), eq(itemAliases.businessId, businessId), inArray(itemAliases.aliasKey, keys), isNotNull(itemAliases.productId)));
+    for (const alias of aliases) add(alias.aliasKey, alias.productId);
+    const linked = await tx
+      .select({ nameKey: savedItems.nameKey, productId: savedItems.productId })
+      .from(savedItems)
+      .where(and(eq(savedItems.tenantId, tenantId), eq(savedItems.businessId, businessId), inArray(savedItems.nameKey, keys), isNotNull(savedItems.productId)));
+    for (const item of linked) add(item.nameKey, item.productId);
+    for (const [key, ids] of idsFor) {
+      if (ids.size === 1) found.set(key, [...ids][0] as string);
+    }
+    return found;
+  }
+
+  /**
+   * Prices a listed product. A name the seller typed uses the same unit, price list and below-price checks.
+   * A sale made now refuses a price below the list, or a free one, unless the person may give discounts.
+   * A typed name on a sale that already happened keeps the seller's price and is flagged. A product chosen by
+   * id keeps the old check on every source. Returns null when a typed unit is not one this product is sold in
+   * and the sale already happened, so the line stays typed and stock is not guessed.
+   */
+  private priceListedLine(
+    product: ProductRow,
+    productUnits: ProductUnitRow[],
+    input: { unit: string; quantity: string; unitPriceMinor?: string | undefined; lineTotalMinor?: string | undefined },
+    index: number,
+    tiers: Map<string, { minQuantity: bigint; priceMinor: bigint }[]> | null,
+    canDiscount: boolean,
+    live: boolean,
+    fromTyped: boolean,
+  ) {
+    const selling = [product.baseUnit, ...productUnits.filter((unit) => !live || unit.forSale).map((unit) => unit.unitCode)];
+    if (fromTyped && !selling.includes(input.unit)) {
+      if (!live) return null;
+      const message = soldBy(product.name, selling);
+      throw new ApiError("VALIDATION_ERROR", message, 400, [{ field: `lines.${index}.unit`, message }]);
+    }
+    const factor = unitFactor(product, productUnits, input.unit, live ? "sale" : undefined);
+    const entered = parseQuantity(input.quantity) as bigint;
+    const quantity = round(entered * factor, 1000n);
+    if (quantity <= 0n) throw new ApiError("VALIDATION_ERROR", "Enter a larger quantity.", 400, [{ field: `lines.${index}.quantity`, message: "Too small." }]);
+    const pack = productUnits.find((unit) => unit.unitCode === input.unit);
+    const listPrice =
+      tierPrice(tiers?.get(`${product.id}:${input.unit}`), entered) ??
+      (input.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null)));
+    const unitPrice = input.unitPriceMinor !== undefined ? BigInt(input.unitPriceMinor) : listPrice;
+    if (unitPrice === null) {
+      throw new ApiError("PRICE_REQUIRED", `Enter a price for ${product.name}.`, 400, [{ field: `lines.${index}.unitPriceMinor`, message: "Price needed." }]);
+    }
+    const exact = input.lineTotalMinor !== undefined ? BigInt(input.lineTotalMinor) : null;
+    if (exact !== null && exact <= 0n) {
+      throw new ApiError("VALIDATION_ERROR", "Enter a price.", 400, [{ field: `lines.${index}.lineTotalMinor`, message: "Enter a price." }]);
+    }
+    const listLine = listPrice !== null ? round(listPrice * entered, 1000n) : null;
+    const lineTotal = exact ?? round(unitPrice * entered, 1000n);
+    const below = exact !== null ? listLine !== null && exact < listLine : listPrice !== null && unitPrice < listPrice;
+    const free = exact !== null ? false : unitPrice === 0n;
+    // A product picked by id is checked on every sale. A typed name is checked only at the counter (ADR-049).
+    const strictPrice = !fromTyped || live;
+    if (strictPrice && free && !canDiscount) {
+      throw new ApiError("FORBIDDEN", `Ask a manager to give ${product.name} away free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
+    }
+    if (strictPrice && below && !canDiscount) {
+      throw new ApiError("FORBIDDEN", `Ask a manager to sell ${product.name} below its price.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Below the price." }]);
+    }
+    const reduction = below && listLine !== null ? (exact !== null ? listLine - exact : round(((listPrice as bigint) - unitPrice) * entered, 1000n)) : 0n;
+    return {
+      below: fromTyped && !strictPrice && !canDiscount && (free || below),
+      line: { product, unit: input.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name, other: false as const, saved: false as const },
+    };
+  }
+
+  /** The owner is told when an offline, imported or captured sale sold a product below its price. The price is kept. */
+  private async flagBelowPrice(tx: DbExecutor, tenant: TenantContext, businessId: string, branchId: string, saleId: string, names: string[]) {
+    const unique = [...new Set(names)];
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: "sale.below_price",
+        entityType: "sale",
+        entityId: saleId,
+        correlationId: tenant.correlationId,
+        businessId,
+        branchId,
+        actorType: tenant.actorType ?? "HUMAN",
+        metadata: { names: unique },
+      },
+      tx,
+    );
+    const owners = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenant.tenantId), eq(memberships.role, "OWNER"), eq(memberships.status, "ACTIVE")));
+    await this.notifications.notify(tx, tenant.tenantId, owners.map((row) => row.id), {
+      kind: "sale.below_price",
+      saleId,
+      actorName: await this.actorName(tx, tenant),
+      data: { summary: unique.join(", ") },
+    });
+  }
+
+  /**
    * Prices each line from the product (or the price typed), checks discounts, and converts to base units.
-   * `live`: a sale made now at the counter. Offline, imported and photo-read sales already happened, so pack rules (ADR-046) are not applied to them.
+   * `live`: a sale made now at the counter. A typed name that is a product is price-checked only then.
+   * Offline, imported and photo-read sales keep the seller's price and tell the owner. Pack rules (ADR-046)
+   * are not applied to those. A product chosen by id is still price-checked on every source.
    */
   private async priceLines(
     tx: DbExecutor,
@@ -1371,56 +1511,76 @@ export class SaleService {
     priceList: { id: string; day: string } | null = null,
     live = false,
   ) {
-    const ids = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])))];
-    const rows = await tx
-      .select()
-      .from(products)
-      .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), inArray(products.id, ids)));
+    const typedKeys = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [] : [savedItemKey(line.description)])).filter((key) => key.length > 0))];
+    const matched = await this.productsForTypedNames(tx, tenant.tenantId, business.id, typedKeys);
+    const ids = [...new Set([...payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])), ...matched.values()])];
+    const rows =
+      ids.length === 0
+        ? []
+        : await tx
+            .select()
+            .from(products)
+            .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), inArray(products.id, ids)));
     const byId = new Map(rows.map((row) => [row.id, row]));
     const units = await productUnitsFor(tx, tenant.tenantId, ids);
     const fromList = priceList ? await listPrices(tx, tenant.tenantId, priceList.id, ids, priceList.day) : null;
     const canDiscount = tenant.permissions.includes(Permission.SALES_DISCOUNT);
-    return payload.lines.map((line, index) => {
-      // Something not in the products: a service, or an item the shop does not list (ADR-035).
+    const lines = [];
+    const belowPrice: string[] = [];
+    for (const [index, line] of payload.lines.entries()) {
       if (!("productId" in line)) {
+        const productId = matched.get(savedItemKey(line.description));
+        const product = productId ? byId.get(productId) : undefined;
+        if (product && !product.archivedAt) {
+          const priced = this.priceListedLine(
+            product,
+            units.get(product.id) ?? [],
+            { unit: line.unit ?? "piece", quantity: line.quantity, unitPriceMinor: line.unitPriceMinor, lineTotalMinor: line.lineTotalMinor },
+            index,
+            fromList,
+            canDiscount,
+            live,
+            true,
+          );
+          if (priced) {
+            lines.push(priced.line);
+            if (priced.below) belowPrice.push(product.name);
+            continue;
+          }
+        }
         const entered = parseQuantity(line.quantity) as bigint;
         const unitPrice = BigInt(line.unitPriceMinor);
-        if (unitPrice === 0n && !canDiscount) {
+        const exact = line.lineTotalMinor !== undefined ? BigInt(line.lineTotalMinor) : null;
+        if (exact !== null && exact <= 0n) {
+          throw new ApiError("VALIDATION_ERROR", "Enter a price.", 400, [{ field: `lines.${index}.lineTotalMinor`, message: "Enter a price." }]);
+        }
+        if (exact === null && unitPrice === 0n && !canDiscount) {
           throw new ApiError("FORBIDDEN", `Ask a manager to give "${line.description}" free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
         }
         const description = line.description.replace(/\s+/g, " ");
-        return { product: null, unit: line.unit ?? "piece", entered, quantity: entered, unitPrice, lineTotal: round(unitPrice * entered, 1000n), reduction: 0n, description, other: true, saved: line.saved === true };
+        lines.push({
+          product: null,
+          unit: line.unit ?? "piece",
+          entered,
+          quantity: entered,
+          unitPrice,
+          lineTotal: exact ?? round(unitPrice * entered, 1000n),
+          reduction: 0n,
+          description,
+          other: true as const,
+          saved: line.saved === true,
+        });
+        continue;
       }
       const product = byId.get(line.productId);
       if (!product || product.archivedAt) {
         throw new ApiError("PRODUCT_NOT_FOUND", "A product in this sale was not found.", 404, [{ field: `lines.${index}.productId`, message: "Not found." }]);
       }
-      const productUnits = units.get(product.id) ?? [];
-      const factor = unitFactor(product, productUnits, line.unit, live ? "sale" : undefined);
-      const entered = parseQuantity(line.quantity) as bigint;
-      const quantity = round(entered * factor, 1000n);
-      if (quantity <= 0n) throw new ApiError("VALIDATION_ERROR", "Enter a larger quantity.", 400, [{ field: `lines.${index}.quantity`, message: "Too small." }]);
-      const pack = productUnits.find((unit) => unit.unitCode === line.unit);
-      // The price list's price for this unit and quantity, else the everyday price (ADR-048). Selling below either
-      // is a discount, which needs a manager.
-      const listPrice =
-        tierPrice(fromList?.get(`${product.id}:${line.unit}`), entered) ??
-        (line.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null)));
-      const unitPrice = line.unitPriceMinor !== undefined ? BigInt(line.unitPriceMinor) : listPrice;
-      if (unitPrice === null) {
-        throw new ApiError("PRICE_REQUIRED", `Enter a price for ${product.name}.`, 400, [{ field: `lines.${index}.unitPriceMinor`, message: "Price needed." }]);
-      }
-      // Giving something away free is a manager's decision, priced or not (review, 19 Nov).
-      if (unitPrice === 0n && !canDiscount) {
-        throw new ApiError("FORBIDDEN", `Ask a manager to give ${product.name} away free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
-      }
-      if (listPrice !== null && unitPrice < listPrice && !canDiscount) {
-        throw new ApiError("FORBIDDEN", `Ask a manager to sell ${product.name} below its price.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Below the price." }]);
-      }
-      const lineTotal = round(unitPrice * entered, 1000n);
-      const reduction = listPrice !== null && unitPrice < listPrice ? round((listPrice - unitPrice) * entered, 1000n) : 0n;
-      return { product, unit: line.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name, other: false, saved: false };
-    });
+      const priced = this.priceListedLine(product, units.get(product.id) ?? [], { unit: line.unit, quantity: line.quantity, unitPriceMinor: line.unitPriceMinor }, index, fromList, canDiscount, live, false);
+      if (!priced) continue;
+      lines.push(priced.line);
+    }
+    return { lines, belowPrice };
   }
 
   /**

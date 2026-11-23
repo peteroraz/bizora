@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
+import { savedItemKey } from "./sale-light.js";
 import { FLEXIBLE_UNIT, parseQuantity } from "./stock-units.js";
+
+export { savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal } from "./sale-light.js";
 
 export { SALE_PAGE_SIZE, IMPORT_MAX_ROWS } from "./constants.js";
 
@@ -18,6 +21,11 @@ export const saleProductLineSchema = z.object({
   unit: flexibleUnit,
   /** Price per unit sold. Left out: the product's price for that unit. Lower than that is a discount. */
   unitPriceMinor: minorAmount.optional(),
+  /** A listed product's total comes from its price and quantity. Only a typed line may send a line total. */
+  lineTotalMinor: z
+    .any()
+    .optional()
+    .refine((value) => value === undefined, { message: "A listed product's total comes from its price." }),
 });
 
 /** Something not in the products: a service done, or an item the shop does not list (ADR-035). */
@@ -32,21 +40,16 @@ export const saleOtherLineSchema = z.object({
    * shop to allow typed items. Left out: a service or other income (ADR-035).
    */
   saved: z.boolean().optional(),
+  /**
+   * The amount for the whole line, in minor units, when the seller typed "for all" rather than a price each.
+   * Stored as the line total. The unit price is only the rounded figure for display.
+   */
+  lineTotalMinor: minorAmount.optional(),
 });
 
 /** What staff can sell (ADR-041): only products from the list, any item typed in (remembered), or both. */
 export const SALES_ITEMS = ["products", "typed", "both"] as const;
 export type SalesItems = (typeof SALES_ITEMS)[number];
-export const sellsProducts = (setting: SalesItems | string | null | undefined) => setting !== "typed";
-export const sellsTyped = (setting: SalesItems | string | null | undefined) => setting === "typed" || setting === "both";
-
-/**
- * The same name however it is typed: "Ogbono", "ogbono" and "Ogbono." are one item.
- * Sizes stay different: "Peak Milk 400g" is not "Peak Milk 900g".
- */
-export function savedItemKey(name: string) {
-  return name.trim().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim().toLowerCase().slice(0, 160);
-}
 
 /** A remembered item as the app gets it. Later fields are filled in by the quick catalog (ADR-049). */
 export type SavedItem = {
@@ -271,36 +274,41 @@ export type SaleMatchInput<T> = {
 const WEEK_MS = 7 * 86_400_000;
 
 /**
- * Ranks what the sales search should show (ADR-049). Exact, then prefix, then alias, then a partial match.
- * Recently and frequently sold names come first inside each of those. Nothing is picked for the user.
+ * Ranks what the sales search should show (ADR-049). An exact name or an exact alias comes first, then a prefix,
+ * then a shorter alias, then a partial match. Recently and frequently sold names come first inside each of those.
+ * A partial match is only a suggestion. The screen chooses an exact listed product when the seller presses Enter.
  */
 export function matchSaleItems<T>(query: string, items: SaleMatchInput<T>[], limit = 8, now = Date.now()) {
   const asked = savedItemKey(query);
   if (!asked) return [] as { item: T; via: SaleMatchVia; score: number }[];
   const askedCode = query.trim().toLowerCase();
   const recentAfter = now - WEEK_MS;
-  const ranked: { item: T; via: SaleMatchVia; score: number }[] = [];
+  const ranked: { item: T; via: SaleMatchVia; score: number; exact: boolean }[] = [];
   for (const entry of items) {
     const key = savedItemKey(entry.name);
     const aliasKeys = (entry.aliases ?? []).map((alias) => savedItemKey(alias));
     const codeHit = (entry.codes ?? []).some((code) => code?.trim().toLowerCase() === askedCode);
+    const nameExact = Boolean(codeHit || key === asked);
+    const aliasExact = aliasKeys.some((alias) => alias === asked);
     let via: SaleMatchVia | null = null;
-    if (codeHit || key === asked) via = "exact";
+    if (nameExact) via = "exact";
+    else if (aliasExact) via = "alias";
     else if (key.startsWith(asked)) via = "prefix";
-    else if (aliasKeys.some((alias) => alias === asked || alias.startsWith(asked))) via = "alias";
+    else if (aliasKeys.some((alias) => alias.startsWith(asked))) via = "alias";
     else if (asked.length >= 2 && (key.includes(asked) || aliasKeys.some((alias) => alias.includes(asked)))) via = "partial";
     if (!via) continue;
-    const base = via === "exact" ? 500 : via === "prefix" ? 400 : via === "alias" ? 300 : 200;
+    const base = nameExact || aliasExact ? 500 : via === "prefix" ? 400 : via === "alias" ? 300 : 200;
     const soldAt = entry.lastSoldAt ? Date.parse(entry.lastSoldAt) : Number.NaN;
     const recent = Number.isFinite(soldAt) && soldAt >= recentAfter ? 40 : 0;
-    ranked.push({ item: entry.item, via, score: base + Math.min(entry.timesSold ?? 0, 80) + recent + (entry.managed ? 10 : 0) });
+    ranked.push({ item: entry.item, via, exact: nameExact || aliasExact, score: base + Math.min(entry.timesSold ?? 0, 80) + recent + (entry.managed ? 10 : 0) });
   }
-  ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, limit);
+  ranked.sort((a, b) => Number(b.exact) - Number(a.exact) || b.score - a.score);
+  return ranked.slice(0, limit).map(({ item, via, score }) => ({ item, via, score }));
 }
 
-/** The unit price to send when the person typed the line total. Even amounts stay exact. */
-export function unitPriceFromTotal(totalMinor: bigint, enteredThousandths: bigint) {
-  if (enteredThousandths <= 0n) return 0n;
-  return (totalMinor * 1000n) / enteredThousandths;
+/** True when the typed text is exactly this listed product's name or one of its other names. A prefix is not exact. */
+export function isExactListedName(query: string, name: string, aliases: string[] = []) {
+  const asked = savedItemKey(query);
+  if (!asked) return false;
+  return savedItemKey(name) === asked || aliases.some((alias) => savedItemKey(alias) === asked);
 }

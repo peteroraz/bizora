@@ -181,6 +181,157 @@ describe("record first, organise later", () => {
     expect(estimated.estimatedProfitMinor).not.toBeNull();
     expect(estimated.profitMinor).toBe(profit.profitMinor);
   });
+
+  it("sells a typed product name as that product, and still remembers a name that is not one", async () => {
+    const branch = await client.query<{ id: string }>("SELECT id FROM branches WHERE business_id = $1 LIMIT 1", [businessId]);
+    const sales = await invite(http, owner, "sales@quick.test", "SALES", branch.rows[0]?.id ?? "", businessId);
+    await request(http)
+      .patch("/api/v1/onboarding")
+      .set(auth(other))
+      .send({ countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Other Shop", branchName: "Main" })
+      .expect(200);
+    const foreign = await request(http)
+      .post("/api/v1/products")
+      .set(auth(other))
+      .send({ name: "Foreign Rice", baseUnit: "bag", priceMinor: "1000000", openingQuantity: "5", openingCostMinor: "4000000" })
+      .expect(201);
+    const foreignId = foreign.body.data.product.id as string;
+    const notOurs = await sell(sales, [{ description: "foreign rice", quantity: "1", unit: "bag", unitPriceMinor: "1000000", saved: true }], "1000000").expect(201);
+    expect(notOurs.body.data.sale.lines[0]).toMatchObject({ productId: null, lineKind: "quick", description: "foreign rice" });
+    const foreignStock = await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1", [foreignId]);
+    expect(foreignStock.rows[0]?.quantity).toBe("5000");
+    const ogbono = await sell(other, [{ description: "Ogbono", quantity: "2", unit: "cup", unitPriceMinor: "100000", saved: true }], "200000").expect(201);
+    expect(ogbono.body.data.sale.lines[0]).toMatchObject({ productId: null, lineKind: "quick" });
+    const remembered = await request(http).get("/api/v1/saved-items").set(auth(other)).expect(200);
+    expect(remembered.body.data.items).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Ogbono", timesSold: 1 })]));
+
+    const rice = await request(http)
+      .post("/api/v1/products")
+      .set(auth(owner))
+      .send({ name: "Rice 50kg", baseUnit: "bag", priceMinor: "8500000", openingQuantity: "10", openingCostMinor: "75000000" })
+      .expect(201);
+    const riceId = rice.body.data.product.id as string;
+    const below = await sell(sales, [{ description: "rice 50kg", quantity: "1", unit: "bag", unitPriceMinor: "8000000", saved: true }], "8000000");
+    expect(below.status).toBe(403);
+    expect(below.body.error.message).toContain("below its price");
+    const wrongUnit = await sell(sales, [{ description: "Rice 50kg", quantity: "1", unit: "cup", unitPriceMinor: "8500000", saved: true }], "8500000");
+    expect(wrongUnit.status).toBe(400);
+    expect(wrongUnit.body.error.message).toBe("Rice 50kg is sold by the bag. Choose bag.");
+    expect(wrongUnit.body.error.fieldErrors).toEqual([expect.objectContaining({ field: "lines.0.unit" })]);
+    const sold = await sell(sales, [{ description: "rice 50kg", quantity: "1", unit: "bag", unitPriceMinor: "8500000", saved: true }], "8500000").expect(201);
+    expect(sold.body.data.sale.lines[0]).toMatchObject({ productId: riceId, lineKind: "product", description: "Rice 50kg", lineTotalMinor: "8500000" });
+    const line = await client.query<{ cost_minor: string; line_kind: string }>("SELECT cost_minor::text, line_kind FROM sale_lines WHERE sale_id = $1", [sold.body.data.sale.id]);
+    expect(line.rows[0]).toMatchObject({ cost_minor: "7500000", line_kind: "product" });
+    const afterOne = await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1", [riceId]);
+    expect(afterOne.rows[0]?.quantity).toBe("9000");
+    const notSaved = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM saved_items WHERE business_id = $1 AND name_key = 'rice 50kg'", [businessId]);
+    expect(notSaved.rows[0]?.count).toBe("0");
+
+    const tenant = await client.query<{ tenant_id: string }>("SELECT tenant_id FROM businesses WHERE id = $1", [businessId]);
+    await client.query("INSERT INTO item_aliases (id, tenant_id, business_id, product_id, alias, alias_key) VALUES ($1, $2, $3, $4, 'Big rice', 'big rice')", [
+      uuidv7(),
+      tenant.rows[0]?.tenant_id,
+      businessId,
+      riceId,
+    ]);
+    const byAlias = await sell(sales, [{ description: "Big rice", quantity: "1", unit: "bag", unitPriceMinor: "8500000", saved: true }], "8500000").expect(201);
+    expect(byAlias.body.data.sale.lines[0]).toMatchObject({ productId: riceId, lineKind: "product", description: "Rice 50kg" });
+    const aliasCost = await client.query<{ cost_minor: string }>("SELECT cost_minor::text FROM sale_lines WHERE sale_id = $1", [byAlias.body.data.sale.id]);
+    expect(aliasCost.rows[0]?.cost_minor).toBe("7500000");
+    const afterAlias = await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1", [riceId]);
+    expect(afterAlias.rows[0]?.quantity).toBe("8000");
+
+    const offlineId = uuidv7();
+    const offline = await request(http)
+      .post("/api/v1/sync/push")
+      .set(auth(sales))
+      .send({
+        operations: [
+          {
+            id: uuidv7(),
+            type: "sale.create",
+            occurredAt: new Date().toISOString(),
+            payload: {
+              id: offlineId,
+              lines: [{ description: "rice 50kg", quantity: "1", unit: "bag", unitPriceMinor: "8000000", saved: true }],
+              payments: [{ method: "cash", amountMinor: "8000000" }],
+              soldAt: new Date().toISOString(),
+            },
+          },
+        ],
+      })
+      .expect(200);
+    expect(offline.body.data.results[0].status).toBe("applied");
+    const kept = await client.query<{ product_id: string; line_kind: string; line_total_minor: string; unit_price_minor: string }>(
+      "SELECT product_id, line_kind, line_total_minor::text, unit_price_minor::text FROM sale_lines WHERE sale_id = $1",
+      [offlineId],
+    );
+    expect(kept.rows[0]).toMatchObject({ product_id: riceId, line_kind: "product", line_total_minor: "8000000", unit_price_minor: "8000000" });
+    const flagged = await client.query<{ action: string }>("SELECT action FROM audit_events WHERE entity_id = $1 AND action = 'sale.below_price'", [offlineId]);
+    expect(flagged.rows).toHaveLength(1);
+    const told = await client.query<{ kind: string }>("SELECT kind FROM notifications WHERE sale_id = $1", [offlineId]);
+    expect(told.rows.map((row) => row.kind)).toContain("sale.below_price");
+    const afterOffline = await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1", [riceId]);
+    expect(afterOffline.rows[0]?.quantity).toBe("7000");
+    expect(foreignStock.rows[0]?.quantity).toBe("5000");
+    const foreignAgain = await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1", [foreignId]);
+    expect(foreignAgain.rows[0]?.quantity).toBe("5000");
+
+    const refused = await request(http)
+      .post("/api/v1/sales")
+      .set(auth(sales))
+      .send({ lines: [{ productId: riceId, quantity: "1", unit: "bag", lineTotalMinor: "8500000" }], payments: [{ method: "cash", amountMinor: "8500000" }] });
+    expect(refused.status).toBe(400);
+  });
+
+  it("records the typed line total, including when the sale syncs later", async () => {
+    const cups = [{ description: "Dry pepper", quantity: "3", unit: "cup", unitPriceMinor: "66666", lineTotalMinor: "200000", saved: true }];
+    const sold = await sell(cashier, cups, "200000").expect(201);
+    expect(sold.body.data.sale.totalMinor).toBe("200000");
+    expect(sold.body.data.sale.lines[0]).toMatchObject({ lineTotalMinor: "200000", unitPriceMinor: "66666", lineKind: "quick" });
+    const books = await client.query<{ debit: string; credit: string; cash: string }>(
+      `SELECT coalesce(sum(jl.debit_minor), 0)::text AS debit, coalesce(sum(jl.credit_minor), 0)::text AS credit,
+              coalesce(sum(jl.debit_minor) FILTER (WHERE a.role = 'cash'), 0)::text AS cash
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id AND je.tenant_id = jl.tenant_id
+       JOIN ledger_accounts a ON a.id = jl.account_id AND a.tenant_id = jl.tenant_id
+       WHERE je.source_id = $1`,
+      [sold.body.data.sale.id],
+    );
+    expect(books.rows[0]).toMatchObject({ debit: "200000", credit: "200000", cash: "200000" });
+
+    const offlineId = uuidv7();
+    const pushed = await request(http)
+      .post("/api/v1/sync/push")
+      .set(auth(cashier))
+      .send({
+        operations: [
+          {
+            id: uuidv7(),
+            type: "sale.create",
+            occurredAt: new Date().toISOString(),
+            payload: { id: offlineId, lines: cups, payments: [{ method: "cash", amountMinor: "200000" }], soldAt: new Date().toISOString() },
+          },
+        ],
+      })
+      .expect(200);
+    expect(pushed.body.data.results[0].status).toBe("applied");
+    const synced = await client.query<{ total: string; line_total: string }>(
+      "SELECT s.total_minor::text AS total, sl.line_total_minor::text AS line_total FROM sales s JOIN sale_lines sl ON sl.sale_id = s.id WHERE s.id = $1",
+      [offlineId],
+    );
+    expect(synced.rows[0]).toMatchObject({ total: "200000", line_total: "200000" });
+    const syncedBooks = await client.query<{ debit: string; credit: string; cash: string }>(
+      `SELECT coalesce(sum(jl.debit_minor), 0)::text AS debit, coalesce(sum(jl.credit_minor), 0)::text AS credit,
+              coalesce(sum(jl.debit_minor) FILTER (WHERE a.role = 'cash'), 0)::text AS cash
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id AND je.tenant_id = jl.tenant_id
+       JOIN ledger_accounts a ON a.id = jl.account_id AND a.tenant_id = jl.tenant_id
+       WHERE je.source_id = $1`,
+      [offlineId],
+    );
+    expect(syncedBooks.rows[0]).toMatchObject({ debit: "200000", credit: "200000", cash: "200000" });
+  });
 });
 
 async function invite(http: Parameters<typeof request>[0], ownerToken: string, email: string, role: string, branchId: string, businessId: string) {

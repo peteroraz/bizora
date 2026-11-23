@@ -187,11 +187,13 @@ function QuickSaleScreen() {
     const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
     // A typed item's price is whatever it sells for today; its last price is only a suggestion.
     const eachPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
-    const unitPrice = line.product.typed && line.priceMode === "total" && typed !== null && entered !== null ? unitPriceFromTotal(typed, entered) : eachPrice;
-    const total = entered !== null && unitPrice !== null ? lineTotal(unitPrice, entered) : null;
+    // "Price for all" keeps the amount typed. The unit price is only the rounded figure shown beside it.
+    const forAll = Boolean(line.product.typed && line.priceMode === "total" && typed !== null && entered !== null && entered > 0n);
+    const unitPrice = forAll ? unitPriceFromTotal(typed as bigint, entered as bigint) : eachPrice;
+    const total = forAll ? typed : entered !== null && unitPrice !== null ? lineTotal(unitPrice, entered) : null;
     const onHand = BigInt(catalog?.quantities[line.product.id] ?? "0");
     const short = line.product.trackStock && entered !== null && baseQuantity(line.product, line.unit, entered) > onHand;
-    return { line, entered, list, unitPrice, total, short, onHand };
+    return { line, entered, list, unitPrice, total, short, onHand, exactTotal: forAll ? typed : null };
   });
   const subtotal = priced.reduce((sum, item) => sum + (item.total ?? 0n), 0n);
   const discountMinor = canDiscount && discount.trim() ? (parseAmount(discount, currency) ?? 0n) : 0n;
@@ -277,7 +279,14 @@ function QuickSaleScreen() {
       id,
       lines: priced.map((item) =>
         item.line.product.typed
-          ? { description: item.line.product.name, quantity: item.line.quantity.trim().replace(/,/g, ""), unit: item.line.unit, unitPriceMinor: String(item.unitPrice), saved: true }
+          ? {
+              description: item.line.product.name,
+              quantity: item.line.quantity.trim().replace(/,/g, ""),
+              unit: item.line.unit,
+              unitPriceMinor: String(item.unitPrice),
+              saved: true,
+              ...(item.exactTotal !== null ? { lineTotalMinor: item.exactTotal.toString() } : {}),
+            }
           : {
               productId: item.line.product.id,
               quantity: item.line.quantity.trim().replace(/,/g, ""),

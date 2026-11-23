@@ -72,7 +72,7 @@ Top items group sale lines by description, unit and kind, and mark cost unknown 
 
 - No Excel import.
 - Stocked products are not merged.
-- A typed name that exactly matches a product does not move stock. The seller picks the product to do that.
+- A typed name that matches one product in this business is sold as that product (stock and cost move). A name that is not a product is still a quick item.
 - Lines brought in as history with no product are `service`, so they are outside the cost-coverage figure.
 - Profit coverage is for the range, not per day.
 - The last price is a suggestion. It is not a price list.

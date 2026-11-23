@@ -1,8 +1,8 @@
 "use client";
 
-import { capitaliseFirst, matchSaleItems, savedItemKey } from "@bizora/contracts";
+import { capitaliseFirst, isExactListedName, matchSaleItems, savedItemKey } from "@bizora/contracts";
 import { useTranslations } from "next-intl";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { searchCatalog, type CachedProduct, type Catalog } from "../../../../lib/offline/catalog";
 import { asProduct } from "../../../../lib/offline/typed-product";
@@ -68,6 +68,25 @@ export function QuickSalePicks({
     ];
     return matchSaleItems(query, inputs, 8).map((hit) => hit.item);
   }, [catalog, query, asked, listOk, savedList, productAliases]);
+  const aliasesFor = (item: PickProduct) => (item.typed ? [] : [...(productAliases[item.id] ?? []), ...(savedList.find((saved) => saved.productId === item.id)?.aliases ?? [])]);
+  const shown = [...matches].sort((a, b) => Number(!b.typed && isExactListedName(query, b.name, aliasesFor(b))) - Number(!a.typed && isExactListedName(query, a.name, aliasesFor(a))));
+  useEffect(() => {
+    const box = document.getElementById("sale-search");
+    if (!box) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") return;
+      const chosen = matches.find((item) => {
+        if (item.typed) return false;
+        const aliases = [...(productAliases[item.id] ?? []), ...(savedList.find((saved) => saved.productId === item.id)?.aliases ?? [])];
+        return isExactListedName(query, item.name, aliases);
+      });
+      if (!chosen) return;
+      event.preventDefault();
+      onAdd(chosen);
+    };
+    box.addEventListener("keydown", onKey);
+    return () => box.removeEventListener("keydown", onKey);
+  }, [matches, onAdd, query, productAliases, savedList]);
   const tiles = useMemo(() => {
     const remembered = savedList.filter((item) => !item.productId).slice(0, 8);
     if (!listOk) return remembered.slice(0, 12);
@@ -81,9 +100,9 @@ export function QuickSalePicks({
   const taken = Boolean(askedKey) && matches.some((item) => savedItemKey(item.name) === askedKey || item.aliases?.some((alias) => savedItemKey(alias) === askedKey));
   return (
     <>
-      {matches.length > 0 ? (
+      {shown.length > 0 ? (
         <ul className="divide-y divide-border rounded-card border border-border bg-card" aria-label={t("matches")}>
-          {matches.map((product) => (
+          {shown.map((product) => (
             <li key={product.id}>
               <button type="button" className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left" onClick={() => onAdd(product)}>
                 <span>
