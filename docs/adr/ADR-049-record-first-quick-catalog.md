@@ -33,6 +33,6 @@ Remembered items stay on `saved_items`. They are not a second catalog and not a 
 - Search is prefix and contains, ranked in one shared function, not a trigram index.
 - A typed name that matches one product in this business is sold as that product. Stock leaves the shelf and the line keeps the product's cost. A live sale below the price asks for a manager. An offline sale at a lower price is kept and the owner is told. Typing a name that is not a product still just works, and another business's product is never used.
 - "3 cups for ₦2,000" is stored as ₦2,000. The unit price on the line is the rounded split, for display, and is not what the books add up.
-- The quick-sale screen keeps a 2,500 ms target. A screen that misses it on the first measurement is measured once more, and fails only if the second measurement misses too. The script-size check is unchanged.
+- The quick-sale screen keeps a 2,500 ms target. A screen that misses it on the first measurement is measured once more, and fails only if the second measurement misses too. The script-size check is unchanged. The few helpers that screen needs (`savedItemKey`, the sales-items setting, the display unit price) live apart from the sale schemas, so the first script stays within 170 KB.
 - Historical lines imported with no product are marked `service`, so they are not treated as goods waiting for a cost.
 - Usage counts (times sold, last price) are not written to the audit log. Creating, renaming, aliasing, upgrading, merging, archiving and estimating a cost are.

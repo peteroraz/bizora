@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
+import { savedItemKey } from "./sale-light.js";
 import { FLEXIBLE_UNIT, parseQuantity } from "./stock-units.js";
+
+export { savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal } from "./sale-light.js";
 
 export { SALE_PAGE_SIZE, IMPORT_MAX_ROWS } from "./constants.js";
 
@@ -47,16 +50,6 @@ export const saleOtherLineSchema = z.object({
 /** What staff can sell (ADR-041): only products from the list, any item typed in (remembered), or both. */
 export const SALES_ITEMS = ["products", "typed", "both"] as const;
 export type SalesItems = (typeof SALES_ITEMS)[number];
-export const sellsProducts = (setting: SalesItems | string | null | undefined) => setting !== "typed";
-export const sellsTyped = (setting: SalesItems | string | null | undefined) => setting === "typed" || setting === "both";
-
-/**
- * The same name however it is typed: "Ogbono", "ogbono" and "Ogbono." are one item.
- * Sizes stay different: "Peak Milk 400g" is not "Peak Milk 900g".
- */
-export function savedItemKey(name: string) {
-  return name.trim().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim().toLowerCase().slice(0, 160);
-}
 
 /** A remembered item as the app gets it. Later fields are filled in by the quick catalog (ADR-049). */
 export type SavedItem = {
@@ -318,10 +311,4 @@ export function isExactListedName(query: string, name: string, aliases: string[]
   const asked = savedItemKey(query);
   if (!asked) return false;
   return savedItemKey(name) === asked || aliases.some((alias) => savedItemKey(alias) === asked);
-}
-
-/** The unit price to show when the person typed the line total. The sale stores that total itself; this figure is display only and can be a kobo or two short. */
-export function unitPriceFromTotal(totalMinor: bigint, enteredThousandths: bigint) {
-  if (enteredThousandths <= 0n) return 0n;
-  return (totalMinor * 1000n) / enteredThousandths;
 }
