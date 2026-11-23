@@ -7,6 +7,8 @@ import {
   businessTypeFromIndustry,
   formatAddressDisplay,
   parseQuantity,
+  capitaliseFirst,
+  FLEXIBLE_UNIT,
   Permission,
   ROLE_PERMISSIONS,
   SALE_PAGE_SIZE,
@@ -16,6 +18,7 @@ import {
   saleCreateSchema,
   saleReleaseSchema,
   saleVoidSchema,
+  UNIT_CODES,
   whatsAppHref,
   type SaleCreateInput,
   type SaleStatus,
@@ -28,7 +31,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { addresses, branches, businesses, customerPayments, customers, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, users } from "../../db/schema.js";
+import { addresses, branches, businesses, businessUnits, customerPayments, customers, itemAliases, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, users } from "../../db/schema.js";
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
 import { APP_ENV, DB, EMAIL } from "../../tokens.js";
@@ -139,6 +142,11 @@ export class SaleService {
           { field: `lines.${typedAt}.description`, message: "Choose a product from the list." },
         ]);
       }
+      if (typedAt >= 0 && source === "pos" && !tenant.permissions.includes(Permission.CATALOG_QUICK_CREATE)) {
+        throw new ApiError("FORBIDDEN", "Adding a new item is turned off for your job. Choose one from the list.", 403, [
+          { field: `lines.${typedAt}.description`, message: "Choose an item from the list." },
+        ]);
+      }
       // Imports are past records, so they are never sent to a cashier.
       const desk = business.salesFlow === "desk" && source !== "import" && source !== "capture";
 
@@ -219,7 +227,7 @@ export class SaleService {
         actorType: tenant.actorType ?? "HUMAN",
       });
       await this.insertLines(tx, tenant, business.id, id, lines, []);
-      if (typedAt >= 0) await this.rememberTyped(tx, tenant, business.id, lines, soldAt);
+      if (typedAt >= 0) await this.rememberTyped(tx, tenant, business.id, lines, soldAt, payload.itemSource === "voice" ? "voice" : "typed", business.rememberItems);
       if (settled) {
         await this.insertPayments(tx, tenant, business.id, id, payload.payments, settled.transfersWait);
         if (settled.transfersWait) await this.askToCheckTransfer(tx, tenant, business.id, id);
@@ -717,6 +725,54 @@ export class SaleService {
   }
 
   /**
+   * What sold in a period, products and remembered items together (ADR-049).
+   * A line with no cost does not get a margin.
+   */
+  async topItems(tenant: TenantContext, query: { from?: string; to?: string }) {
+    const business = await requireBusiness(this.db, tenant);
+    const today = this.day(business);
+    const from = query.from && /^\d{4}-\d{2}-\d{2}$/.test(query.from) ? query.from : today.date;
+    const to = query.to && /^\d{4}-\d{2}-\d{2}$/.test(query.to) ? query.to : from;
+    const filters: SQL[] = [
+      eq(saleLines.tenantId, tenant.tenantId),
+      eq(sales.businessId, business.id),
+      inArray(sales.status, ["awaiting_release", "completed"]),
+      sql`(${sales.soldAt} AT TIME ZONE ${business.timezone})::date >= ${from}::date`,
+      sql`(${sales.soldAt} AT TIME ZONE ${business.timezone})::date <= ${to}::date`,
+    ];
+    if (tenant.membershipBranchId) filters.push(eq(sales.branchId, tenant.membershipBranchId));
+    if (!tenant.permissions.includes(Permission.SALES_READ_ALL)) filters.push(eq(sales.membershipId, tenant.membershipId));
+    const rows = await this.db
+      .select({
+        name: saleLines.description,
+        unit: saleLines.enteredUnit,
+        kind: saleLines.lineKind,
+        salesCount: sql<number>`count(*)::int`,
+        total: sql<string>`coalesce(sum(${saleLines.lineTotalMinor}), 0)::text`,
+        costKnown: sql<boolean>`bool_and(${saleLines.lineKind} = 'service' OR ${saleLines.costMinor} IS NOT NULL)`,
+      })
+      .from(saleLines)
+      .innerJoin(sales, and(eq(sales.tenantId, saleLines.tenantId), eq(sales.id, saleLines.saleId)))
+      .where(and(...filters))
+      .groupBy(saleLines.description, saleLines.enteredUnit, saleLines.lineKind)
+      .orderBy(sql`sum(${saleLines.lineTotalMinor}) DESC`)
+      .limit(20);
+    return {
+      from,
+      to,
+      currency: business.baseCurrencyCode.trim(),
+      items: rows.map((row) => ({
+        name: row.name,
+        unit: row.unit,
+        kind: row.kind,
+        salesCount: Number(row.salesCount),
+        totalMinor: BigInt(row.total).toString(),
+        costKnown: row.kind === "service" ? true : Boolean(row.costKnown),
+      })),
+    };
+  }
+
+  /**
    * Sends the customer a link to their receipt or invoice by email (ADR-042): the same page as the WhatsApp link, never
    * the PDF itself. Only someone who can see the sale may send it; the address is not stored, only its domain is logged.
    */
@@ -838,6 +894,7 @@ export class SaleService {
         id: line.id,
         returnedQuantity: (returnedByLine.get(line.id) ?? 0n).toString(),
         productId: line.productId,
+        lineKind: line.lineKind,
         description: line.description,
         quantity: line.quantity.toString(),
         enteredQuantity: line.enteredQuantity.toString(),
@@ -1367,8 +1424,9 @@ export class SaleService {
   }
 
   /**
-   * Remembers items typed in at a sale, so staff can pick them next time (ADR-041): the name as first typed, the unit
-   * and price of the latest sale, and how often it sells. An item removed from the list comes back when sold again.
+   * Remembers items typed in at a sale (ADR-041, ADR-049): one row per business per name, the latest unit and price,
+   * and how often it sells. A retry or "ogbono" after "Ogbono" updates that row. An alias updates the item it points at.
+   * Turned off with remember items: the sale is still recorded, the name is just not offered next time.
    */
   private async rememberTyped(
     tx: DbExecutor,
@@ -1376,17 +1434,38 @@ export class SaleService {
     businessId: string,
     lines: { saved: boolean; description: string; unit: string; unitPrice: bigint }[],
     soldAt: Date,
+    source: "typed" | "voice",
+    remember: boolean,
   ) {
+    if (!remember) return;
     const byKey = new Map<string, { name: string; unit: string; price: bigint; count: number }>();
     for (const line of lines) {
       if (!line.saved) continue;
       const key = savedItemKey(line.description);
+      if (!key) continue;
       const seen = byKey.get(key);
       byKey.set(key, { name: seen?.name ?? line.description.trim(), unit: line.unit, price: line.unitPrice, count: (seen?.count ?? 0) + 1 });
     }
     // Typed explicitly: Postgres cannot work out the type of a bare parameter inside CASE or GREATEST.
     const when = sql`${soldAt.toISOString()}::timestamptz`;
     for (const [key, item] of byKey) {
+      await this.rememberUnit(tx, tenant, businessId, item.unit);
+      const [alias] = await tx
+        .select()
+        .from(itemAliases)
+        .where(and(eq(itemAliases.tenantId, tenant.tenantId), eq(itemAliases.businessId, businessId), eq(itemAliases.aliasKey, key)))
+        .limit(1);
+      if (alias?.productId) continue;
+      if (alias?.savedItemId) {
+        await this.touchRemembered(tx, tenant, alias.savedItemId, item, soldAt, when);
+        continue;
+      }
+      const named = await tx
+        .select({ id: products.id, name: products.name })
+        .from(products)
+        .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, businessId), isNull(products.archivedAt), sql`lower(${products.name}) LIKE ${`${key.slice(0, 80)}%`}`))
+        .limit(20);
+      if (named.some((row) => savedItemKey(row.name) === key)) continue;
       const price = sql`${item.price.toString()}::bigint`;
       await tx
         .insert(savedItems)
@@ -1397,8 +1476,12 @@ export class SaleService {
           name: item.name.slice(0, 160),
           nameKey: key,
           unit: item.unit,
+          unitSet: true,
+          source,
+          catalogMode: "quick",
           lastPriceMinor: item.price,
           timesSold: item.count,
+          firstSoldAt: soldAt,
           lastSoldAt: soldAt,
           createdBy: tenant.userId,
           updatedBy: tenant.userId,
@@ -1407,9 +1490,11 @@ export class SaleService {
           target: [savedItems.tenantId, savedItems.businessId, savedItems.nameKey],
           set: {
             unit: item.unit,
+            unitSet: true,
             // An older offline sale arriving late does not replace a newer price.
             lastPriceMinor: sql`CASE WHEN ${savedItems.lastSoldAt} IS NULL OR ${savedItems.lastSoldAt} <= ${when} THEN ${price} ELSE ${savedItems.lastPriceMinor} END`,
             lastSoldAt: sql`GREATEST(coalesce(${savedItems.lastSoldAt}, ${when}), ${when})`,
+            firstSoldAt: sql`CASE WHEN ${savedItems.firstSoldAt} IS NULL THEN ${when} ELSE ${savedItems.firstSoldAt} END`,
             timesSold: sql`${savedItems.timesSold} + ${item.count}::integer`,
             archivedAt: null,
             updatedAt: new Date(),
@@ -1419,12 +1504,54 @@ export class SaleService {
     }
   }
 
+  private async touchRemembered(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    id: string,
+    item: { unit: string; price: bigint; count: number },
+    soldAt: Date,
+    when: SQL,
+  ) {
+    const price = sql`${item.price.toString()}::bigint`;
+    await tx
+      .update(savedItems)
+      .set({
+        unit: item.unit,
+        unitSet: true,
+        lastPriceMinor: sql`CASE WHEN ${savedItems.lastSoldAt} IS NULL OR ${savedItems.lastSoldAt} <= ${when} THEN ${price} ELSE ${savedItems.lastPriceMinor} END`,
+        lastSoldAt: sql`GREATEST(coalesce(${savedItems.lastSoldAt}, ${when}), ${when})`,
+        firstSoldAt: sql`CASE WHEN ${savedItems.firstSoldAt} IS NULL OR ${savedItems.firstSoldAt} > ${when} THEN ${when} ELSE ${savedItems.firstSoldAt} END`,
+        timesSold: sql`${savedItems.timesSold} + ${item.count}::integer`,
+        archivedAt: null,
+        updatedAt: soldAt,
+        updatedBy: tenant.userId,
+      })
+      .where(and(eq(savedItems.id, id), eq(savedItems.tenantId, tenant.tenantId)));
+  }
+
+  /** A unit used at the counter joins the business list, so the next sale can offer it. */
+  private async rememberUnit(tx: DbExecutor, tenant: TenantContext, businessId: string, unit: string) {
+    if ((UNIT_CODES as readonly string[]).includes(unit) || !FLEXIBLE_UNIT.test(unit)) return;
+    await tx
+      .insert(businessUnits)
+      .values({
+        id: newId(),
+        tenantId: tenant.tenantId,
+        businessId,
+        code: unit,
+        displayName: capitaliseFirst(unit),
+        standard: false,
+        createdBy: tenant.userId,
+      })
+      .onConflictDoNothing({ target: [businessUnits.tenantId, businessUnits.businessId, businessUnits.code] });
+  }
+
   private async insertLines(
     tx: DbExecutor,
     tenant: TenantContext,
     businessId: string,
     saleId: string,
-    lines: { product: ProductRow | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; reduction?: bigint }[],
+    lines: { product: ProductRow | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; reduction?: bigint; saved?: boolean }[],
     movements: { lineIndex: number; id: string; cost: bigint }[],
   ) {
     await tx.insert(saleLines).values(
@@ -1444,6 +1571,7 @@ export class SaleService {
           unitPriceMinor: line.unitPrice,
           discountMinor: line.reduction ?? 0n,
           lineTotalMinor: line.lineTotal,
+          lineKind: line.product ? "product" : line.saved ? "quick" : "service",
           costMinor: movement?.cost ?? null,
           stockMovementId: movement?.id ?? null,
         };

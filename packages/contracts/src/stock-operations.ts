@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
-import { UNIT_CODES, parseCountQuantity, parseQuantity } from "./stock-units.js";
+import { parseCountQuantity, parseQuantity } from "./stock-units.js";
+import { unitCodeSchema } from "./stock.js";
 
 /**
  * Transfers with a lifecycle and count sessions (ADR-047). Quantities travel as decimal strings and are stored as
@@ -26,7 +27,7 @@ const requiredNote = z.string().trim().min(3, "Say why, in a few words.").max(24
 export const transferLineSchema = z.object({
   productId: z.string().uuid(),
   quantity,
-  unit: z.enum(UNIT_CODES),
+  unit: unitCodeSchema,
 });
 
 export const transferCreateSchema = z.object({
@@ -62,7 +63,7 @@ export const countSessionCreateSchema = z.object({
 export const countSessionLineSchema = z.object({
   productId: z.string().uuid(),
   countedQuantity: countQuantity,
-  unit: z.enum(UNIT_CODES),
+  unit: unitCodeSchema,
   reason: z.enum(COUNT_REASONS).optional(),
   note,
 });

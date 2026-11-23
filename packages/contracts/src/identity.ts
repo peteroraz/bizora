@@ -241,6 +241,10 @@ export const updateBusinessSchema = z.object({
   salesFlow: z.enum(["simple", "desk"]).optional(),
   /** products: only products from the list. typed: any item typed in, remembered. both (ADR-041). */
   salesItems: z.enum(["products", "typed", "both"]).optional(),
+  /** Remember a typed item for the whole business so the next sale can suggest it (ADR-049). */
+  rememberItems: z.boolean().optional(),
+  /** A list of names is enough. Prices and stock can come later (ADR-049). */
+  quickCatalog: z.boolean().optional(),
 });
 
 export const updateBranchSchema = z.object({

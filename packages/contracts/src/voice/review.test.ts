@@ -99,6 +99,12 @@ describe("checking a spoken sale against the shop", () => {
     expect(blocking(listOnly).map((warning) => warning.code)).toContain("product_unknown");
   });
 
+  it("matches a remembered item by another name", () => {
+    const ogbono = { id: "ogbono", name: "Ogbono", baseUnit: "cup", priceMinor: "100000", packs: [], typed: true, aliases: ["Igbogbono"] };
+    const result = buildReview(parseSpokenSale("two cups of igbogbono at 1000 each, cash.", { currency: "NGN" }), [...products, ogbono], customers, { canChangePrice: false, canGiveCredit: true, typedItems: true });
+    expect(result.lines[0]?.product).toMatchObject({ id: "ogbono" });
+  });
+
   it("matches a saved typed item and uses its last price as a suggestion only", () => {
     const saved = { id: "typed:agege bread", name: "Agege bread", baseUnit: "piece", priceMinor: "150000", packs: [], typed: true };
     const sale = parseSpokenSale("Three Agege bread, cash.", { currency: "NGN" });

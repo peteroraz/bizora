@@ -14,6 +14,7 @@ import { api } from "../../../lib/api";
 import type { SaleReleaseRow, SaleSummary, SaleView } from "../../../lib/sales-client";
 import { ActionLink } from "../../../components/action-link";
 import { WaitingSales } from "../../../components/waiting-sales";
+import { useUnitName } from "../../../components/stock-quantity";
 
 type Tab = "day" | "awaiting_payment" | "awaiting_release";
 
@@ -49,6 +50,9 @@ function SalesScreen() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [summary, setSummary] = useState<SaleSummary | null>(null);
+  type TopRow = { name: string; unit: string; totalMinor: string; salesCount: number; costKnown: boolean };
+  const [top, setTop] = useState<TopRow[]>([]);
+  const unitName = useUnitName();
   const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
 
@@ -94,6 +98,15 @@ function SalesScreen() {
   useEffect(() => {
     void load("", 1, defaultTab);
   }, [load, defaultTab]);
+
+  useEffect(() => {
+    if (tab !== "day" || !seesDay || !date) return;
+    void api(`/api/v1/sales/top-items?from=${date}&to=${date}`)
+      .then(async (response) => {
+        if (response.ok) setTop(((await response.json()).data as { items: TopRow[] }).items);
+      })
+      .catch(() => undefined);
+  }, [tab, seesDay, date]);
 
   const currency = summary?.currency ?? "NGN";
   const money = (minor: string) => formatCurrency(BigInt(minor), currency, locale);
@@ -179,6 +192,28 @@ function SalesScreen() {
             <p className="mt-1 text-xl font-semibold tabular-nums">{money(summary.creditMinor)}</p>
           </Card>
         </div>
+      ) : null}
+      {tab === "day" && top.length > 0 ? (
+        <Card data-testid="sales-top-items">
+          <p className="text-sm font-medium">{t("topItems")}</p>
+          <ul className="mt-2 divide-y divide-border text-sm">
+            {top.map((item) => (
+              <li key={`${item.name}-${item.unit}`} className="flex min-h-11 items-center justify-between gap-3 py-2">
+                <span>
+                  <span className="block font-medium">{item.name}</span>
+                  <span className="block text-xs text-muted">
+                    {t("count", { count: item.salesCount })}
+                    {item.costKnown ? "" : ` · ${t("topNoCost")}`}
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block tabular-nums">{money(item.totalMinor)}</span>
+                  <span className="block text-xs text-muted">{unitName(item.unit, 1)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
       {loaded && items.length === 0 ? (
         <EmptyState

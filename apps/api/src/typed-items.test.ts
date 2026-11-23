@@ -72,6 +72,8 @@ describe("ADR-041: what staff can sell, and typed items remembered", () => {
       .set(auth(owner))
       .send({ countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Kemi Stores", branchName: "Main" })
       .expect(200);
+    // New shops may type items (ADR-049). This suite still checks the products-only gate.
+    await request(http).patch(`/api/v1/businesses/${businessId}`).set(auth(owner)).send({ salesItems: "products" }).expect(200);
     cashier = await invite(http, owner, "cashier@typed.test", "CASHIER", branchId, businessId);
     riceId = (await request(http).post("/api/v1/products").set(auth(owner)).send({ name: "Rice 50kg", baseUnit: "bag", priceMinor: "7500000", openingQuantity: "10", openingCostMinor: "60000000" }).expect(201)).body.data.product.id as string;
     other = (

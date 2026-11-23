@@ -9,11 +9,11 @@ import { listPrice, sellingUnits } from "../lib/sales-client";
 import { useStockText, useUnitName } from "./stock-quantity";
 import { AmountInput } from "./typing";
 
-export type Line = { key: string; product: CachedProduct; unit: string; quantity: string; price: string };
+export type Line = { key: string; product: CachedProduct; unit: string; quantity: string; price: string; priceMode?: "each" | "total" };
 type Priced = { line: Line; list: bigint | null; total: bigint | null; short: boolean; onHand: bigint };
 
-/** Units offered for an item typed in (ADR-041). */
-const TYPED_UNITS = ["piece", "pack", "carton", "bag", "sachet", "bottle", "tin", "crate", "dozen", "paint", "kg", "litre"] as const;
+/** Units offered for an item typed in, including market measures (ADR-049). */
+const TYPED_UNITS = ["piece", "cup", "mudu", "bowl", "heap", "scoop", "rubber", "basin", "plate", "wrap", "portion", "pack", "carton", "bag", "sachet", "bottle", "tin", "crate", "dozen", "paint", "kg", "litre"] as const;
 
 /**
  * The lines of a quick sale: how many, which unit, and the price. Loaded once the screen has opened (and on the first
@@ -27,8 +27,9 @@ export default function QuickSaleLines(props: {
   onPriceOpen: (key: string) => void;
   onStep: (line: Line, by: bigint) => void;
   onChange: (key: string, change: Partial<Line>) => void;
+  units?: string[];
 }) {
-  const { priced, currency, canDiscount, priceOpen, onPriceOpen, onStep, onChange } = props;
+  const { priced, currency, canDiscount, priceOpen, onPriceOpen, onStep, onChange, units = [] } = props;
   const t = useTranslations("sales");
   const locale = useLocale();
   const unitName = useUnitName();
@@ -63,7 +64,7 @@ export default function QuickSaleLines(props: {
             </div>
             {line.product.typed ? (
               <select aria-label={t("unit")} className="h-11 rounded-control border border-border bg-input px-2 text-sm" value={line.unit} onChange={(event) => onChange(line.key, { unit: event.target.value })}>
-                {TYPED_UNITS.map((unit) => (
+                {[...new Set([...TYPED_UNITS, ...units, line.unit])].map((unit) => (
                   <option key={unit} value={unit}>
                     {unitName(unit, 1)}
                   </option>
@@ -91,9 +92,24 @@ export default function QuickSaleLines(props: {
               <span className="text-sm text-muted">{list !== null ? t("eachPrice", { price: money(list), unit: unitName(line.unit, 1) }) : t("noPriceShort")}</span>
             )}
           </div>
+          {line.product.typed ? (
+            <div className="flex gap-2" role="group" aria-label={t("typed.priceKind")}>
+              {(["each", "total"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={(line.priceMode ?? "each") === mode}
+                  className={`min-h-11 rounded-control border px-3 text-sm ${(line.priceMode ?? "each") === mode ? "border-primary bg-primary text-primary-fg" : "border-border"}`}
+                  onClick={() => onChange(line.key, { priceMode: mode })}
+                >
+                  {t(mode === "each" ? "typed.each" : "typed.all")}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {canDiscount || line.product.typed ? (
             priceOpen === line.key || line.price.trim() || line.product.typed ? (
-              <FormField id={`price-${index}`} label={t("price")}>
+              <FormField id={`price-${index}`} label={line.product.typed && line.priceMode === "total" ? t("typed.priceAll") : t("price")}>
                 <AmountInput
                   currency={currency}
                   id={`price-${index}`}

@@ -120,7 +120,38 @@ const UNIT_WORDS: Record<string, UnitCode> = {
   yard: "yard", yards: "yard", yd: "yard", yds: "yard",
 };
 
-/** Reads the unit words traders write ("ctn", "pcs", "ltr") as a unit code, or null if unknown. */
-export function unitFromText(text: string): UnitCode | null {
-  return UNIT_WORDS[text.trim().toLowerCase().replace(/\.$/, "")] ?? null;
+/** Market units a shop can sell in without setting up stock (ADR-049). The code is the word itself. */
+const MARKET_UNIT_CODES: Record<string, string> = {
+  tray: "tray", trays: "tray",
+  keg: "keg", kegs: "keg",
+  gallon: "gallon", gallons: "gallon",
+  jerrycan: "jerrycan", jerrycans: "jerrycan",
+  basket: "basket", baskets: "basket",
+  tuber: "tuber", tubers: "tuber",
+  heap: "heap", heaps: "heap",
+  bunch: "bunch", bunches: "bunch",
+  derica: "derica", dericas: "derica",
+  mudu: "mudu", mudus: "mudu",
+  congo: "congo", congos: "congo",
+  cup: "cup", cups: "cup",
+  plate: "plate", plates: "plate",
+  wrap: "wrap", wraps: "wrap",
+  ball: "ball", balls: "ball",
+  drum: "drum", drums: "drum",
+  loaf: "loaf", loaves: "loaf",
+  bowl: "bowl", bowls: "bowl",
+  scoop: "scoop", scoops: "scoop",
+  rubber: "rubber", rubbers: "rubber",
+  basin: "basin", basins: "basin",
+  portion: "portion", portions: "portion",
+  pallet: "pallet", pallets: "pallet",
+};
+
+/** A unit code: a standard one, or a short word the business uses (cup, mudu). */
+export const FLEXIBLE_UNIT = /^[a-z][a-z0-9]{0,15}$/;
+
+/** Reads the unit words traders write ("ctn", "pcs", "cups", "mudu") as a unit code, or null if unknown. */
+export function unitFromText(text: string): string | null {
+  const word = text.trim().toLowerCase().replace(/\.$/, "");
+  return UNIT_WORDS[word] ?? MARKET_UNIT_CODES[word] ?? null;
 }

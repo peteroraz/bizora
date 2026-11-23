@@ -74,6 +74,9 @@ const runTheShop: PermissionCode[] = [
   P.PRODUCTS_MANAGE,
   P.PRICES_COST_READ,
   P.PRICING_LISTS_MANAGE,
+  P.CATALOG_QUICK_CREATE,
+  P.CATALOG_MANAGE,
+  P.CATALOG_CONVERT_TO_MANAGED,
   P.PURCHASES_MANAGE,
   P.MONEY_READ,
   P.EXPENSES_RECORD,
@@ -97,8 +100,8 @@ const runTheShop: PermissionCode[] = [
  * - Checking the books (ACCOUNTANT, AUDITOR) comes without taking sales or payments.
  */
 export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
-  OWNER: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ, P.BANK_RECONCILE],
-  ADMINISTRATOR: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ, P.BANK_RECONCILE],
+  OWNER: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ, P.BANK_RECONCILE, P.CATALOG_MERGE],
+  ADMINISTRATOR: [...base, ...settingsAll, ...runTheShop, P.EXPENSES_APPROVE, P.CUSTOMERS_EXPORT, P.AUDIT_READ, P.BANK_RECONCILE, P.CATALOG_MERGE],
   MANAGER: [
     ...base,
     P.USERS_READ,
@@ -120,6 +123,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
     P.SALES_CREATE,
     P.SALES_READ_OWN,
     P.STOCK_READ,
+    P.CATALOG_QUICK_CREATE,
   ],
   CASHIER: [
     ...base,
@@ -133,6 +137,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly PermissionCode[]> = {
     P.CASH_CLOSE,
     P.DEBTORS_READ,
     P.STOCK_READ,
+    P.CATALOG_QUICK_CREATE,
   ],
   INVENTORY: [...base, P.STOCK_READ, P.STOCK_RECEIVE, P.STOCK_COUNT, P.STOCK_TRANSFER, P.SALES_RELEASE, P.REPORTS_STOCK_READ],
   EMPLOYEE: [...base],

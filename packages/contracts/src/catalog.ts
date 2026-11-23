@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
-import { UNIT_CODES, parseQuantity } from "./stock-units.js";
+import { parseQuantity } from "./stock-units.js";
+import { unitCodeSchema } from "./stock.js";
 
 /**
  * Catalog items and their variants (ADR-046). A product is a variant of a catalog item: it is what is stocked, sold,
@@ -105,7 +106,7 @@ export const catalogItemUpdateSchema = z.object(catalogItemFields).partial().ext
 });
 
 export const variantPackSchema = z.object({
-  unitCode: z.enum(UNIT_CODES),
+  unitCode: unitCodeSchema,
   baseQuantity: decimalQuantity,
   priceMinor: minorAmount.optional(),
   forPurchase: z.boolean().optional(),
@@ -116,7 +117,7 @@ export const variantPackSchema = z.object({
 export const variantCreateSchema = z.object({
   id: clientId.optional(),
   variantLabel: z.string().trim().min(1).max(80).optional().nullable(),
-  baseUnit: z.enum(UNIT_CODES),
+  baseUnit: unitCodeSchema,
   priceMinor: minorAmount.optional().nullable(),
   defaultCostMinor: minorAmount.optional().nullable(),
   lowStockLevel: z.union([decimalQuantity, z.literal("0")]).optional().nullable(),

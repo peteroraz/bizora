@@ -64,6 +64,7 @@ Set `TRUST_PROXY=true` in production. The API trusts `TRUST_PROXY_HOPS` hops (de
 
 - **Row-level security** is not enabled in PostgreSQL. Isolation between businesses is enforced in the API from the signed-in session, and is tested route by route (ADR-043). It is required before general availability (issue #43).
 - **Email** is sent by Resend on staging. Production refuses the console provider. Invitation links are never returned by the API in staging or production (ADR-042).
+- **A sale can be recorded before products are set up** (ADR-049, `docs/catalog/QUICK_CATALOG.md`). Typed items are remembered for the business. Profit is not invented when a cost is missing. A spreadsheet of names is CSV or pasted text; Excel files are not read.
 - **Offline voice sales** are experimental (ADR-040, ADR-041, ADR-044, `docs/voice/README.md`):
   - English only, measured on read-out Nigerian English and a few Pidgin-influenced sentences (`docs/voice/benchmark.md`), not on real market sales or physical phones;
   - every sale is reviewed before it is saved;

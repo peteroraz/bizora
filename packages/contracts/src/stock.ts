@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
-import { PAID_FROM, STOCK_ADD_REASONS, STOCK_REMOVE_REASONS, UNIT_CODES, parseCountQuantity, parseQuantity } from "./stock-units.js";
+import { FLEXIBLE_UNIT, PAID_FROM, STOCK_ADD_REASONS, STOCK_REMOVE_REASONS, parseCountQuantity, parseQuantity } from "./stock-units.js";
 
 export * from "./stock-units.js";
 
-export const unitCodeSchema = z.enum(UNIT_CODES);
+/** A standard unit or a short custom one such as cup or mudu (ADR-049). */
+export const unitCodeSchema = z.string().trim().toLowerCase().regex(FLEXIBLE_UNIT, "Use a short unit such as piece, bag or cup.");
 
 export const decimalQuantity = z.string().trim().refine((value) => parseQuantity(value) !== null, "Enter a quantity above zero, with up to 3 decimals.");
 const countQuantity = z.string().trim().refine((value) => parseCountQuantity(value) !== null, "Enter how many you counted.");

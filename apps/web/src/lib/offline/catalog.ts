@@ -18,6 +18,11 @@ export type CachedProduct = {
   archived: boolean;
   /** An item typed in at a sale and remembered (ADR-041), not a product: no stock, the last price as its price. */
   typed?: boolean;
+  aliases?: string[];
+  timesSold?: number;
+  lastSoldAt?: string | null;
+  /** Set once this remembered item has been turned into a product. */
+  productId?: string | null;
 };
 
 export type Catalog = {

@@ -54,6 +54,7 @@ function idFor(path: string, param: string): string {
     ["reconciliation", randomUUID()],
     ["sales", ids.sale!],
     ["saved-items", ids.savedItem!],
+    ["units", ids.unit!],
     ["shop-devices", randomUUID()],
     ["staff", ids.membership!],
     ["catalog/brands", ids.brand!],
@@ -104,6 +105,7 @@ const BODY = {
 const BODIES: Record<string, object> = {
   "PATCH /api/v1/followups/:id": { status: "done", title: "Probe" },
   "PATCH /api/v1/products/:id": { name: "Hijack", priceMinor: "100", reason: "Probe price change", changeReason: "Probe" },
+  "PATCH /api/v1/units/:id": { displayName: "Hijack" },
   "POST /api/v1/products/:id/archive": { reason: "Probe" },
   "POST /api/v1/products/:id/photos": { image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" },
   "POST /api/v1/stock/counts/:id/approve": {},
@@ -180,6 +182,7 @@ describe("tenant isolation matrix (ADR-043)", () => {
     await request(h.http).patch(`/api/v1/businesses/${b.businessId}`).set(auth(bt)).send({ salesItems: "both" }).expect(200);
     await request(h.http).post("/api/v1/sales").set(auth(bt)).send({ lines: [{ description: "Bravotenant bread", quantity: "1", unitPriceMinor: "150000", saved: true }], payments: [{ method: "cash", amountMinor: "150000" }] }).expect(201);
     ids.savedItem = (await request(h.http).get("/api/v1/saved-items").set(auth(bt))).body.data.items[0].id;
+    ids.unit = (await request(h.http).post("/api/v1/units").set(auth(bt)).send({ code: "cup", displayName: "Bravotenant cup" }).expect(201)).body.data.unit.id;
     ids.tenant = b.tenantId;
     ids.user = b.userId;
     // Catalog, transfers, counts, price lists and deliveries (the routes added after the first matrix).

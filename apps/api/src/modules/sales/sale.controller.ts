@@ -50,6 +50,12 @@ export class SaleController {
     return success(await this.sales.summary(tenant, date), tenant.correlationId);
   }
 
+  @Get("top-items")
+  @RequireAnyPermission(Permission.SALES_READ_ALL, Permission.SALES_READ_OWN, Permission.SALES_CREATE)
+  async topItems(@CurrentTenant() tenant: TenantContext, @Query("from") from?: string, @Query("to") to?: string) {
+    return success(await this.sales.topItems(tenant, { ...(from ? { from } : {}), ...(to ? { to } : {}) }), tenant.correlationId);
+  }
+
   @Get("queues")
   @RequireAnyPermission(Permission.SALES_CREATE, ...SEE_SALES)
   async queues(@CurrentTenant() tenant: TenantContext) {

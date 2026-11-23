@@ -1,5 +1,4 @@
 import { currencyDigits } from "../typing.js";
-import type { UnitCode } from "../stock-units.js";
 import { ENGLISH, type VoiceLexicon } from "./lexicon.js";
 import { tokenize, type NumberToken, type Token } from "./tokens.js";
 
@@ -20,7 +19,7 @@ export type SpokenLine = {
   productText: string;
   /** The unit as said, and as a unit code when it is one Bizora knows ("bags" → bag). */
   unitText: string | null;
-  unit: UnitCode | null;
+  unit: string | null;
   /** Thousandths of the unit said (5 bags → 5000n). Null when no quantity was said. */
   quantity: bigint | null;
   unitPriceMinor: bigint | null;
@@ -365,12 +364,12 @@ export function parseSpokenSale(transcript: string, options: { currency: string;
     } else continue;
 
     let unitText: string | null = null;
-    let unit: UnitCode | null = null;
+    let unit: string | null = null;
     const takeUnit = (w: string) => {
       const code = lexicon.unit(w);
       if (!code || unitText) return false;
       unitText = w;
-      unit = code === "other" ? null : code;
+      unit = code;
       return true;
     };
     const unitWord = word(tokens[j]);

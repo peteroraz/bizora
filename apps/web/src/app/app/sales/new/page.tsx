@@ -1,6 +1,6 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, parseAmount, parseQuantity, sellsProducts, sellsTyped, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, matchSaleItems, parseAmount, parseQuantity, savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -100,6 +100,8 @@ function QuickSaleScreen() {
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
+  const [productAliases, setProductAliases] = useState<Record<string, string[]>>({});
+  const [extraUnits, setExtraUnits] = useState<string[]>([]);
   // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
   const [chosenList, setChosenList] = useState("");
   const [fromList, setFromList] = useState<ListPrices | null>(null);
@@ -160,10 +162,17 @@ function QuickSaleScreen() {
     if (typedOk) {
       void (async () => {
         const { readSavedItems, refreshSavedItems } = await savedItemsModule();
+        const applySaved = (saved: { items: Parameters<typeof asProduct>[0][]; productAliases?: { productId: string; alias: string }[]; units?: { code: string; standard?: boolean }[] }) => {
+          setSavedList(saved.items.map(asProduct));
+          const byProduct: Record<string, string[]> = {};
+          for (const alias of saved.productAliases ?? []) byProduct[alias.productId] = [...(byProduct[alias.productId] ?? []), alias.alias];
+          setProductAliases(byProduct);
+          setExtraUnits((saved.units ?? []).filter((unit) => unit.standard === false).map((unit) => unit.code));
+        };
         const saved = await readSavedItems(owner);
-        if (saved) setSavedList(saved.items.map(asProduct));
+        if (saved) applySaved(saved);
         const fresh = await refreshSavedItems(owner);
-        if (fresh) setSavedList(fresh.items.map(asProduct));
+        if (fresh) applySaved(fresh);
       })();
     }
   }, [access.owner, access.branchId, typedOk, voiceOn]);
@@ -172,20 +181,44 @@ function QuickSaleScreen() {
   const currency = catalog?.currency ?? place.currency;
   const money = (minor: bigint) => formatCurrency(minor, currency, locale);
   const asked = query.trim().toLowerCase();
-  // Products from the list and items typed before, as the shop allows (ADR-041).
-  const matches = useMemo(
-    () => (asked ? [...(listOk && catalog ? searchCatalog(catalog, query) : []), ...savedList.filter((item) => item.name.toLowerCase().includes(asked))].slice(0, 8) : []),
-    [catalog, query, asked, listOk, savedList],
-  );
-  // Quick tiles: what this phone sold recently, then the rest of the list, 12 at most.
+  // Products, remembered items and other names, ranked the same way on the phone and the server (ADR-049).
+  const matches = useMemo(() => {
+    if (!asked) return [];
+    const remembered = new Map(savedList.map((item) => [savedItemKey(item.name), item]));
+    const inputs = [
+      ...(listOk && catalog
+        ? Object.values(catalog.products)
+            .filter((product) => !product.archived)
+            .map((product) => {
+              const memory = remembered.get(savedItemKey(product.name));
+              const aliases = [...(productAliases[product.id] ?? []), ...(memory?.aliases ?? []), ...(product.category ? [product.category] : [])];
+              return {
+                item: { ...product, quantity: catalog.quantities[product.id] ?? "0", aliases, timesSold: memory?.timesSold, lastSoldAt: memory?.lastSoldAt ?? null },
+                name: product.name,
+                aliases,
+                codes: [product.barcode],
+                timesSold: memory?.timesSold ?? 0,
+                lastSoldAt: memory?.lastSoldAt,
+                managed: true,
+              };
+            })
+        : []),
+      ...savedList
+        .filter((item) => !item.productId && !(listOk && catalog && Object.values(catalog.products).some((product) => !product.archived && savedItemKey(product.name) === savedItemKey(item.name))))
+        .map((item) => ({ item: { ...item, quantity: "0" }, name: item.name, aliases: item.aliases, timesSold: item.timesSold, lastSoldAt: item.lastSoldAt, managed: false })),
+    ];
+    return matchSaleItems(query, inputs, 8).map((hit) => hit.item);
+  }, [catalog, query, asked, listOk, savedList, productAliases]);
+  // Quick tiles: remembered items and what this phone sold recently, 12 at most.
   const tiles = useMemo(() => {
-    if (!listOk) return savedList.slice(0, 12);
-    if (!catalog) return [];
+    const remembered = savedList.filter((item) => !item.productId).slice(0, 8);
+    if (!listOk) return remembered.slice(0, 12);
+    if (!catalog) return remembered;
     const all = searchCatalog(catalog, "");
     const byId = new Map(all.map((product) => [product.id, product]));
     const first = recent.map((id) => byId.get(id)).filter((product): product is NonNullable<typeof product> => Boolean(product));
-    const seen = new Set(first.map((product) => product.id));
-    return [...first, ...all.filter((product) => !seen.has(product.id))].slice(0, 12);
+    const seen = new Set([...remembered.map((item) => savedItemKey(item.name)), ...first.map((product) => product.id)]);
+    return [...remembered, ...first, ...all.filter((product) => !seen.has(product.id) && !seen.has(savedItemKey(product.name)))].slice(0, 12);
   }, [catalog, recent, listOk, savedList]);
 
   /** Each line's price and total, worked out the way the server will. Problems are shown before saving. */
@@ -194,7 +227,8 @@ function QuickSaleScreen() {
     const list = (line.product.typed ? null : tierPrice(fromList?.tiers.get(`${line.product.id}:${line.unit}`), entered)) ?? listPrice(line.product, line.unit);
     const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
     // A typed item's price is whatever it sells for today; its last price is only a suggestion.
-    const unitPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
+    const eachPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
+    const unitPrice = line.product.typed && line.priceMode === "total" && typed !== null && entered !== null ? unitPriceFromTotal(typed, entered) : eachPrice;
     const total = entered !== null && unitPrice !== null ? lineTotal(unitPrice, entered) : null;
     const onHand = BigInt(catalog?.quantities[line.product.id] ?? "0");
     const short = line.product.trackStock && entered !== null && baseQuantity(line.product, line.unit, entered) > onHand;
@@ -300,6 +334,7 @@ function QuickSaleScreen() {
       ...(desk ? { requestedPayment: mode } : {}),
       ...(balance > 0n ? { dueDate } : {}),
       ...(comment.trim() ? { comment: comment.trim() } : {}),
+      ...(spoken.current ? { itemSource: "voice" as const } : {}),
     };
     setPending(true);
     try {
@@ -372,7 +407,10 @@ function QuickSaleScreen() {
       {voice && voiceOn && catalog ? (
         <Suspense fallback={null}>
           <VoiceSale
-            products={[...(listOk ? Object.values(catalog.products) : []), ...savedList]}
+            products={[
+              ...(listOk ? Object.values(catalog.products).map((product) => ({ ...product, aliases: [...(product.aliases ?? []), ...(productAliases[product.id] ?? [])] })) : []),
+              ...savedList.filter((item) => !item.productId),
+            ]}
             currency={currency}
             owner={access.owner ?? null}
             canChangePrice={canDiscount}
@@ -401,6 +439,7 @@ function QuickSaleScreen() {
           {t("voice.open")}
         </button>
       ) : null}
+      <p className="text-base font-semibold">{t("soldQuestion")}</p>
       <FormField id="sale-search" label={t("findProduct")}>
         <div className="flex gap-2">
           <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
@@ -423,7 +462,7 @@ function QuickSaleScreen() {
         {priced.length > 0 ? (
           <Card className="p-4">
             <Suspense fallback={<p className="text-sm text-muted">{t("loading")}</p>}>
-              <QuickSaleLines priced={priced} currency={currency} canDiscount={canDiscount} priceOpen={priceOpen} onPriceOpen={setPriceOpen} onStep={step} onChange={updateLine} />
+              <QuickSaleLines priced={priced} currency={currency} canDiscount={canDiscount} priceOpen={priceOpen} onPriceOpen={setPriceOpen} onStep={step} onChange={updateLine} units={extraUnits} />
             </Suspense>
           </Card>
         ) : (

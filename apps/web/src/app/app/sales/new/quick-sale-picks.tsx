@@ -1,7 +1,8 @@
 "use client";
 
-import { capitaliseFirst } from "@bizora/contracts";
+import { capitaliseFirst, savedItemKey } from "@bizora/contracts";
 import { useTranslations } from "next-intl";
+import { useUnitName } from "../../../../components/stock-quantity";
 import type { CachedProduct } from "../../../../lib/offline/catalog";
 import { asProduct } from "../../../../lib/offline/typed-product";
 
@@ -33,6 +34,9 @@ export function QuickSalePicks({
   stockText: (quantity: string, baseUnit: string, packs: CachedProduct["packs"]) => string;
 }) {
   const t = useTranslations("sales");
+  const unitName = useUnitName();
+  const askedKey = savedItemKey(query);
+  const taken = Boolean(askedKey) && matches.some((item) => savedItemKey(item.name) === askedKey || item.aliases?.some((alias) => savedItemKey(alias) === askedKey));
   return (
     <>
       {matches.length > 0 ? (
@@ -40,9 +44,13 @@ export function QuickSalePicks({
           {matches.map((product) => (
             <li key={product.id}>
               <button type="button" className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left" onClick={() => onAdd(product)}>
-                <span className="text-sm font-medium">{product.name}</span>
+                <span>
+                  <span className="block text-sm font-medium">{product.name}</span>
+                  {product.typed && product.priceMinor ? <span className="block text-xs text-muted">{t("typed.last", { price: money(BigInt(product.priceMinor)), unit: unitName(product.baseUnit, 1) })}</span> : null}
+                  {product.timesSold ? <span className="block text-xs text-muted">{t("typed.used", { count: product.timesSold })}</span> : null}
+                </span>
                 <span className="text-right text-sm text-muted">
-                  {product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}
+                  {product.typed ? "" : product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}
                   {product.trackStock ? ` · ${stockText(product.quantity, product.baseUnit, product.packs)}` : ""}
                 </span>
               </button>
@@ -66,7 +74,7 @@ export function QuickSalePicks({
           ))}
         </div>
       ) : null}
-      {typedOk && asked && !matches.some((item) => item.name.toLowerCase() === asked) ? (
+      {typedOk && askedKey && !taken ? (
         <button type="button" className="min-h-12 w-full rounded-card border border-dashed border-primary px-4 text-left text-sm font-medium text-primary" data-testid="sell-typed" onClick={() => onAdd(asProduct({ name: capitaliseFirst(query.trim()), unit: "piece", lastPriceMinor: null }))}>
           {t("typed.sell", { name: capitaliseFirst(query.trim()) })}
         </button>

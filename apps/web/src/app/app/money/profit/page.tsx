@@ -35,7 +35,8 @@ function ProfitScreen() {
   }, [load]);
 
   const money = (minor: string | bigint) => (profit ? formatCurrency(BigInt(minor), profit.currency, locale) : "");
-  const result = profit ? BigInt(profit.profitMinor) : 0n;
+  const honest = !profit?.profitStatus || profit.profitStatus === "known";
+  const result = profit ? (honest ? BigInt(profit.profitMinor) : profit.estimatedProfitMinor ? BigInt(profit.estimatedProfitMinor) : null) : 0n;
   const nothing = profit && profit.salesMinor === "0" && profit.expensesMinor === "0" && profit.costOfSalesMinor === "0" && profit.posCashoutFeesMinor === "0";
   const monthName = day ? new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`)) : "";
 
@@ -79,10 +80,13 @@ function ProfitScreen() {
       {profit ? (
         <Card className="space-y-4" data-testid="profit-card">
           <div>
-            <p className="text-sm text-muted">{result < 0n ? t("profit.loss") : t("profit.profit")}</p>
-            <p className={`text-3xl font-semibold tabular-nums ${result < 0n ? "text-danger" : "text-success"}`} data-testid="profit-amount">
-              {money(result < 0n ? -result : result)}
-            </p>
+            <p className="text-sm text-muted">{result === null ? t("profit.addCosts") : !honest ? t("profit.estimated") : result < 0n ? t("profit.loss") : t("profit.profit")}</p>
+            {result === null ? null : (
+              <p className={`text-3xl font-semibold tabular-nums ${result < 0n ? "text-danger" : "text-success"}`} data-testid="profit-amount">
+                {money(result < 0n ? -result : result)}
+              </p>
+            )}
+            {!honest && profit.costCoverageBps !== undefined ? <p className="mt-1 text-xs text-muted">{t("profit.coverage", { percent: Math.round(profit.costCoverageBps / 100) })}</p> : null}
             {profit.expensesAwaitingApproval > 0 ? <p className="mt-1 text-xs text-warning">{t("profit.waiting", { count: profit.expensesAwaitingApproval })}</p> : null}
           </div>
           {nothing ? (

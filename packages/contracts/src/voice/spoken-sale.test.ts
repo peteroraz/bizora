@@ -107,6 +107,10 @@ describe("reading a spoken sale", () => {
     expect(sale.totalMinor).toBe(45_000n);
   });
 
+  it("keeps a market unit such as cup", () => {
+    expect(read("Sold two cups of ogbono for two thousand naira cash.").lines[0]).toMatchObject({ productText: "ogbono", unit: "cup", quantity: 2000n });
+  });
+
   it("keeps half and decimal quantities exact", () => {
     expect(read("one and a half kg of meat at 6000 per kg cash").lines[0]).toMatchObject({ quantity: 1500n, unit: "kg", unitPriceMinor: 600_000n });
     expect(read("one and a half kg of meat at 6000 per kg cash").totalMinor).toBe(900_000n);

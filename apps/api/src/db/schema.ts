@@ -175,8 +175,12 @@ export const businesses = pgTable(
     multiCurrencyEnabled: boolean("multi_currency_enabled").notNull().default(false),
     staffFeaturesEnabled: boolean("staff_features_enabled").notNull().default(true),
     salesFlow: varchar("sales_flow", { length: 10 }).notNull().default("simple"),
-    /** What staff can sell (ADR-041): products from the list, any typed item, or both. */
-    salesItems: varchar("sales_items", { length: 10 }).notNull().default("products"),
+    /** What staff can sell (ADR-041, ADR-049): products from the list, any typed item, or both. New shops start on both. */
+    salesItems: varchar("sales_items", { length: 10 }).notNull().default("both"),
+    /** Remember a typed item for the whole business so the next sale can suggest it (ADR-049). */
+    rememberItems: boolean("remember_items").notNull().default(true),
+    /** A list of names is enough to start selling. Stock and prices can come later (ADR-049). */
+    quickCatalog: boolean("quick_catalog").notNull().default(true),
     visibleModules: text("visible_modules")
       .array()
       .notNull()
@@ -869,15 +873,74 @@ export const savedItems = pgTable(
     lastPriceMinor: bigint("last_price_minor", { mode: "bigint" }),
     timesSold: integer("times_sold").notNull().default(0),
     lastSoldAt: timestamp("last_sold_at", { withTimezone: true }),
+    firstSoldAt: timestamp("first_sold_at", { withTimezone: true }),
+    /** typed, import, voice, or migration. A later sale does not change how the item first arrived. */
+    source: varchar("source", { length: 16 }).notNull().default("typed"),
+    productId: uuid("product_id"),
+    /** quick until someone starts tracking stock. managed once it points at a product. */
+    catalogMode: varchar("catalog_mode", { length: 8 }).notNull().default("quick"),
+    /** False when the unit is still the placeholder used for a name-only import. */
+    unitSet: boolean("unit_set").notNull().default(true),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("saved_items_name_key").on(table.tenantId, table.businessId, table.nameKey),
+    uniqueIndex("saved_items_tenant_business_id_key").on(table.tenantId, table.businessId, table.id),
     index("saved_items_recent_idx").on(table.tenantId, table.businessId, table.lastSoldAt),
     foreignKey({ name: "saved_items_tenant_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
   ],
 );
+
+/** Another name for the same thing: "Igbogbono" for Ogbono, or "Peak tin" for Peak Milk 400g (ADR-049). */
+export const itemAliases = pgTable(
+  "item_aliases",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    savedItemId: uuid("saved_item_id"),
+    productId: uuid("product_id"),
+    alias: varchar("alias", { length: 160 }).notNull(),
+    aliasKey: varchar("alias_key", { length: 160 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (table) => [uniqueIndex("item_aliases_key").on(table.tenantId, table.businessId, table.aliasKey)],
+);
+
+/** A unit this business sells in, such as cup or mudu, kept beside the standard list (ADR-049). */
+export const businessUnits = pgTable(
+  "business_units",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    code: varchar("code", { length: 16 }).notNull(),
+    displayName: varchar("display_name", { length: 40 }).notNull(),
+    pluralName: varchar("plural_name", { length: 40 }),
+    standard: boolean("standard").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (table) => [uniqueIndex("business_units_code_key").on(table.tenantId, table.businessId, table.code)],
+);
+
+/** A cost the owner added later for a period. It never rewrites the sale or the books (ADR-049). */
+export const costEstimates = pgTable("cost_estimates", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  savedItemId: uuid("saved_item_id"),
+  productId: uuid("product_id"),
+  estimatedCostMinor: bigint("estimated_cost_minor", { mode: "bigint" }).notNull(),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  reason: varchar("reason", { length: 240 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by"),
+});
 
 /** Categories, nested (migration 0040, ADR-046). */
 export const categories = pgTable(
@@ -1167,6 +1230,8 @@ export const saleLines = pgTable(
     unitPriceMinor: bigint("unit_price_minor", { mode: "bigint" }).notNull(),
     discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
     lineTotalMinor: bigint("line_total_minor", { mode: "bigint" }).notNull(),
+    /** product, quick, or service. A snapshot of what the line was when it was sold (ADR-049). */
+    lineKind: varchar("line_kind", { length: 16 }).notNull().default("product"),
     costMinor: bigint("cost_minor", { mode: "bigint" }),
     stockMovementId: uuid("stock_movement_id"),
   },
@@ -1465,6 +1530,9 @@ export const schema = {
   products,
   productUnits,
   savedItems,
+  itemAliases,
+  businessUnits,
+  costEstimates,
   stockMovements,
   stockBalances,
   stockCounts,

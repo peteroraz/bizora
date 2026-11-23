@@ -55,6 +55,14 @@ export const Permission = {
   PRICES_COST_READ: "prices.cost.read",
   /** Make and change price lists, and give customers one (ADR-048). */
   PRICING_LISTS_MANAGE: "pricing.lists.manage",
+  /** Type a new item while recording a sale (ADR-049). Does not allow stock, cost, or merging. */
+  CATALOG_QUICK_CREATE: "catalog.quick_create",
+  /** Rename remembered items, add aliases and units, and import a list of names (ADR-049). */
+  CATALOG_MANAGE: "catalog.manage",
+  /** Merge two remembered items that are the same thing (ADR-049). Not for stocked products. */
+  CATALOG_MERGE: "catalog.merge",
+  /** Start tracking stock and cost for a remembered item (ADR-049). */
+  CATALOG_CONVERT_TO_MANAGED: "catalog.convert_to_managed",
   PURCHASES_MANAGE: "purchases.manage",
 
   // Money
