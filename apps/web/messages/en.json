@@ -1857,6 +1857,7 @@
       "released": "Goods for {number} were given out by {name}.",
       "comment": "{name} commented on {number}.",
       "voided": "{number} was cancelled by {name}.",
+      "below_price": "{name} sold {summary} below its price while offline. The sale was kept.",
       "transfer_waiting": "{name} recorded a transfer for {number}. Check your bank and confirm it.",
       "transfer_not_received": "The transfer for {number} never came ({name} checked). Talk to the customer.",
       "stock_request": "{name} asked to change stock: {summary}. Approve or reject it under Stock.",
