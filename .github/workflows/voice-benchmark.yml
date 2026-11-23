@@ -68,4 +68,7 @@ jobs:
         env:
           VOICE_BENCH_ONLY: ${{ vars.VOICE_BENCH_ONLY || '' }}
           VOICE_BENCH_CROWD_DB: ${{ vars.VOICE_BENCH_CROWD_DB || '5' }}
+        env:
+          VOICE_BENCH_ONLY: "prompt \\+ cap|shipped"
+          VOICE_BENCH_CROWD_DB: "10"
         run: node scripts/voice-benchmark.mjs ../../bench/ng ../../bench/sales ../../bench/pidgin
