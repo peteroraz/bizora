@@ -92,7 +92,11 @@ describe("ADR-040: a sale spoken offline syncs once and keeps the books right", 
     expect(all.body.data.scope).toBe("all");
     expect(all.body.data.items.map((item: { name: string }) => item.name).sort()).toEqual(["Bola Walk In", "Chinedu Eze", "Emeka Obi"]);
     expect(Object.keys(all.body.data.items[0]).sort()).toEqual(["creditAllowed", "id", "name"]);
-    expect(JSON.stringify(all.body.data)).not.toMatch(/803/);
+    // The directory is names only. Match the whole phone numbers: a short piece such as 803 also turns up inside an id.
+    const directory = JSON.stringify(all.body.data);
+    expect(directory).not.toContain("08031234567");
+    expect(directory).not.toContain("08039999999");
+    expect(directory).not.toContain("phone");
     // A cashier sees only customers approved for credit and those who bought here lately.
     const limited = await request(http).get("/api/v1/customers/directory").set(auth(cashier)).expect(200);
     expect(limited.body.data.scope).toBe("credit_and_recent");

@@ -1,6 +1,6 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, capitaliseFirst, parseAmount, parseQuantity, sellsProducts, sellsTyped, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, parseAmount, parseQuantity, sellsProducts, sellsTyped, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +21,7 @@ import { refreshOfflineCatalog } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
 import { SentenceInput } from "../../../../components/typing";
 import { asProduct } from "../../../../lib/offline/typed-product";
+import type { QuickSalePicks as QuickSalePicksComponent } from "./quick-sale-picks";
 
 import type { Line } from "../../../../components/quick-sale-lines";
 import type { ListPrices } from "../../../../components/sale-price-list";
@@ -47,6 +48,7 @@ const QuickSaleLines = lazy(linesModule);
 const savedItemsModule = () => import("../../../../lib/offline/saved-items");
 const priceListModule = () => import("../../../../components/sale-price-list");
 const SalePriceList = lazy(priceListModule);
+const picksModule = () => import("./quick-sale-picks");
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -109,6 +111,13 @@ function QuickSaleScreen() {
   const voiceOn = access.offlineVoice !== false;
   // A sale confirmed on the voice screen is saved once its fields are in place (ADR-040).
   const [autoSave, setAutoSave] = useState(false);
+  // Search results load after the screen opens: they are not part of the first script.
+  const [Picks, setPicks] = useState<typeof QuickSalePicksComponent | null>(null);
+  useEffect(() => {
+    const load = () => void picksModule().then((module) => setPicks(() => module.QuickSalePicks));
+    if (document.readyState === "complete") window.setTimeout(load, 0);
+    else window.addEventListener("load", () => window.setTimeout(load, 0), { once: true });
+  }, []);
   const spoken = useRef(false);
   const recentStore = access.owner && access.branchId ? recentKey(access.owner.tenantId, access.branchId) : null;
 
@@ -397,41 +406,18 @@ function QuickSaleScreen() {
           <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
         </div>
       </FormField>
-      {matches.length > 0 ? (
-        <ul className="divide-y divide-border rounded-card border border-border bg-card" aria-label={t("matches")}>
-          {matches.map((product) => (
-            <li key={product.id}>
-              <button type="button" className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left" onClick={() => addProduct(product)}>
-                <span className="text-sm font-medium">{product.name}</span>
-                <span className="text-right text-sm text-muted">
-                  {product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}
-                  {product.trackStock ? ` · ${stockText(product.quantity, product.baseUnit, product.packs)}` : ""}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : query.trim() && catalog && !typedOk ? (
-        <p className="text-sm text-muted">{t("noMatches")}</p>
-      ) : !asked && tiles.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label={t("quickPicks")} data-testid="product-tiles">
-          {tiles.map((product) => (
-            <button
-              key={product.id}
-              type="button"
-              className="flex min-h-16 flex-col items-start justify-between rounded-card border border-border bg-card px-3 py-2 text-left hover:border-primary"
-              onClick={() => addProduct(product)}
-            >
-              <span className="line-clamp-2 text-sm font-medium leading-tight">{product.name}</span>
-              <span className="text-xs text-muted">{product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {typedOk && asked && !matches.some((item) => item.name.toLowerCase() === asked) ? (
-        <button type="button" className="min-h-12 w-full rounded-card border border-dashed border-primary px-4 text-left text-sm font-medium text-primary" data-testid="sell-typed" onClick={() => addProduct(asProduct({ name: capitaliseFirst(query.trim()), unit: "piece", lastPriceMinor: null }))}>
-          {t("typed.sell", { name: capitaliseFirst(query.trim()) })}
-        </button>
+      {Picks ? (
+        <Picks
+          query={query}
+          matches={matches}
+          tiles={tiles}
+          catalogReady={Boolean(catalog)}
+          typedOk={typedOk}
+          asked={asked}
+          onAdd={addProduct}
+          money={money}
+          stockText={stockText}
+        />
       ) : null}
       <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
         {priced.length > 0 ? (
