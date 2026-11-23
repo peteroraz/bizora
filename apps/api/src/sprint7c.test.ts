@@ -177,7 +177,7 @@ describe("sprint 7c: suppliers and what is owed to them", () => {
   it("moves stock already bought on credit onto suppliers when the change is first applied", async () => {
     // As before 7c: deliveries with only a typed name, and no supplier records.
     await client.exec(
-      "DELETE FROM supplier_entries; ALTER TABLE stock_movements DISABLE TRIGGER stock_movements_immutable; UPDATE stock_movements SET supplier_id = NULL; ALTER TABLE stock_movements ENABLE TRIGGER stock_movements_immutable; DELETE FROM suppliers;",
+      "DELETE FROM supplier_entries; DELETE FROM supplier_products; ALTER TABLE stock_movements DISABLE TRIGGER stock_movements_immutable; UPDATE stock_movements SET supplier_id = NULL; ALTER TABLE stock_movements ENABLE TRIGGER stock_movements_immutable; DELETE FROM suppliers;",
     );
     const migration = (await loadMigrationSql()).find((item) => item.id.startsWith("0026"));
     await client.exec(migration?.sql ?? "");

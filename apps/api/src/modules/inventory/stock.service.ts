@@ -27,6 +27,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { addPurchase, addSupplierReturn, findOrAddSupplier, owedNow } from "../suppliers/supplier-ledger.js";
+import { recordPurchaseCost } from "../pricing/purchase-cost.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import {
   type BranchRow,
@@ -73,6 +74,13 @@ export type MovementInput = {
   totalCostMinor?: bigint | null;
   /** Exact value to use (the value that left the other shop in a transfer). */
   valueMinor?: bigint;
+  /**
+   * Delivery and other charges on goods received, already this line's share (ADR-048). They are added to the
+   * goods' value, so they become part of the average cost, and are paid from the drawer or the bank.
+   */
+  charges?: { paidFrom: "cash" | "bank"; amountMinor: bigint }[];
+  /** The delivery this came in, when several products came together with charges. */
+  receiptId?: string | null;
   transferId?: string | null;
   countId?: string | null;
   /**
@@ -130,9 +138,10 @@ export class StockService {
     const position = { quantity: balance?.quantity ?? 0n, valueMinor: balance?.valueMinor ?? 0n };
     const fallbackUnitCost = averageUnitCost(position) ?? product.defaultCostMinor ?? 0n;
 
+    const chargesMinor = input.quantity > 0n && input.type === "received" ? (input.charges ?? []).reduce((sum, charge) => sum + charge.amountMinor, 0n) : 0n;
     let value: bigint;
     if (input.quantity > 0n) {
-      value = input.valueMinor ?? input.totalCostMinor ?? ROUND(fallbackUnitCost * input.quantity, QUANTITY_SCALE);
+      value = (input.valueMinor ?? input.totalCostMinor ?? ROUND(fallbackUnitCost * input.quantity, QUANTITY_SCALE)) + chargesMinor;
     } else {
       value = input.valueMinor ?? -issueStock(position, -input.quantity, fallbackUnitCost).costMinor;
     }
@@ -190,6 +199,8 @@ export class StockService {
       transferId: input.transferId ?? null,
       countId: input.countId ?? null,
       journalEntryId,
+      chargesMinor,
+      receiptId: input.receiptId ?? null,
       occurredAt,
       createdBy: tenant.userId,
       membershipId: tenant.membershipId,
@@ -210,7 +221,7 @@ export class StockService {
       })
       .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, branch.id), eq(stockBalances.productId, product.id)));
 
-    return { id, valueMinor: value, documentNumber, quantity: next.quantity, negative };
+    return { id, valueMinor: value, chargesMinor, documentNumber, quantity: next.quantity, negative };
   }
 
   // Stock in ---------------------------------------------------------------------------------------------------
@@ -237,7 +248,12 @@ export class StockService {
    * Stock in, inside a transaction the caller owns, so a whole supplier delivery saves together (ADR-018).
    * The caller has already checked who may pay the supplier.
    */
-  async receiveIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockReceiveSchema.parse>, options: { occurredAt?: Date } = {}) {
+  async receiveIn(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    payload: ReturnType<typeof stockReceiveSchema.parse>,
+    options: { occurredAt?: Date; charges?: { paidFrom: "cash" | "bank"; amountMinor: bigint }[]; receiptId?: string } = {},
+  ) {
     const context = await this.context(tx, tenant, payload.productId, payload.branchId);
     const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
     const entered = parseQuantity(payload.quantity) as bigint;
@@ -261,9 +277,26 @@ export class StockService {
       paidFrom: payload.paidFrom,
       totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
       documentType: "stock_in",
+      ...(options.charges ? { charges: options.charges } : {}),
+      ...(options.receiptId ? { receiptId: options.receiptId } : {}),
       ...(options.occurredAt ? { occurredAt: options.occurredAt } : {}),
     });
-    if (supplier && payload.paidFrom === "credit" && result.valueMinor > 0n) {
+    // What it cost to buy, for the product and for this supplier (ADR-048). Only a cost someone entered counts.
+    if (payload.totalCostMinor) {
+      await recordPurchaseCost(tx, tenant, {
+        businessId: context.business.id,
+        productId: context.product.id,
+        supplierId: supplier && !supplier.unnamed ? supplier.id : null,
+        goodsMinor: BigInt(payload.totalCostMinor),
+        chargesMinor: result.chargesMinor,
+        baseQuantity: quantity,
+        currencyCode: context.business.baseCurrencyCode.trim(),
+        at: options.occurredAt ?? new Date(),
+      });
+    }
+    // The supplier is owed for the goods; delivery charges were paid to someone else.
+    const owedForGoods = result.valueMinor - result.chargesMinor;
+    if (supplier && payload.paidFrom === "credit" && owedForGoods > 0n) {
       const [movement] = await tx
         .select({ journalEntryId: stockMovements.journalEntryId, occurredAt: stockMovements.occurredAt })
         .from(stockMovements)
@@ -274,7 +307,7 @@ export class StockService {
         branchId: context.branch.id,
         supplierId: supplier.id,
         stockMovementId: result.id,
-        amountMinor: result.valueMinor,
+        amountMinor: owedForGoods,
         currencyCode: context.business.baseCurrencyCode,
         entryDate: localDate(movement?.occurredAt ?? new Date(), context.business.timezone),
         payBy: payload.payBy,
@@ -946,10 +979,16 @@ export class StockService {
     if (input.type === "received" || input.type === "returned") {
       const credit: PostingLine["account"] =
         input.paidFrom === "cash" ? { role: "cash", branchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
-      return [
-        { ...stock, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) },
-        { account: credit, creditMinor: amount },
-      ];
+      // Charges on a delivery (ADR-048) are part of the stock's value, paid from the drawer or the bank; the supplier
+      // is owed (or paid) only for the goods.
+      const charges = input.type === "received" && value > 0n ? (input.charges ?? []).filter((charge) => charge.amountMinor > 0n) : [];
+      const chargesTotal = charges.reduce((sum, charge) => sum + charge.amountMinor, 0n);
+      const lines: PostingLine[] = [{ ...stock, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) }];
+      if (amount - chargesTotal > 0n) lines.push({ account: credit, creditMinor: amount - chargesTotal });
+      for (const charge of charges) {
+        lines.push({ account: charge.paidFrom === "cash" ? { role: "cash", branchId } : { role: "bank" }, creditMinor: charge.amountMinor, memo: "Delivery charges" });
+      }
+      return lines;
     }
     // Adjusted or counted.
     if (value > 0n) {

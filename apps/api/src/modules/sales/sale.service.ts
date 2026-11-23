@@ -31,6 +31,7 @@ import { addresses, branches, businesses, customerPayments, customers, paymentAl
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
 import { DB } from "../../tokens.js";
+import { choosePriceList, listPrices, tierPrice } from "../pricing/price-selection.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor, type BusinessRow, type ProductRow } from "../inventory/inventory-scope.js";
@@ -104,7 +105,16 @@ export class SaleService {
       const business = await requireBusiness(tx, tenant);
       const branch = await resolveBranch(tx, tenant, business.id);
       const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
-      const lines = await this.priceLines(tx, tenant, business, payload);
+      // A price list: chosen at the counter, or the customer's (ADR-048).
+      const priceList = await choosePriceList(tx, tenant, {
+        businessId: business.id,
+        branchId: branch.id,
+        currencyCode: business.baseCurrencyCode,
+        chosenId: payload.priceListId,
+        customerListId: customer?.priceListId ?? null,
+        live: source === "pos",
+      });
+      const lines = await this.priceLines(tx, tenant, business, payload, priceList ? { id: priceList.id, day: localDate(soldAt, business.timezone) } : null);
       // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.
       const typedAt = lines.findIndex((line) => line.saved);
       if (typedAt >= 0 && source === "pos" && !sellsTyped(business.salesItems)) {
@@ -156,6 +166,7 @@ export class SaleService {
         businessId: business.id,
         branchId: branch.id,
         customerId: customer?.id ?? null,
+        priceListId: priceList?.id ?? null,
         saleNumber: receiptNumber,
         invoiceNumber: desk || (settled && settled.balance > 0n) ? (await this.numbers.next(tx, tenant.tenantId, business.id, "invoice")).number : null,
         provisionalNumber: payload.provisionalNumber ?? null,
@@ -1246,7 +1257,7 @@ export class SaleService {
   }
 
   /** Prices each line from the product (or the price typed), checks discounts, and converts to base units. */
-  private async priceLines(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, payload: SaleCreateInput) {
+  private async priceLines(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, payload: SaleCreateInput, priceList: { id: string; day: string } | null = null) {
     const ids = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])))];
     const rows = await tx
       .select()
@@ -1254,6 +1265,7 @@ export class SaleService {
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), inArray(products.id, ids)));
     const byId = new Map(rows.map((row) => [row.id, row]));
     const units = await productUnitsFor(tx, tenant.tenantId, ids);
+    const fromList = priceList ? await listPrices(tx, tenant.tenantId, priceList.id, ids, priceList.day) : null;
     const canDiscount = tenant.permissions.includes(Permission.SALES_DISCOUNT);
     return payload.lines.map((line, index) => {
       // Something not in the products: a service, or an item the shop does not list (ADR-035).
@@ -1276,8 +1288,11 @@ export class SaleService {
       const quantity = round(entered * factor, 1000n);
       if (quantity <= 0n) throw new ApiError("VALIDATION_ERROR", "Enter a larger quantity.", 400, [{ field: `lines.${index}.quantity`, message: "Too small." }]);
       const pack = productUnits.find((unit) => unit.unitCode === line.unit);
+      // The price list's price for this unit and quantity, else the everyday price (ADR-048). Selling below either
+      // is a discount, which needs a manager.
       const listPrice =
-        line.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null));
+        tierPrice(fromList?.get(`${product.id}:${line.unit}`), entered) ??
+        (line.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null)));
       const unitPrice = line.unitPriceMinor !== undefined ? BigInt(line.unitPriceMinor) : listPrice;
       if (unitPrice === null) {
         throw new ApiError("PRICE_REQUIRED", `Enter a price for ${product.name}.`, 400, [{ field: `lines.${index}.unitPriceMinor`, message: "Price needed." }]);

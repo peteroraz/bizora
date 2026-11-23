@@ -24,6 +24,10 @@ import { asProduct } from "../../../../lib/offline/typed-product";
 
 import type { Line } from "../../../../components/quick-sale-lines";
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";
+type Tier = { min: bigint; price: bigint };
+/** Prices from a price list (ADR-048), by product and unit, largest minimum quantity first. */
+type ListPrices = { id: string; name: string; tiers: Map<string, Tier[]> };
+const tierPrice = (tiers: Tier[] | undefined, entered: bigint | null) => (entered === null ? null : (tiers?.find((tier) => entered >= tier.min)?.price ?? null));
 
 /** Quantities are thousandths (ADR-014); the stepper shows them as people type them: "3", "2.5". */
 const quantityText = (thousandths: bigint) =>
@@ -94,6 +98,10 @@ function QuickSaleScreen() {
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
+  // Price lists (ADR-048): those staff may choose here, the one chosen, and the prices the sale will use.
+  const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
+  const [chosenList, setChosenList] = useState("");
+  const [fromList, setFromList] = useState<ListPrices | null>(null);
   const typedOk = sellsTyped(access.salesItems);
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
@@ -146,6 +154,40 @@ function QuickSaleScreen() {
     }
   }, [access.owner, access.branchId, typedOk]);
 
+  useEffect(() => {
+    void api("/api/v1/pricing/lists")
+      .then(async (response) => (response.ok ? ((await response.json()) as { data: { lists: { id: string; name: string; active: boolean }[] } }) : null))
+      .then((payload) => setLists((payload?.data.lists ?? []).filter((list) => list.active)))
+      .catch(() => undefined);
+  }, []);
+
+  // The same rule as the sale: the list chosen here, else the customer's. Offline, the everyday prices are used.
+  useEffect(() => {
+    if (!chosenList && !customer?.id) {
+      setFromList(null);
+      return;
+    }
+    let live = true;
+    const query = new URLSearchParams({ ...(chosenList ? { priceListId: chosenList } : {}), ...(customer?.id ? { customerId: customer.id } : {}) });
+    void api(`/api/v1/pricing/for-sale?${query.toString()}`)
+      .then(async (response) => (response.ok ? ((await response.json()) as { data: { priceList: { id: string; name: string } | null; prices: { productId: string; unitCode: string; minQuantity: string; priceMinor: string }[] } }) : null))
+      .then((payload) => {
+        if (!live) return;
+        const list = payload?.data.priceList;
+        if (!list) return setFromList(null);
+        const tiers = new Map<string, Tier[]>();
+        for (const price of payload.data.prices) {
+          const key = `${price.productId}:${price.unitCode}`;
+          tiers.set(key, [...(tiers.get(key) ?? []), { min: parseQuantity(price.minQuantity) ?? 1000n, price: BigInt(price.priceMinor) }].sort((a, b) => (b.min > a.min ? 1 : -1)));
+        }
+        setFromList({ id: list.id, name: list.name, tiers });
+      })
+      .catch(() => live && setFromList(null));
+    return () => {
+      live = false;
+    };
+  }, [chosenList, customer?.id]);
+
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
   const money = (minor: bigint) => formatCurrency(minor, currency, locale);
@@ -169,7 +211,7 @@ function QuickSaleScreen() {
   /** Each line's price and total, worked out the way the server will. Problems are shown before saving. */
   const priced = lines.map((line) => {
     const entered = parseQuantity(line.quantity);
-    const list = listPrice(line.product, line.unit);
+    const list = (line.product.typed ? null : tierPrice(fromList?.tiers.get(`${line.product.id}:${line.unit}`), entered)) ?? listPrice(line.product, line.unit);
     const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
     // A typed item's price is whatever it sells for today; its last price is only a suggestion.
     const unitPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
@@ -273,6 +315,7 @@ function QuickSaleScreen() {
       payments: paidParts.map((part) => ({ method: part.method, amountMinor: (part.amountMinor ?? 0n).toString() })),
       ...(discountMinor > 0n ? { discountMinor: discountMinor.toString() } : {}),
       ...(customer ? { customerId: customer.id } : {}),
+      ...(chosenList && fromList ? { priceListId: fromList.id } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(desk ? { requestedPayment: mode } : {}),
       ...(balance > 0n ? { dueDate } : {}),
@@ -297,7 +340,8 @@ function QuickSaleScreen() {
         await enqueue(
           access.owner,
           "sale.create",
-          { ...body, provisionalNumber: provisional, soldAt: new Date().toISOString() },
+          // Offline, the sale names the list it was priced from, so the server prices it the same way.
+          { ...body, ...(fromList ? { priceListId: fromList.id } : {}), provisionalNumber: provisional, soldAt: new Date().toISOString() },
           {
             meta: {
               summary: priced.map((item) => `${item.line.quantity} ${unitName(item.line.unit, Number(item.line.quantity) || 1)} ${item.line.product.name}`).join(", "),
@@ -443,6 +487,27 @@ function QuickSaleScreen() {
             </Suspense>
           ) : null}
         </fieldset>
+        {lists.length > 0 ? (
+          <FormField id="sale-price-list" label={t("priceList")} hint={fromList && !chosenList ? t("customerPrices", { name: fromList.name }) : undefined}>
+            <select
+              id="sale-price-list"
+              className="h-11 w-full rounded-control border border-border bg-input px-2 text-sm"
+              value={chosenList}
+              onChange={(event) => setChosenList(event.target.value)}
+            >
+              <option value="">{t("everydayPrices")}</option>
+              {lists.map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        ) : fromList ? (
+          <p className="text-sm text-muted" role="status">
+            {t("customerPrices", { name: fromList.name })}
+          </p>
+        ) : null}
         {findsCustomers ? (
           <Card className="p-4">
             <p className="text-sm font-medium">{balance > 0n || mode === "credit" ? t("customer") : t("customerOptional")}</p>

@@ -45,7 +45,9 @@ export class ProductService {
     const needle = query.q?.trim();
     if (needle) {
       const match = or(ilike(products.name, like(needle)), eq(products.barcode, needle), ilike(products.category, like(needle)));
-      if (match) filters.push(match);
+      // A supplier's own code for the product finds it too (ADR-048).
+      const bySupplierCode = sql`EXISTS (SELECT 1 FROM supplier_products sp WHERE sp.tenant_id = ${products.tenantId} AND sp.product_id = ${products.id} AND lower(sp.supplier_sku) = ${needle.toLowerCase()})`;
+      if (match) filters.push(or(match, bySupplierCode) as SQL);
     }
     if (query.category?.trim()) filters.push(eq(products.category, query.category.trim()));
     const page = Math.max(1, query.page ?? 1);
