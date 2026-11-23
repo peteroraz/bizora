@@ -26,16 +26,18 @@ test("owner adds a product, records stock in and damage, sees low stock, and cou
 
   // Add a product counted in pieces, sold by the carton too, with stock on hand today.
   await page.goto("/app/stock/new");
-  await page.getByLabel("Product name").fill("Peak Milk Tin");
+  await page.getByLabel("Item name").fill("Peak Milk Tin");
   await page.getByLabel("How you count it").selectOption("tin");
   await page.getByLabel("Selling price per tin").fill("450");
+  await page.getByLabel("How many tins you have").fill("40");
+  // Packs, the warning level and cost are behind More options (ADR-046).
+  await page.getByRole("button", { name: "More options" }).click();
   await page.getByRole("button", { name: "Add a pack size" }).click();
   await page.getByLabel("Pack", { exact: true }).selectOption("carton");
   await page.getByLabel("How many tins in one").fill("48");
   await page.getByLabel("Warn me when stock falls to (in tins)").fill("30");
-  await page.getByLabel("How many tins you have").fill("40");
   await page.getByLabel("What they cost in total").fill("14,000");
-  await page.getByRole("button", { name: "Save product" }).click();
+  await page.getByRole("button", { name: "Save item" }).click();
   await expect(page.getByRole("heading", { name: "Peak Milk Tin" })).toBeVisible();
   await expect(page.getByText("40 tins").first()).toBeVisible();
 
@@ -64,7 +66,7 @@ test("owner adds a product, records stock in and damage, sees low stock, and cou
   // Prices change: the owner updates the selling price.
   await page.locator("#edit-price").fill("500");
   await page.locator("#edit-reason").pressSequentially("new price list");
-  await page.getByRole("button", { name: "Save product" }).click();
+  await page.getByRole("button", { name: "Save item" }).click();
   await expect(page.getByText("Product updated.")).toBeVisible();
   await expect(page.getByText(/₦500\.00 per tin/)).toBeVisible();
 

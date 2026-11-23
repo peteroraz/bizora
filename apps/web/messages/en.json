@@ -1026,7 +1026,7 @@
   "stock": {
     "title": "Stock",
     "description": "What you have in each shop, and every change to it.",
-    "add": "Add a product",
+    "add": "Add item",
     "searchLabel": "Search stock",
     "searchPlaceholder": "Name, category or barcode",
     "search": "Search",
@@ -1050,9 +1050,9 @@
     "reject": "Reject",
     "belowZeroTitle": "Below zero, please check",
     "belowZeroLine": "{name} at {shop}: {quantity}",
-    "newTitle": "Add a product",
-    "newLead": "Name it, choose how you count it, and say how many you have now.",
-    "name": "Product name",
+    "newTitle": "Add an item",
+    "newLead": "Name it, give its price, and say how many you have. Everything else can wait.",
+    "name": "Item name",
     "categoryHint": "Optional, for example Drinks or Grains",
     "baseUnit": "How you count it",
     "priceLabel": "Selling price per {unit}",
@@ -1072,7 +1072,7 @@
     "openingQuantity": "How many {unit} you have",
     "openingCost": "What they cost in total",
     "openingHint": "Optional. Recorded as money you put into the business.",
-    "save": "Save product",
+    "save": "Save item",
     "saving": "Saving…",
     "duplicate": "A product with this name already exists.",
     "failed": "Could not save. Check the details and try again.",
@@ -1224,7 +1224,27 @@
       "needsNetwork": "Adding photos needs the internet. Connect and try again."
     },
     "lists": "Say or snap stock",
-    "sentForApproval": "Sent to a manager or the owner. Stock changes when they approve it."
+    "sentForApproval": "Sent to a manager or the owner. Stock changes when they approve it.",
+    "photo": "Photo",
+    "moreOptions": "More options",
+    "fewerOptions": "Fewer options",
+    "kind": "What is it?",
+    "kinds": {
+      "physical": "Goods you keep in stock",
+      "service": "A service (no stock)",
+      "non_stock": "Not counted, like a delivery charge"
+    },
+    "noCategory": "No category",
+    "newCategory": "Or a new category",
+    "brand": "Brand",
+    "noBrand": "No brand",
+    "newBrand": "Or a new brand",
+    "sku": "Your own code (SKU)",
+    "skuHint": "Optional. Each code is used for one item only.",
+    "categoriesLink": "Categories and brands",
+    "skuShown": "Code {sku}",
+    "variants": "Variants of this item",
+    "loadingLists": "Loading…"
   },
   "sales": {
     "title": "Sales",
@@ -2567,5 +2587,26 @@
       "money": "cash and profit",
       "activity": "activity"
     }
+  },
+  "catalog": {
+    "back": "Back to stock",
+    "title": "Categories and brands",
+    "lead": "Group items so they are easy to find. Both are optional: an item needs neither.",
+    "categories": "Categories",
+    "noCategories": "No categories yet. Add one below, or type one when you add an item.",
+    "itemCount": "{count, plural, =0 {no items} one {1 item} other {# items}}",
+    "stopUsing": "Stop using",
+    "useAgain": "Use again",
+    "newCategory": "New category",
+    "inside": "Inside",
+    "topLevel": "Top level (not inside another)",
+    "addCategory": "Add category",
+    "brands": "Brands",
+    "noBrands": "No brands yet.",
+    "newBrand": "New brand",
+    "addBrand": "Add brand",
+    "saving": "Saving…",
+    "failed": "That did not save. Try again.",
+    "needsNetwork": "You are offline. Connect to the internet to change categories and brands."
   }
 }

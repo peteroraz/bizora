@@ -72,10 +72,19 @@ export async function productUnitsFor(executor: DbExecutor, tenantId: string, pr
   return map;
 }
 
-/** Thousandths of the base unit in one of `unit`: 1000 for the base unit, the pack size for packs. */
-export function unitFactor(product: ProductRow, units: ProductUnitRow[], unit: string): bigint {
+/**
+ * Thousandths of the base unit in one of `unit`: 1000 for the base unit, the pack size for packs. With a purpose, a
+ * pack marked as not bought in (or not sold in) that pack is refused (ADR-046); the base unit is always allowed.
+ */
+export function unitFactor(product: ProductRow, units: ProductUnitRow[], unit: string, purpose?: "purchase" | "sale"): bigint {
   if (unit === product.baseUnit) return 1000n;
   const pack = units.find((item) => item.unitCode === unit);
   if (!pack) throw new ApiError("UNIT_NOT_FOUND", `This product is not counted in ${unit}.`, 422, [{ field: "unit", message: "Choose one of this product's units." }]);
+  if (purpose === "purchase" && !pack.forPurchase) {
+    throw new ApiError("UNIT_NOT_FOR_PURCHASE", `${product.name} is not bought in ${unit}s. Choose another unit.`, 422, [{ field: "unit", message: "Choose another unit." }]);
+  }
+  if (purpose === "sale" && !pack.forSale) {
+    throw new ApiError("UNIT_NOT_FOR_SALE", `${product.name} is not sold in ${unit}s. Choose another unit.`, 422, [{ field: "unit", message: "Choose another unit." }]);
+  }
   return pack.baseQuantity;
 }

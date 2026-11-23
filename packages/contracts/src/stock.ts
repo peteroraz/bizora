@@ -18,6 +18,9 @@ export const packUnitInputSchema = z.object({
   /** How many base units are in one of this pack, e.g. "24". */
   baseQuantity: decimalQuantity,
   priceMinor: minorAmount.optional(),
+  /** Whether stock is bought in, and sold in, this pack (ADR-046). Both by default. */
+  forPurchase: z.boolean().optional(),
+  forSale: z.boolean().optional(),
 });
 
 export const productWriteSchema = z.object({
@@ -30,12 +33,25 @@ export const productWriteSchema = z.object({
   barcode: z.string().trim().max(64).optional().nullable(),
   trackStock: z.boolean().optional(),
   packs: z.array(packUnitInputSchema).max(5).optional(),
+  /** Codes (ADR-046). A SKU is unique among the business's products in use; barcodes may repeat. */
+  sku: z.string().trim().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/, "Use letters, numbers, spaces and . _ - / only.").optional().nullable(),
+  gtin: z.string().trim().max(14).optional().nullable(),
+  mpn: z.string().trim().max(64).optional().nullable(),
+  reference: z.string().trim().max(64).optional().nullable(),
+  /** The item's category and brand (ADR-046). `category` (text) still works and finds or makes the category. */
+  categoryId: z.string().uuid().optional().nullable(),
+  brandId: z.string().uuid().optional().nullable(),
   /** Why the product was changed (7f). Needed when the selling price or cost changes; kept in its history. */
   changeReason: z.string().trim().max(240).optional(),
 });
 
 export const productCreateSchema = productWriteSchema.extend({
   id: clientId.optional(),
+  /** Add this product as a variant of an existing item (ADR-046), named by `variantLabel`. */
+  catalogItemId: z.string().uuid().optional(),
+  variantLabel: z.string().trim().min(1).max(80).optional(),
+  /** The item's type when a new item is made; only physical items keep stock. */
+  itemType: z.enum(["physical", "service", "digital", "non_stock"]).optional(),
   /** Stock on hand today, counted in the base unit. Posted as opening stock against the owner's money. */
   openingQuantity: decimalQuantity.optional(),
   openingCostMinor: minorAmount.optional(),

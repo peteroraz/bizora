@@ -110,7 +110,7 @@ export class SaleService {
       const business = await requireBusiness(tx, tenant);
       const branch = await resolveBranch(tx, tenant, business.id);
       const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
-      const lines = await this.priceLines(tx, tenant, business, payload);
+      const lines = await this.priceLines(tx, tenant, business, payload, source === "pos");
       // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.
       const typedAt = lines.findIndex((line) => line.saved);
       if (typedAt >= 0 && source === "pos" && !sellsTyped(business.salesItems)) {
@@ -1281,7 +1281,8 @@ export class SaleService {
   }
 
   /** Prices each line from the product (or the price typed), checks discounts, and converts to base units. */
-  private async priceLines(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, payload: SaleCreateInput) {
+  /** `live`: a sale made now at the counter. Offline, imported and photo-read sales already happened, so pack rules (ADR-046) are not applied to them. */
+  private async priceLines(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, payload: SaleCreateInput, live = false) {
     const ids = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])))];
     const rows = await tx
       .select()
@@ -1306,7 +1307,7 @@ export class SaleService {
         throw new ApiError("PRODUCT_NOT_FOUND", "A product in this sale was not found.", 404, [{ field: `lines.${index}.productId`, message: "Not found." }]);
       }
       const productUnits = units.get(product.id) ?? [];
-      const factor = unitFactor(product, productUnits, line.unit);
+      const factor = unitFactor(product, productUnits, line.unit, live ? "sale" : undefined);
       const entered = parseQuantity(line.quantity) as bigint;
       const quantity = round(entered * factor, 1000n);
       if (quantity <= 0n) throw new ApiError("VALIDATION_ERROR", "Enter a larger quantity.", 400, [{ field: `lines.${index}.quantity`, message: "Too small." }]);

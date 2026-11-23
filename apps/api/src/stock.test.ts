@@ -136,7 +136,7 @@ describe("products and stock", () => {
       .set(auth(a.token))
       .send({ name: "Indomie 70g", baseUnit: "piece", priceMinor: "25000", packs: [{ unitCode: "carton", baseQuantity: "40", priceMinor: "950000" }] })
       .expect(201);
-    expect(noodles.body.data.product.packs).toEqual([{ unitCode: "carton", baseQuantity: "40000", priceMinor: "950000" }]);
+    expect(noodles.body.data.product.packs).toEqual([{ unitCode: "carton", baseQuantity: "40000", priceMinor: "950000", forPurchase: true, forSale: true }]);
 
     const duplicate = await request(http).post("/api/v1/products").set(auth(a.token)).send({ name: "rice 50KG", baseUnit: "bag" }).expect(409);
     expect(duplicate.body.error.code).toBe("DUPLICATE_PRODUCT");
