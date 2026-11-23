@@ -182,6 +182,8 @@ function StockScreen() {
                   </ActionLink>
                 </>
               ) : null}
+              {can(access, Permission.PRICING_LISTS_MANAGE) ? <ActionLink href="/app/stock/prices">{t("pricesLink")}</ActionLink> : null}
+              {canReceive && can(access, Permission.PURCHASES_MANAGE) ? <ActionLink href="/app/stock/delivery">{t("deliveryChargesLink")}</ActionLink> : null}
             </>
           ) : undefined
         }

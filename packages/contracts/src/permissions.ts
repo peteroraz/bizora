@@ -53,6 +53,8 @@ export const Permission = {
   STOCK_ADJUST: "stock.adjust",
   PRODUCTS_MANAGE: "products.manage",
   PRICES_COST_READ: "prices.cost.read",
+  /** Make and change price lists, and give customers one (ADR-048). */
+  PRICING_LISTS_MANAGE: "pricing.lists.manage",
   PURCHASES_MANAGE: "purchases.manage",
 
   // Money

@@ -17,6 +17,7 @@ import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
+import { ProductBuying } from "../../../../components/product-buying";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
@@ -720,6 +721,8 @@ function ProductScreen() {
           </SafeForm>
         </Card>
       ) : null}
+
+      <ProductBuying productId={product.id} currency={product.currency} />
 
       {can(access, Permission.PRODUCTS_MANAGE) && !product.archived ? (
         <div className="space-y-3">

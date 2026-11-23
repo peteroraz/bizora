@@ -23,7 +23,9 @@ import { SentenceInput } from "../../../../components/typing";
 import { asProduct } from "../../../../lib/offline/typed-product";
 
 import type { Line } from "../../../../components/quick-sale-lines";
+import type { ListPrices } from "../../../../components/sale-price-list";
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";
+const tierPrice = (tiers: { min: bigint; price: bigint }[] | undefined, entered: bigint | null) => (entered === null ? null : (tiers?.find((tier) => entered >= tier.min)?.price ?? null));
 
 /** Quantities are thousandths (ADR-014); the stepper shows them as people type them: "3", "2.5". */
 const quantityText = (thousandths: bigint) =>
@@ -43,6 +45,8 @@ const SaleMoneyExtras = lazy(extrasModule);
 const linesModule = () => import("../../../../components/quick-sale-lines");
 const QuickSaleLines = lazy(linesModule);
 const savedItemsModule = () => import("../../../../lib/offline/saved-items");
+const priceListModule = () => import("../../../../components/sale-price-list");
+const SalePriceList = lazy(priceListModule);
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -94,6 +98,9 @@ function QuickSaleScreen() {
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
+  // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
+  const [chosenList, setChosenList] = useState("");
+  const [fromList, setFromList] = useState<ListPrices | null>(null);
   const typedOk = sellsTyped(access.salesItems);
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
@@ -135,7 +142,7 @@ function QuickSaleScreen() {
     warmOfflineCopy();
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
     const preload = () => {
-      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : [])]).catch(() => undefined);
+      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
       // Customer names for finding a customer with no network; refreshed at most every few hours.
       if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
     };
@@ -175,7 +182,7 @@ function QuickSaleScreen() {
   /** Each line's price and total, worked out the way the server will. Problems are shown before saving. */
   const priced = lines.map((line) => {
     const entered = parseQuantity(line.quantity);
-    const list = listPrice(line.product, line.unit);
+    const list = (line.product.typed ? null : tierPrice(fromList?.tiers.get(`${line.product.id}:${line.unit}`), entered)) ?? listPrice(line.product, line.unit);
     const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
     // A typed item's price is whatever it sells for today; its last price is only a suggestion.
     const unitPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
@@ -279,6 +286,7 @@ function QuickSaleScreen() {
       payments: paidParts.map((part) => ({ method: part.method, amountMinor: (part.amountMinor ?? 0n).toString() })),
       ...(discountMinor > 0n ? { discountMinor: discountMinor.toString() } : {}),
       ...(customer ? { customerId: customer.id } : {}),
+      ...(chosenList && fromList ? { priceListId: fromList.id } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(desk ? { requestedPayment: mode } : {}),
       ...(balance > 0n ? { dueDate } : {}),
@@ -303,7 +311,8 @@ function QuickSaleScreen() {
         await enqueue(
           access.owner,
           "sale.create",
-          { ...body, provisionalNumber: provisional, soldAt: new Date().toISOString() },
+          // Offline, the sale names the list it was priced from, so the server prices it the same way.
+          { ...body, ...(fromList ? { priceListId: fromList.id } : {}), provisionalNumber: provisional, soldAt: new Date().toISOString() },
           {
             meta: {
               summary: priced.map((item) => `${item.line.quantity} ${unitName(item.line.unit, Number(item.line.quantity) || 1)} ${item.line.product.name}`).join(", "),
@@ -449,6 +458,9 @@ function QuickSaleScreen() {
             </Suspense>
           ) : null}
         </fieldset>
+        <Suspense fallback={null}>
+          <SalePriceList customerId={customer?.id ?? null} chosen={chosenList} onChosen={setChosenList} onPrices={setFromList} />
+        </Suspense>
         {findsCustomers ? (
           <Card className="p-4">
             <p className="text-sm font-medium">{balance > 0n || mode === "credit" ? t("customer") : t("customerOptional")}</p>

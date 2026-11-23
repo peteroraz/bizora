@@ -68,6 +68,7 @@ export * from "./ledger.js";
 export * from "./stock.js";
 export * from "./catalog.js";
 export * from "./stock-operations.js";
+export * from "./pricing.js";
 export * from "./sales.js";
 export * from "./csv.js";
 export { BUSINESS_FEATURES, FEATURE_DEFAULTS, LOCKED_OFF_FEATURES, businessFeatureSchema, setBusinessFeatureSchema } from "./features.js";

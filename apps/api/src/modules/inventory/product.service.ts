@@ -61,7 +61,9 @@ export class ProductService {
         sql`lower(${products.reference}) = ${code}`,
         sql`${products.catalogItemId} IN (SELECT i.id FROM catalog_items i JOIN brands b ON b.tenant_id = i.tenant_id AND b.id = i.brand_id WHERE i.tenant_id = ${tenant.tenantId} AND b.name ILIKE ${like(needle)})`,
       );
-      if (match) filters.push(match);
+      // A supplier's own code for the product finds it too (ADR-048).
+      const bySupplierCode = sql`EXISTS (SELECT 1 FROM supplier_products sp WHERE sp.tenant_id = ${products.tenantId} AND sp.product_id = ${products.id} AND lower(sp.supplier_sku) = ${code})`;
+      if (match) filters.push(or(match, bySupplierCode) as SQL);
     }
     if (query.category?.trim()) filters.push(eq(products.category, query.category.trim()));
     const page = Math.max(1, query.page ?? 1);
