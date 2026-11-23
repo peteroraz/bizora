@@ -173,6 +173,72 @@ describe("price lists, suppliers per product and landed cost (ADR-048)", () => {
     expect(audit.rows.map((row) => row.action)).toEqual(["pricing.list.created", "pricing.prices.set", "pricing.prices.set"]);
   });
 
+  it("prices one variant of an item and leaves the other at its everyday price", async () => {
+    const http = app.getHttpServer();
+    const made = await request(http)
+      .post("/api/v1/catalog/items")
+      .set(auth(a.token))
+      .send({
+        name: "Polo shirt",
+        variants: [
+          { variantLabel: "Black", baseUnit: "piece", priceMinor: "500000", openingQuantity: "5", openingCostMinor: "1000000" },
+          { variantLabel: "White", baseUnit: "piece", priceMinor: "450000", openingQuantity: "5", openingCostMinor: "1000000" },
+        ],
+      })
+      .expect(201);
+    const variants = made.body.data.item.variants as { id: string; name: string }[];
+    const black = variants.find((variant) => variant.name.includes("Black"));
+    const white = variants.find((variant) => variant.name.includes("White"));
+    if (!black || !white) throw new Error(JSON.stringify(variants));
+    const list = (await request(http).post("/api/v1/pricing/lists").set(auth(a.token)).send({ name: "Shirt wholesale" }).expect(201)).body.data.id as string;
+    await request(http)
+      .put(`/api/v1/pricing/lists/${list}/prices`)
+      .set(auth(a.token))
+      .send({ prices: [{ productId: black.id, unitCode: "piece", priceMinor: "400000" }] })
+      .expect(200);
+    const sale = await request(http)
+      .post("/api/v1/sales")
+      .set(auth(a.token))
+      .send({
+        priceListId: list,
+        lines: [
+          { productId: black.id, quantity: "1", unit: "piece" },
+          { productId: white.id, quantity: "1", unit: "piece" },
+        ],
+        payments: [{ method: "cash", amountMinor: "850000" }],
+      })
+      .expect(201);
+    // Black uses the list (₦4,000). White is not on the list, so it stays at ₦4,500.
+    expect(sale.body.data.sale.subtotalMinor).toBe("850000");
+    const stored = await client.query<{ price_list_id: string | null }>("SELECT price_list_id FROM sales WHERE id = $1", [sale.body.data.sale.id]);
+    expect(stored.rows[0]?.price_list_id).toBe(list);
+  });
+
+  it("adds delivery charges to stock kept in a warehouse", async () => {
+    const http = app.getHttpServer();
+    const warehouseId = (await request(http).post("/api/v1/branches").set(auth(a.token)).send({ name: "Warehouse", kind: "warehouse" }).expect(201)).body.data.branch.id as string;
+    const hauled = (await request(http).post("/api/v1/products").set(auth(a.token)).send({ name: "Warehouse salt", baseUnit: "bag", priceMinor: "100000", openingQuantity: "1", openingCostMinor: "50000" }).expect(201)).body.data.product.id as string;
+    const haulier = (await request(http).post("/api/v1/suppliers").set(auth(a.token)).send({ name: "Warehouse Haulage" }).expect(201)).body.data.supplier.id as string;
+    const shopBefore = (await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1 AND branch_id = $2", [hauled, a.branchId])).rows[0]?.quantity;
+    const created = await request(http)
+      .post("/api/v1/stock/receipts")
+      .set(auth(a.token))
+      .send({
+        id: uuidv7(),
+        branchId: warehouseId,
+        supplierId: haulier,
+        paidFrom: "credit",
+        lines: [{ productId: hauled, quantity: "2", unit: "bag", totalCostMinor: "10000000" }],
+        charges: [{ kind: "transport", amountMinor: "200000", paidFrom: "cash" }],
+      })
+      .expect(201);
+    expect(created.body.data).toMatchObject({ goodsMinor: "10000000", chargesMinor: "200000" });
+    const held = await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1 AND branch_id = $2", [hauled, warehouseId]);
+    expect(held.rows[0]?.quantity).toBe("2000");
+    const shopAfter = (await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1 AND branch_id = $2", [hauled, a.branchId])).rows[0]?.quantity;
+    expect(shopAfter).toBe(shopBefore);
+  });
+
   it("sells to a customer at their list's prices, by quantity, and at everyday prices otherwise", async () => {
     const http = app.getHttpServer();
     await request(http).put(`/api/v1/customers/${customerId}/price-list`).set(auth(salesToken)).send({ priceListId: listId }).expect(403);
@@ -371,6 +437,7 @@ describe("price lists, suppliers per product and landed cost (ADR-048)", () => {
       .expect(404);
     await request(http).put(`/api/v1/suppliers/${supplierA}/products`).set(auth(b.token)).send({ productId: bRice.body.data.product.id }).expect(404);
     await request(http).get(`/api/v1/products/${riceId}/suppliers`).set(auth(b.token)).expect(404);
+    await request(http).get(`/api/v1/pricing/products/${riceId}`).set(auth(b.token)).expect(404);
     expect((await request(http).get("/api/v1/products").query({ q: "DG-RICE-50" }).set(auth(b.token)).expect(200)).body.data.items).toEqual([]);
     await request(http)
       .post("/api/v1/stock/receipts")

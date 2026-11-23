@@ -259,6 +259,12 @@ export class PricingService {
   /** Every list's prices for one product, for the product page. */
   async productPrices(tenant: TenantContext, productId: string) {
     const business = await requireBusiness(this.db, tenant);
+    const [product] = await this.db
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), eq(products.id, productId)))
+      .limit(1);
+    if (!product) throw new ApiError("PRODUCT_NOT_FOUND", "Product not found.", 404);
     const rows = await this.db
       .select({ price: priceListPrices, listName: priceLists.name, active: priceLists.active })
       .from(priceListPrices)
