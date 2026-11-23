@@ -173,6 +173,7 @@ function StockScreen() {
               ) : null}
               {canAdd ? (
                 <>
+                  <ActionLink href="/app/stock/categories">{t("categoriesLink")}</ActionLink>
                   <ActionLink href="/app/stock/import">{t("import")}</ActionLink>
                   <ActionLink href="/app/stock/new" variant="primary">
                     {t("add")}

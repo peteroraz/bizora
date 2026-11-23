@@ -787,6 +787,19 @@ export const products = pgTable(
     lowStockLevel: bigint("low_stock_level", { mode: "bigint" }),
     barcode: varchar("barcode", { length: 64 }),
     trackStock: boolean("track_stock").notNull().default(true),
+    /**
+     * The item this product is a variant of (migration 0040, ADR-046). Left out on insert, the database trigger
+     * makes the product its own item (same ID), so every product always has one.
+     */
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .$defaultFn(() => null as unknown as string),
+    /** What makes this variant different, such as "Black / Large". Empty for an item's only variant. */
+    variantLabel: varchar("variant_label", { length: 80 }),
+    sku: varchar("sku", { length: 64 }),
+    gtin: varchar("gtin", { length: 14 }),
+    mpn: varchar("mpn", { length: 64 }),
+    reference: varchar("reference", { length: 64 }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -825,6 +838,77 @@ export const savedItems = pgTable(
   ],
 );
 
+/** Categories, nested (migration 0040, ADR-046). */
+export const categories = pgTable(
+  "categories",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    parentId: uuid("parent_id"),
+    name: varchar("name", { length: 60 }).notNull(),
+    nameKey: varchar("name_key", { length: 60 }).notNull(),
+    position: integer("position").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    taxonomyCode: varchar("taxonomy_code", { length: 64 }),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("categories_tenant_business_id_key").on(table.tenantId, table.businessId, table.id)],
+);
+
+/** Brands (migration 0040, ADR-046). */
+export const brands = pgTable(
+  "brands",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    nameKey: varchar("name_key", { length: 80 }).notNull(),
+    manufacturer: varchar("manufacturer", { length: 120 }),
+    website: varchar("website", { length: 200 }),
+    logoUrl: varchar("logo_url", { length: 400 }),
+    active: boolean("active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("brands_tenant_business_id_key").on(table.tenantId, table.businessId, table.id), uniqueIndex("brands_name_key").on(table.tenantId, table.businessId, table.nameKey)],
+);
+
+/** What the trader thinks of as the item; its products are its variants (migration 0040, ADR-046). */
+export const catalogItems = pgTable(
+  "catalog_items",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    itemType: varchar("item_type", { length: 16 }).$type<"physical" | "service" | "digital" | "non_stock">().notNull().default("physical"),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: varchar("description", { length: 2000 }),
+    categoryId: uuid("category_id"),
+    brandId: uuid("brand_id"),
+    taxable: boolean("taxable").notNull().default(false),
+    taxCode: varchar("tax_code", { length: 32 }),
+    pricesIncludeTax: boolean("prices_include_tax").notNull().default(true),
+    durationMinutes: integer("duration_minutes"),
+    commissionBasisPoints: integer("commission_basis_points"),
+    onlineTitle: varchar("online_title", { length: 160 }),
+    shortDescription: varchar("short_description", { length: 300 }),
+    slug: varchar("slug", { length: 160 }),
+    seoTitle: varchar("seo_title", { length: 160 }),
+    seoDescription: varchar("seo_description", { length: 300 }),
+    onlineVisible: boolean("online_visible").notNull().default(false),
+    itemCondition: varchar("item_condition", { length: 16 }),
+    weightGrams: bigint("weight_grams", { mode: "bigint" }),
+    lengthMm: integer("length_mm"),
+    widthMm: integer("width_mm"),
+    heightMm: integer("height_mm"),
+    taxonomyCode: varchar("taxonomy_code", { length: 64 }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("catalog_items_tenant_business_id_key").on(table.tenantId, table.businessId, table.id)],
+);
+
 export const productUnits = pgTable(
   "product_units",
   {
@@ -835,6 +919,9 @@ export const productUnits = pgTable(
     unitCode: varchar("unit_code", { length: 16 }).notNull(),
     baseQuantity: bigint("base_quantity", { mode: "bigint" }).notNull(),
     priceMinor: bigint("price_minor", { mode: "bigint" }),
+    /** Whether stock may be bought in, and sold in, this pack (migration 0040). */
+    forPurchase: boolean("for_purchase").notNull().default(true),
+    forSale: boolean("for_sale").notNull().default(true),
   },
   (table) => [
     uniqueIndex("product_units_product_unit_key").on(table.productId, table.unitCode),

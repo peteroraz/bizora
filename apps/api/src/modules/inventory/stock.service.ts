@@ -241,7 +241,7 @@ export class StockService {
     const context = await this.context(tx, tenant, payload.productId, payload.branchId);
     const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
     const entered = parseQuantity(payload.quantity) as bigint;
-    const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+    const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit, "purchase"));
     // The supplier named or chosen; a new name is added to the suppliers (ADR-029). Bought on credit with no
     // supplier named: kept under "Supplier not named", so what is owed is never lost.
     const supplier = await findOrAddSupplier(tx, tenant, context.business.id, {
@@ -314,7 +314,7 @@ export class StockService {
       if (!supplier) throw new ApiError("SUPPLIER_NOT_FOUND", "That supplier was not found.", 404);
       const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
       const entered = parseQuantity(payload.quantity) as bigint;
-      const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit));
+      const quantity = this.toBase(entered, unitFactor(context.product, units, payload.unit, "purchase"));
       const result = await this.applyMovement(tx, context, {
         ...(payload.id ? { id: payload.id } : {}),
         type: "supplier_return",

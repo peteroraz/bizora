@@ -7,16 +7,19 @@ import {
   parseQuantity,
   productCreateSchema,
   productWriteSchema,
+  isValidGtin,
+  variantName,
 } from "@bizora/contracts";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { auditEvents, branches, productUnits, products, stockBalances, users } from "../../db/schema.js";
+import { auditEvents, branches, brands, catalogItems, categories, productUnits, products, stockBalances, users } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { type ProductRow, type ProductUnitRow, productUnitsFor, requireBusiness, requireProduct, resolveBranch } from "./inventory-scope.js";
+import { categoryPath, copyCategoryToVariants, requireBrand, requireItem, resolveCategory } from "./catalog-scope.js";
 import { mainPhotos } from "./product-photo.service.js";
 import { StockService } from "./stock.service.js";
 
@@ -44,7 +47,18 @@ export class ProductService {
     const filters: SQL[] = [eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)];
     const needle = query.q?.trim();
     if (needle) {
-      const match = or(ilike(products.name, like(needle)), eq(products.barcode, needle), ilike(products.category, like(needle)));
+      // Name, category and every code (ADR-046): barcode and GTIN exactly, SKU, MPN and reference in any case, brand by name.
+      const code = needle.toLowerCase();
+      const match = or(
+        ilike(products.name, like(needle)),
+        eq(products.barcode, needle),
+        eq(products.gtin, needle),
+        ilike(products.category, like(needle)),
+        sql`lower(${products.sku}) = ${code}`,
+        sql`lower(${products.mpn}) = ${code}`,
+        sql`lower(${products.reference}) = ${code}`,
+        sql`${products.catalogItemId} IN (SELECT i.id FROM catalog_items i JOIN brands b ON b.tenant_id = i.tenant_id AND b.id = i.brand_id WHERE i.tenant_id = ${tenant.tenantId} AND b.name ILIKE ${like(needle)})`,
+      );
       if (match) filters.push(match);
     }
     if (query.category?.trim()) filters.push(eq(products.category, query.category.trim()));
@@ -125,8 +139,32 @@ export class ProductService {
       .where(and(...filters))
       .orderBy(asc(branches.name));
     const current = balances.find((row) => row.balance.branchId === tenant.branchId)?.balance ?? null;
+    const [itemRow] = await this.db
+      .select({ item: catalogItems, brandName: brands.name })
+      .from(catalogItems)
+      .leftJoin(brands, and(eq(brands.tenantId, catalogItems.tenantId), eq(brands.id, catalogItems.brandId)))
+      .where(and(eq(catalogItems.tenantId, tenant.tenantId), eq(catalogItems.id, product.catalogItemId)))
+      .limit(1);
+    const siblings = await this.db
+      .select({ id: products.id, variantLabel: products.variantLabel, name: products.name })
+      .from(products)
+      .where(and(eq(products.tenantId, tenant.tenantId), eq(products.catalogItemId, product.catalogItemId), isNull(products.archivedAt)))
+      .orderBy(asc(products.name));
     return {
       ...this.present(tenant, product, units, current),
+      // The item this product is a variant of (ADR-046), and the other variants.
+      item: itemRow
+        ? {
+            id: itemRow.item.id,
+            name: itemRow.item.name,
+            itemType: itemRow.item.itemType,
+            categoryId: itemRow.item.categoryId,
+            categoryPath: await categoryPath(this.db, tenant.tenantId, business.id, itemRow.item.categoryId),
+            brandId: itemRow.item.brandId,
+            brandName: itemRow.brandName,
+            variants: siblings,
+          }
+        : null,
       photoUrl: (await mainPhotos(this.db, tenant.tenantId, [product.id])).get(product.id) ?? null,
       currency: business.baseCurrencyCode.trim(),
       shops: balances.map((row) => ({
@@ -144,18 +182,47 @@ export class ProductService {
       if (taken && taken.tenantId === tenant.tenantId) return this.get(tenant, taken.id);
       if (taken) throw new ApiError("ID_CONFLICT", "This record ID is already used. Create a new one and try again.", 409);
     }
-    const business = await requireBusiness(this.db, tenant);
+    const id = await this.db.transaction(async (tx) => this.createIn(tx, tenant, payload));
+    return this.get(tenant, id);
+  }
+
+  /** Creates the product in the caller's transaction, so an item and all its variants are made together (ADR-046). */
+  async createIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof productCreateSchema.parse> & { onlyVariant?: boolean }) {
+    const business = await requireBusiness(tx, tenant);
     this.assertCostAllowed(tenant, payload.defaultCostMinor ?? payload.openingCostMinor);
-    await this.assertNameFree(tenant.tenantId, business.id, payload.name, null);
+    // A variant of an existing item takes the item's name with its own label (ADR-046).
+    const parent = payload.catalogItemId ? await requireItem(tx, tenant, business.id, payload.catalogItemId) : null;
+    if (parent && !payload.variantLabel && !payload.onlyVariant) throw new ApiError("VALIDATION_ERROR", "Give the variant a name, such as Black / Large.", 400, [{ field: "variantLabel", message: "Required." }]);
+    const name = parent ? variantName(parent.name, payload.variantLabel) : payload.name;
+    const trackStock = parent ? parent.itemType === "physical" && payload.trackStock !== false : payload.itemType ? payload.itemType === "physical" && payload.trackStock !== false : (payload.trackStock ?? true);
+    await this.assertNameFree(tenant.tenantId, business.id, name, null, tx);
+    await this.assertCodesFree(tenant.tenantId, business.id, payload, null, tx);
     const id = payload.id ?? newId();
-    await this.db.transaction(async (tx) => {
-      await tx.insert(products).values({ id, tenantId: tenant.tenantId, businessId: business.id, ...this.values(payload), createdBy: tenant.userId, updatedBy: tenant.userId });
+    {
+      const category = parent ? null : await resolveCategory(tx, tenant, business.id, { categoryId: payload.categoryId, categoryText: payload.category });
+      const brand = !parent && payload.brandId ? await requireBrand(tx, tenant, business.id, payload.brandId) : null;
+      await tx.insert(products).values({
+        id,
+        tenantId: tenant.tenantId,
+        businessId: business.id,
+        ...this.values({ ...payload, name, trackStock, category: parent ? null : (category?.name ?? null) }),
+        ...(parent ? { catalogItemId: parent.id, variantLabel: payload.variantLabel ?? null, category: (await this.variantCategory(tx, parent)) ?? null } : {}),
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      });
+      if (!parent) {
+        // The database made the product its own item (same ID); fill in what this request knows about it.
+        await tx
+          .update(catalogItems)
+          .set({ itemType: payload.itemType ?? (trackStock ? "physical" : "non_stock"), categoryId: category?.id ?? null, brandId: brand?.id ?? null, updatedAt: new Date() })
+          .where(and(eq(catalogItems.tenantId, tenant.tenantId), eq(catalogItems.id, id)));
+      }
       await this.replacePacks(tx, tenant, business.id, id, payload.packs ?? []);
       await this.audit.record(
         { tenantId: tenant.tenantId, actorUserId: tenant.userId, action: "product.created", entityType: "product", entityId: id, correlationId: tenant.correlationId, businessId: business.id, actorType: tenant.actorType ?? "HUMAN" },
         tx,
       );
-      if (payload.openingQuantity && payload.trackStock !== false) {
+      if (payload.openingQuantity && trackStock) {
         const context = await this.stock.context(tx, tenant, id);
         const quantity = parseQuantity(payload.openingQuantity) as bigint;
         await this.stock.applyMovement(tx, context, {
@@ -167,8 +234,8 @@ export class ProductService {
           documentType: "stock_in",
         });
       }
-    });
-    return this.get(tenant, id);
+    }
+    return id;
   }
 
   async update(tenant: TenantContext, id: string, raw: unknown) {
@@ -183,7 +250,13 @@ export class ProductService {
       );
       if (moved) throw new ApiError("UNIT_LOCKED", "The counting unit cannot change once stock has been recorded.", 422, [{ field: "baseUnit", message: "Keep the same unit." }]);
     }
-    const values = this.values(payload);
+    await this.assertCodesFree(tenant.tenantId, business.id, payload, id);
+    const item = await requireItem(this.db, tenant, business.id, existing.catalogItemId, { includeArchived: true });
+    const [{ count: variantCount } = { count: 1 }] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(products)
+      .where(and(eq(products.tenantId, tenant.tenantId), eq(products.catalogItemId, item.id), isNull(products.archivedAt)));
+    const values = this.values({ ...payload, trackStock: item.itemType === "physical" ? (payload.trackStock ?? existing.trackStock) : false });
     // Without permission to see cost, the existing default cost is kept as it is.
     const seesCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     if (!seesCost) delete (values as Partial<typeof values>).defaultCostMinor;
@@ -201,7 +274,33 @@ export class ProductService {
       throw new ApiError("REASON_REQUIRED", "Say why the price or cost is changing.", 400, [{ field: "changeReason", message: "Say why." }]);
     }
     await this.db.transaction(async (tx) => {
+      // The item's category (ADR-046): by ID, or by the typed name. Shared by every variant, so only an item's only
+      // variant may change it from here; an item with several is changed on the item.
+      const singleVariant = variantCount <= 1;
+      // The older form sends the category name back as it was; the same name means no change, so an item kept in
+      // a sub-category is not moved to a top category of the same name.
+      const sameText = payload.categoryId === undefined && (payload.category?.trim() || null) === (existing.category ?? null);
+      const category =
+        singleVariant && !sameText && (payload.categoryId !== undefined || payload.category !== undefined)
+          ? await resolveCategory(tx, tenant, business.id, { categoryId: payload.categoryId, categoryText: payload.category })
+          : undefined;
+      const brand = singleVariant && payload.brandId ? await requireBrand(tx, tenant, business.id, payload.brandId) : undefined;
+      if (category !== undefined) values.category = category?.name ?? null;
+      else values.category = existing.category;
       await tx.update(products).set({ ...values, updatedBy: tenant.userId, updatedAt: new Date() }).where(and(eq(products.tenantId, tenant.tenantId), eq(products.id, id)));
+      if (singleVariant) {
+        await tx
+          .update(catalogItems)
+          .set({
+            ...(!existing.variantLabel ? { name: values.name } : {}),
+            ...(category !== undefined ? { categoryId: category?.id ?? null } : {}),
+            ...(brand !== undefined ? { brandId: brand.id } : payload.brandId === null ? { brandId: null } : {}),
+            updatedAt: new Date(),
+            updatedBy: tenant.userId,
+          })
+          .where(and(eq(catalogItems.tenantId, tenant.tenantId), eq(catalogItems.id, item.id)));
+        if (category !== undefined) await copyCategoryToVariants(tx, tenant.tenantId, item.id, category?.name ?? null);
+      }
       if (payload.packs) await this.replacePacks(tx, tenant, business.id, id, payload.packs);
       await this.audit.record(
         {
@@ -366,10 +465,16 @@ export class ProductService {
       baseUnit: product.baseUnit,
       priceMinor: product.priceMinor?.toString() ?? null,
       packs: units
-        .map((unit) => ({ unitCode: unit.unitCode, baseQuantity: unit.baseQuantity.toString(), priceMinor: unit.priceMinor?.toString() ?? null }))
+        .map((unit) => ({ unitCode: unit.unitCode, baseQuantity: unit.baseQuantity.toString(), priceMinor: unit.priceMinor?.toString() ?? null, forPurchase: unit.forPurchase, forSale: unit.forSale }))
         .sort((a, b) => Number(BigInt(a.baseQuantity) - BigInt(b.baseQuantity))),
       lowStockLevel: product.lowStockLevel?.toString() ?? null,
       barcode: product.barcode,
+      catalogItemId: product.catalogItemId,
+      variantLabel: product.variantLabel,
+      sku: product.sku,
+      gtin: product.gtin,
+      mpn: product.mpn,
+      reference: product.reference,
       trackStock: product.trackStock,
       archived: product.archivedAt !== null,
       updatedAt: product.updatedAt,
@@ -399,7 +504,36 @@ export class ProductService {
       lowStockLevel: payload.lowStockLevel ? (payload.lowStockLevel === "0" ? 0n : (parseQuantity(payload.lowStockLevel) as bigint)) : null,
       barcode: payload.barcode?.trim() || null,
       trackStock: payload.trackStock ?? true,
+      sku: payload.sku?.trim() || null,
+      gtin: payload.gtin?.trim() || null,
+      mpn: payload.mpn?.trim() || null,
+      reference: payload.reference?.trim() || null,
     };
+  }
+
+  /** The category name to show on a new variant: its item's. */
+  private async variantCategory(executor: DbExecutor, item: { tenantId: string; businessId: string; categoryId: string | null }) {
+    if (!item.categoryId) return null;
+    const [row] = await executor.select({ name: categories.name }).from(categories).where(and(eq(categories.tenantId, item.tenantId), eq(categories.id, item.categoryId))).limit(1);
+    return row?.name ?? null;
+  }
+
+  /** A SKU is the business's own code: one product in use per SKU. A GTIN must have a right check digit. */
+  private async assertCodesFree(tenantId: string, businessId: string, payload: { sku?: string | null | undefined; gtin?: string | null | undefined }, exceptId: string | null, executor: DbExecutor = this.db) {
+    const gtin = payload.gtin?.trim();
+    if (gtin && !isValidGtin(gtin)) {
+      throw new ApiError("VALIDATION_ERROR", "This GTIN is not right: check the digits.", 400, [{ field: "gtin", message: "Check the digits." }]);
+    }
+    const sku = payload.sku?.trim();
+    if (!sku) return;
+    const [taken] = await executor
+      .select({ id: products.id, name: products.name })
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), eq(products.businessId, businessId), isNull(products.archivedAt), sql`lower(${products.sku}) = lower(${sku})`))
+      .limit(1);
+    if (taken && taken.id !== exceptId) {
+      throw new ApiError("DUPLICATE_SKU", `This SKU is already used by ${taken.name}.`, 409, [{ field: "sku", message: taken.id }]);
+    }
   }
 
   private async replacePacks(tx: DbExecutor, tenant: TenantContext, businessId: string, productId: string, packs: NonNullable<ReturnType<typeof productWriteSchema.parse>["packs"]>) {
@@ -419,6 +553,8 @@ export class ProductService {
         unitCode: pack.unitCode,
         baseQuantity: parseQuantity(pack.baseQuantity) as bigint,
         priceMinor: pack.priceMinor ? BigInt(pack.priceMinor) : null,
+        forPurchase: pack.forPurchase ?? true,
+        forSale: pack.forSale ?? true,
       })),
     );
   }
@@ -429,8 +565,8 @@ export class ProductService {
     }
   }
 
-  private async assertNameFree(tenantId: string, businessId: string, name: string, exceptId: string | null) {
-    const [taken] = await this.db
+  private async assertNameFree(tenantId: string, businessId: string, name: string, exceptId: string | null, executor: DbExecutor = this.db) {
+    const [taken] = await executor
       .select({ id: products.id })
       .from(products)
       .where(and(eq(products.tenantId, tenantId), eq(products.businessId, businessId), isNull(products.archivedAt), sql`lower(${products.name}) = lower(${name.trim()})`))

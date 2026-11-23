@@ -30,6 +30,9 @@ import { ProductPhotos } from "../../../../components/product-photos";
 import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
+  /** The item this product belongs to, and its other variants (ADR-046). */
+  item?: { id: string; name: string; itemType: string; categoryPath: string | null; brandName: string | null; variants: { id: string; name: string; variantLabel: string | null }[] } | null;
+  sku?: string | null;
   currency: string;
   shops: { branchId: string; branchName: string; quantity: string; belowZero: boolean; valueMinor?: string }[];
 };
@@ -226,13 +229,27 @@ function ProductScreen() {
     <div className="space-y-6">
       <PageHeader
         title={product.name}
-        description={[product.category, product.priceMinor ? t("price", { price: money(product.priceMinor), unit: unitName(product.baseUnit, 1) }) : null]
+        description={[product.item?.categoryPath ?? product.category, product.item?.brandName, product.sku ? t("skuShown", { sku: product.sku }) : null, product.priceMinor ? t("price", { price: money(product.priceMinor), unit: unitName(product.baseUnit, 1) }) : null]
           .filter(Boolean)
           .join(" · ")}
         actions={
           <BackLink href="/app/stock">{t("back")}</BackLink>
         }
       />
+      {product.item && product.item.variants.length > 1 ? (
+        <nav aria-label={t("variants")} className="flex flex-wrap gap-2" data-testid="product-variants">
+          {product.item.variants.map((variant) => (
+            <a
+              key={variant.id}
+              href={`/app/stock/${variant.id}`}
+              aria-current={variant.id === product.id ? "page" : undefined}
+              className={`inline-flex min-h-11 items-center rounded-control border px-3 text-sm ${variant.id === product.id ? "border-primary font-medium" : "border-border"}`}
+            >
+              {variant.variantLabel ?? variant.name}
+            </a>
+          ))}
+        </nav>
+      ) : null}
       {message ? (
         <p
           className={`rounded-card border px-4 py-3 text-sm ${

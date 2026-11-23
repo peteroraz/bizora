@@ -55,10 +55,10 @@ test("edit a customer, copy a receipt link twice, and give a reason for a new pr
   // A new selling price says why, and the history shows it.
   await page.goto(`/app/stock/${productId}`);
   await page.locator("#edit-price").fill("25,000");
-  await page.getByRole("button", { name: "Save product" }).click();
+  await page.getByRole("button", { name: "Save item" }).click();
   await expect(page.getByText("Say why the price or cost is changing.")).toBeVisible();
   await page.locator("#edit-reason").pressSequentially("supplier raised the carton price");
-  await page.getByRole("button", { name: "Save product" }).click();
+  await page.getByRole("button", { name: "Save item" }).click();
   await expect(page.getByTestId("product-change").first()).toContainText("Selling price: ₦24,000.00 → ₦25,000.00");
   await expect(page.getByTestId("product-change").first()).toContainText("Reason: Supplier raised the carton price");
 });

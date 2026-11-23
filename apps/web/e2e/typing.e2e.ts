@@ -49,15 +49,16 @@ test("boxes take only what fits: names, Ghana phone numbers, cedi amounts, and s
 
   // A product: cedi amounts with commas and two decimals, and the opening cost worked out.
   await page.goto("/app/stock/new");
-  await page.getByLabel("Product name").pressSequentially("rice 5kg");
-  await expect(page.getByLabel("Product name")).toHaveValue("Rice 5kg");
+  await page.getByLabel("Item name").pressSequentially("rice 5kg");
+  await expect(page.getByLabel("Item name")).toHaveValue("Rice 5kg");
   const price = page.getByLabel("Selling price per piece");
   await price.pressSequentially("1500.555abc");
   await expect(price).toHaveValue("1,500.55");
-  await page.getByLabel("Cost price per piece").pressSequentially("1200");
   await page.getByLabel("How many pieces you have").pressSequentially("10");
+  await page.getByRole("button", { name: "More options" }).click();
+  await page.getByLabel("Cost price per piece").pressSequentially("1200");
   await expect(page.getByText("10 × GH₵1,200.00 = GH₵12,000.00")).toBeVisible();
-  await page.getByRole("button", { name: "Save product" }).click();
+  await page.getByRole("button", { name: "Save item" }).click();
   await expect(page).toHaveURL(/\/app\/stock\/[0-9a-f-]+$/);
 
   // Stock in: the cost of one works out the total.
