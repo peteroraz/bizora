@@ -3,7 +3,9 @@ import { type SyncOperationResult, syncPushSchema } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { asRefusal, IdempotencyService, requestHash } from "../idempotency/idempotency.service.js";
+import { and, eq } from "drizzle-orm";
 import type { AppDatabase } from "../../db/database.js";
+import { branches } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { WorkRulesService } from "../work-rules/work-rules.service.js";
 import { SyncHandlerRegistry } from "./sync-handler.registry.js";
@@ -42,7 +44,9 @@ export class SyncService {
             if (!handler.anyOf.some((code) => tenant.permissions.includes(code))) {
               throw new ApiError("FORBIDDEN", "You do not have permission to perform this action.", 403);
             }
-            return { value: await handler.handle(tenant, operation), status: 200 };
+            // Work done offline belongs to the shop it was done in, even if the person has since switched shop.
+            const { scoped, payload } = await this.inShopOf(tenant, operation.payload);
+            return { value: await handler.handle(scoped, { ...operation, payload }), status: 200 };
           },
         );
         if (outcome.kind === "fresh") await this.flagIfOutsideRules(tenant, operation);
@@ -62,6 +66,28 @@ export class SyncService {
       }
     }
     return { results };
+  }
+
+  /**
+   * The phone records which shop offline work was done in (`branchId` on the payload). It is checked like a shop
+   * chosen at sign-in: it must be this business's, open, and one the person may work in. Without it (older phones),
+   * the shop selected now is used, as before.
+   */
+  private async inShopOf(tenant: TenantContext, raw: unknown): Promise<{ scoped: TenantContext; payload: unknown }> {
+    if (!raw || typeof raw !== "object" || typeof (raw as { branchId?: unknown }).branchId !== "string") return { scoped: tenant, payload: raw };
+    const { branchId, ...payload } = raw as { branchId: string } & Record<string, unknown>;
+    if (branchId === tenant.branchId) return { scoped: tenant, payload };
+    if (tenant.membershipBranchId && tenant.membershipBranchId !== branchId) {
+      throw new ApiError("SHOP_NOT_ALLOWED", "This was saved in a shop you no longer work in. Ask the owner to record it.", 403);
+    }
+    const [branch] = await this.db.select().from(branches).where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.id, branchId))).limit(1);
+    if (!branch || (tenant.businessId && branch.businessId !== tenant.businessId)) {
+      throw new ApiError("SHOP_NOT_FOUND", "The shop this was saved in is no longer available. Record it again in the right shop.", 404);
+    }
+    if (branch.closedAt) {
+      throw new ApiError("SHOP_CLOSED", `${branch.name} was closed after this was saved. Record it again in the shop that took over.`, 409);
+    }
+    return { scoped: { ...tenant, branchId, businessId: branch.businessId }, payload };
   }
 
   /**

@@ -126,7 +126,8 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       permissions: profile.tenant?.permissions ?? [],
       ...(profile.tenant?.role ? { role: profile.tenant.role } : {}),
       staffSession: Boolean(profile.tenant?.deviceId),
-      owner: tenantId && membershipId ? { tenantId, membershipId } : null,
+      // The shop goes with the owner, so work saved offline keeps the shop it was done in (ADR-044).
+      owner: tenantId && membershipId ? { tenantId, membershipId, ...(profile.tenant?.branchId ? { branchId: profile.tenant.branchId } : {}) } : null,
       branchId: profile.tenant?.branchId ?? null,
       salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
       salesItems: currentBusiness?.salesItems ?? "products",
@@ -148,8 +149,9 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       currentBusiness?.timezone,
     ],
   );
-  const [outbox, setOutbox] = useState<{ pending: number; rejected: { id: string; error: { message: string } | null }[] }>({
+  const [outbox, setOutbox] = useState<{ pending: number; retrying: number; rejected: { id: string; error: { message: string } | null; meta?: { summary: string } }[] }>({
     pending: 0,
+    retrying: 0,
     rejected: [],
   });
 
@@ -165,7 +167,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       const refresh = () => {
         void queue
           .summary(owner)
-          .then((next) => setOutbox({ pending: next.pending, rejected: next.rejected }))
+          .then((next) => setOutbox({ pending: next.pending, retrying: next.retrying, rejected: next.rejected }))
           .catch(() => undefined);
       };
       refresh();
@@ -223,7 +225,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
 
   const [AccountMenu, setAccountMenu] = useState<ComponentType<AccountMenuProps> | null>(null);
   const accountTrigger = (
-    <button className="rounded-pill" aria-label={t("accountMenu")}>
+    <button className="flex h-11 w-11 items-center justify-center rounded-pill" aria-label={t("accountMenu")}>
       <Avatar name={profile.user?.displayName ?? t("account")} />
     </button>
   );
@@ -486,9 +488,20 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
             </p>
           ) : null}
           {outbox.pending > 0 ? (
-            <Badge tone="warning" role="status">
-              {t("syncWaiting", { count: outbox.pending })}
-            </Badge>
+            // Tapping tries again at once (ADR-044); after a failed try it says so, so nobody thinks it synced.
+            <button
+              type="button"
+              data-testid="sync-now"
+              className="min-h-9 rounded-full"
+              onClick={() =>
+                access.owner &&
+                void Promise.all([import("../../lib/offline/outbox"), import("../../lib/offline/sync")]).then(([queue, sync]) => access.owner && queue.flush(access.owner, sync.pushToServer, Date.now(), { force: true }))
+              }
+            >
+              <Badge tone="warning" role="status">
+                {outbox.retrying > 0 ? t("syncRetrying", { count: outbox.pending }) : t("syncWaiting", { count: outbox.pending })}
+              </Badge>
+            </button>
           ) : null}
         </header>
         {outbox.rejected.length > 0 && access.owner ? (
@@ -497,7 +510,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
               <p className="font-medium text-danger">{t("syncRejected", { count: outbox.rejected.length })}</p>
               <ul className="mt-1 list-disc pl-5 text-muted">
                 {outbox.rejected.map((item) => (
-                  <li key={item.id}>{item.error?.message}</li>
+                  <li key={item.id}>{item.meta?.summary ? `${item.meta.summary}: ` : ""}{item.error?.message}</li>
                 ))}
               </ul>
             </div>

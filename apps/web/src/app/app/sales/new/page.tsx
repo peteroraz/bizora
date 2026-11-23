@@ -132,7 +132,11 @@ function QuickSaleScreen() {
     })();
     warmOfflineCopy();
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
-    const preload = () => void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule()]).catch(() => undefined);
+    const preload = () => {
+      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule()]).catch(() => undefined);
+      // Customer names for finding a customer with no network; refreshed at most every few hours.
+      if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
+    };
     if (document.readyState === "complete") window.setTimeout(preload, 0);
     else window.addEventListener("load", () => window.setTimeout(preload, 0), { once: true });
     if (typedOk) {

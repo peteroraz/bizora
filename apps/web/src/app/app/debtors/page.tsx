@@ -75,7 +75,7 @@ function DebtorsScreen() {
               type="button"
               role="tab"
               aria-selected={filter === option}
-              className={`rounded-pill border px-3 py-1 text-sm ${filter === option ? "border-primary bg-primary text-primary-fg" : "border-border"}`}
+              className={`min-h-11 rounded-pill border px-4 text-sm ${filter === option ? "border-primary bg-primary text-primary-fg" : "border-border"}`}
               onClick={() => {
                 setFilter(option);
                 void load(option, query);

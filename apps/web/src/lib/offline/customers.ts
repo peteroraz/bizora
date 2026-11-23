@@ -77,3 +77,10 @@ export async function clearSavedLists() {
     db.close();
   }
 }
+
+/** Refreshes the saved names only when they are older than `maxAgeMs`, to spare data on slow networks (ADR-044). */
+export async function refreshCustomerDirectoryIfOld(owner: OutboxOwner, maxAgeMs = 6 * 3_600_000) {
+  const saved = await readCustomerDirectory(owner);
+  if (saved && Date.now() - Date.parse(saved.syncedAt) < maxAgeMs) return saved;
+  return refreshCustomerDirectory(owner);
+}

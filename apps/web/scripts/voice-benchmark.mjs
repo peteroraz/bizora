@@ -18,7 +18,7 @@ import { parseSpokenSale } from "@bizora/contracts/voice";
 env.allowRemoteModels = true;
 env.cacheDir = process.env.VOICE_BENCH_CACHE ?? ".cache/voice-bench";
 
-const [nigerianDir, salesDir] = process.argv.slice(2);
+const [nigerianDir, salesDir, pidginDir] = process.argv.slice(2);
 const PROMPT = "Sold in naira, cash, transfer or POS. Rice, Peak Milk, Indomie, garri, palm oil, sugar, semovita, Coke. Emeka, Chioma, Mama Nkechi, Alhaji Musa.";
 
 /** Each candidate: where it comes from, which file precision, and how it decodes. */
@@ -110,18 +110,34 @@ function wordErrors(reference, hypothesis) {
   return { errors: row[hyp.length], words: ref.length };
 }
 
-/** A sale is right when the parser reads the same items, quantities, prices, customer and payment as from the true words. */
-function saleRight(reference, hypothesis) {
+function keyOf(sale) {
+  return JSON.stringify({
+    lines: sale.lines.map((line) => [line.productText.split(" ").at(-1), String(line.quantity), String(line.unitPriceMinor), line.unit]),
+    customer: (sale.customerText ?? "").toLowerCase().split(" ")[0] ?? "",
+    paid: String(sale.paidMinor),
+    total: String(sale.totalMinor),
+  });
+}
+
+/**
+ * How well the sale is read from what the model heard, against what the parser reads from the true words (ADR-044):
+ * right (everything equal), quantities, money (prices, total, paid), products, failed (nothing usable or a blocking
+ * question), and false confidence (looks complete, with no question for the trader, but is wrong).
+ */
+function saleScore(reference, hypothesis) {
   const want = parseSpokenSale(reference, { currency: "NGN" });
   const got = parseSpokenSale(hypothesis, { currency: "NGN" });
-  const key = (sale) =>
-    JSON.stringify({
-      lines: sale.lines.map((line) => [line.productText.split(" ").at(-1), String(line.quantity), String(line.unitPriceMinor), line.unit]),
-      customer: (sale.customerText ?? "").toLowerCase().split(" ")[0] ?? "",
-      paid: String(sale.paidMinor),
-      total: String(sale.totalMinor),
-    });
-  return key(want) === key(got);
+  const pairs = want.lines.map((line, index) => [line, got.lines[index]]);
+  const blocking = new Set(["no_items", "no_quantity", "no_price", "unclear_price"]);
+  const right = keyOf(want) === keyOf(got);
+  return {
+    right,
+    quantity: pairs.length > 0 && pairs.every(([a, b]) => b && a.quantity === b.quantity),
+    money: want.totalMinor === got.totalMinor && want.paidMinor === got.paidMinor && pairs.every(([a, b]) => b && a.unitPriceMinor === b.unitPriceMinor),
+    product: pairs.length > 0 && pairs.every(([a, b]) => b && a.productText.split(" ").at(-1) === b.productText.split(" ").at(-1)),
+    failed: got.lines.length === 0 || got.issues.some((issue) => blocking.has(issue.code ?? issue)),
+    falseConfidence: !right && got.lines.length > 0 && got.issues.length === 0,
+  };
 }
 
 async function modelBytes(id, dtype) {
@@ -154,6 +170,7 @@ async function transcriber(candidate) {
 const sets = [
   { name: "Nigerian English (SLR70)", clips: readIndex(nigerianDir), sales: false },
   { name: "Spoken sales", clips: readIndex(salesDir), sales: true },
+  ...(pidginDir ? [{ name: "Pidgin-influenced, fast and slow", clips: readIndex(pidginDir), sales: true }] : []),
 ];
 for (const set of sets) {
   for (const clip of set.clips) clip.audio = decode(clip.file);
@@ -176,6 +193,7 @@ for (const candidate of CANDIDATES) {
         let errors = 0;
         let total = 0;
         let right = 0;
+        const tally = { quantity: 0, money: 0, product: 0, failed: 0, falseConfidence: 0 };
         let seconds = 0;
         let audioSeconds = 0;
         const examples = [];
@@ -187,12 +205,21 @@ for (const candidate of CANDIDATES) {
           const counted = wordErrors(clip.text, heard);
           errors += counted.errors;
           total += counted.words;
-          if (set.sales && saleRight(clip.text, heard)) right += 1;
+          if (set.sales) {
+            const score = saleScore(clip.text, heard);
+            if (score.right) right += 1;
+            for (const name of Object.keys(tally)) if (score[name]) tally[name] += 1;
+          }
           if (examples.length < 3) examples.push(`${clip.text} → ${heard.trim()}`);
         }
         row.scores[`${set.name} ${condition === "audio" ? "clean" : "crowd"}`] = {
           wer: Math.round((errors / Math.max(1, total)) * 1000) / 10,
-          ...(set.sales ? { salesRight: `${right}/${set.clips.length}` } : {}),
+          ...(set.sales
+            ? {
+                salesRight: `${right}/${set.clips.length}`,
+                ...Object.fromEntries(Object.entries(tally).map(([name, count]) => [name, Math.round((count / set.clips.length) * 1000) / 10])),
+              }
+            : {}),
           speed: Math.round((seconds / audioSeconds) * 100) / 100,
           examples,
         };
@@ -215,5 +242,14 @@ const table = [
       : `| ${row.name} | ${row.mb} | ${columns.map((column) => row.scores[column].wer).join(" | ")} | ${row.scores["Spoken sales clean"]?.salesRight ?? ""} / ${row.scores["Spoken sales crowd"]?.salesRight ?? ""} | ${row.scores[columns[0]].speed} |`,
   ),
 ].join("\n");
-console.log(`\nVOICE BENCHMARK\n${table}`);
+const salesColumns = columns.filter((column) => column.startsWith("Spoken sales") || column.startsWith("Pidgin"));
+const extraction = [
+  "| Model | Set | Sales right | Quantity right % | Money right % | Product right % | Failed (asked to correct) % | False confidence % |",
+  "| --- | --- | --- | --- | --- | --- | --- | --- |",
+  ...results
+    .filter((row) => !row.error)
+    .flatMap((row) => salesColumns.map((column) => { const score = row.scores[column]; return `| ${row.name} | ${column} | ${score.salesRight} | ${score.quantity} | ${score.money} | ${score.product} | ${score.failed} | ${score.falseConfidence} |`; })),
+].join("\n");
+console.log(`\nVOICE BENCHMARK\n${table}\n\nSALE EXTRACTION\n${extraction}`);
+if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### Sale extraction\n\n${extraction}\n`);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Offline voice benchmark\n\n${table}\n`);
