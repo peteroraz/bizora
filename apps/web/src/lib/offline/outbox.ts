@@ -10,7 +10,8 @@ import { purgeOfflinePages } from "./sw-client";
  * - The server is the authority. Rejected items stay visible until someone dismisses them; they are never retried.
  * - Signing out of Shop mode deletes the store, but only once nothing is waiting.
  */
-export type OutboxOwner = { tenantId: string; membershipId: string };
+/** Whose work it is. `branchId` is the shop it is done in, recorded on each item so a later shop switch cannot move it. */
+export type OutboxOwner = { tenantId: string; membershipId: string; branchId?: string };
 
 export type OutboxItem = {
   id: string;
@@ -41,11 +42,19 @@ const MAX_DELAY_MS = 10 * 60_000;
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
+// Other tabs of Bizora on this phone hear about changes too, so a sale synced in one tab is not shown as waiting
+// in another (ADR-044).
+const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("bizora-outbox") : null;
+channel?.addEventListener("message", () => {
+  for (const listener of listeners) listener();
+});
+
 function notify() {
   for (const listener of listeners) listener();
+  channel?.postMessage("changed");
 }
 
-/** Called whenever the outbox changes, so the screen can show "3 waiting to sync". */
+/** Called whenever the outbox changes, here or in another tab, so the screen can show "3 waiting to sync". */
 export function subscribe(listener: Listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -117,10 +126,12 @@ export async function enqueue(
 ): Promise<string> {
   if (!available()) throw new Error("This browser cannot save work offline.");
   const now = options.now ?? Date.now();
+  // The shop it was done in travels with it (ADR-044); the server checks the person may still work there.
+  const inShop = owner.branchId && payload && typeof payload === "object" && !("branchId" in payload) ? { ...payload, branchId: owner.branchId } : payload;
   const item: OutboxItem = {
     id: options.id ?? uuidv7(now),
     type,
-    payload,
+    payload: inShop,
     occurredAt: new Date(now).toISOString(),
     tenantId: owner.tenantId,
     membershipId: owner.membershipId,
@@ -141,6 +152,8 @@ export async function summary(owner?: OutboxOwner) {
   const scoped = owner ? items.filter(mine(owner)) : items;
   return {
     pending: scoped.filter((item) => item.status === "pending").length,
+    /** Waiting items whose last try failed (no network, or the server was down): shown so nobody thinks they synced. */
+    retrying: scoped.filter((item) => item.status === "pending" && item.attempts > 0).length,
     rejected: scoped.filter((item) => item.status === "rejected"),
     /** Everything waiting on this device, whoever made it. */
     devicePending: items.filter((item) => item.status === "pending").length,

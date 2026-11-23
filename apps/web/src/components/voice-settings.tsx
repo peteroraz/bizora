@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import {
   bestFits,
+  cancelInstall,
   chooseTier,
   chosenTier,
   detectSupport,
@@ -53,8 +54,8 @@ export function VoiceSettings() {
     setProgress(0);
     try {
       await install((loaded, total) => setProgress(total > 0 ? Math.round((loaded / total) * 100) : 0));
-    } catch {
-      setProblem(t("failed"));
+    } catch (error) {
+      setProblem((error as { code?: string }).code === "cancelled" ? t("stopped") : t("failed"));
     } finally {
       setProgress(null);
       await refresh();
@@ -104,7 +105,14 @@ export function VoiceSettings() {
         <p className="text-sm">{t("missing", { size: mb(sizes[tier] || speechModel().approxBytes) })}</p>
       ) : null}
       {free !== null ? <p className="text-xs text-muted">{t("free", { size: mb(free) })}</p> : null}
-      {progress !== null ? <p className="text-sm">{t("downloading", { percent: progress })}</p> : null}
+      {progress !== null ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm">{t("downloading", { percent: progress })}</p>
+          <Button variant="secondary" onClick={() => cancelInstall()}>
+            {t("stop")}
+          </Button>
+        </div>
+      ) : null}
       {problem ? (
         <p className="text-sm text-danger" role="alert">
           {problem}

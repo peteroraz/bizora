@@ -1,6 +1,6 @@
 "use client";
 
-import { IDEMPOTENCY_HEADER, Permission, capitaliseFirst, parseAmount, parseQuantity, sellsProducts, sellsTyped, uuidv7 } from "@bizora/contracts";
+import { IDEMPOTENCY_HEADER, Permission, parseAmount, parseQuantity, sellsProducts, sellsTyped, uuidv7 } from "@bizora/contracts";
 import { Button, Card, FormField, Input, PageHeader, SafeForm, SubmitButton } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -21,9 +21,12 @@ import { refreshOfflineCatalog } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
 import { SentenceInput } from "../../../../components/typing";
 import { asProduct } from "../../../../lib/offline/typed-product";
+import type { QuickSalePicks as QuickSalePicksComponent } from "./quick-sale-picks";
 
 import type { Line } from "../../../../components/quick-sale-lines";
+import type { ListPrices } from "../../../../components/sale-price-list";
 type PayMode = "cash" | "transfer" | "pos" | "split" | "credit";
+const tierPrice = (tiers: { min: bigint; price: bigint }[] | undefined, entered: bigint | null) => (entered === null ? null : (tiers?.find((tier) => entered >= tier.min)?.price ?? null));
 
 /** Quantities are thousandths (ADR-014); the stepper shows them as people type them: "3", "2.5". */
 const quantityText = (thousandths: bigint) =>
@@ -43,6 +46,9 @@ const SaleMoneyExtras = lazy(extrasModule);
 const linesModule = () => import("../../../../components/quick-sale-lines");
 const QuickSaleLines = lazy(linesModule);
 const savedItemsModule = () => import("../../../../lib/offline/saved-items");
+const priceListModule = () => import("../../../../components/sale-price-list");
+const SalePriceList = lazy(priceListModule);
+const picksModule = () => import("./quick-sale-picks");
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -94,12 +100,24 @@ function QuickSaleScreen() {
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
+  // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
+  const [chosenList, setChosenList] = useState("");
+  const [fromList, setFromList] = useState<ListPrices | null>(null);
   const typedOk = sellsTyped(access.salesItems);
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
   const [voice, setVoice] = useState(false);
+  // Bizora operations can switch voice off for a business in the pilot (ADR-045).
+  const voiceOn = access.offlineVoice !== false;
   // A sale confirmed on the voice screen is saved once its fields are in place (ADR-040).
   const [autoSave, setAutoSave] = useState(false);
+  // Search results load after the screen opens: they are not part of the first script.
+  const [Picks, setPicks] = useState<typeof QuickSalePicksComponent | null>(null);
+  useEffect(() => {
+    const load = () => void picksModule().then((module) => setPicks(() => module.QuickSalePicks));
+    if (document.readyState === "complete") window.setTimeout(load, 0);
+    else window.addEventListener("load", () => window.setTimeout(load, 0), { once: true });
+  }, []);
   const spoken = useRef(false);
   const recentStore = access.owner && access.branchId ? recentKey(access.owner.tenantId, access.branchId) : null;
 
@@ -112,13 +130,13 @@ function QuickSaleScreen() {
     const params = new URLSearchParams(window.location.search);
     const customerId = params.get("customer");
     const swap = params.get("swap");
-    if (params.get("voice") === "1") setVoice(true);
+    if (params.get("voice") === "1" && voiceOn) setVoice(true);
     if (customerId) setCustomer({ id: customerId, name: params.get("name") ?? "" });
     if (swap) {
       setNote(t("swapNote", { number: swap }));
       setExtras(true);
     }
-  }, [t]);
+  }, [t, voiceOn]);
 
   useEffect(() => {
     const owner = access.owner;
@@ -132,7 +150,11 @@ function QuickSaleScreen() {
     })();
     warmOfflineCopy();
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
-    const preload = () => void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), voiceModule()]).catch(() => undefined);
+    const preload = () => {
+      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
+      // Customer names for finding a customer with no network; refreshed at most every few hours.
+      if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
+    };
     if (document.readyState === "complete") window.setTimeout(preload, 0);
     else window.addEventListener("load", () => window.setTimeout(preload, 0), { once: true });
     if (typedOk) {
@@ -144,7 +166,7 @@ function QuickSaleScreen() {
         if (fresh) setSavedList(fresh.items.map(asProduct));
       })();
     }
-  }, [access.owner, access.branchId, typedOk]);
+  }, [access.owner, access.branchId, typedOk, voiceOn]);
 
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
@@ -169,7 +191,7 @@ function QuickSaleScreen() {
   /** Each line's price and total, worked out the way the server will. Problems are shown before saving. */
   const priced = lines.map((line) => {
     const entered = parseQuantity(line.quantity);
-    const list = listPrice(line.product, line.unit);
+    const list = (line.product.typed ? null : tierPrice(fromList?.tiers.get(`${line.product.id}:${line.unit}`), entered)) ?? listPrice(line.product, line.unit);
     const typed = line.price.trim() ? parseAmount(line.price, currency) : null;
     // A typed item's price is whatever it sells for today; its last price is only a suggestion.
     const unitPrice = (canDiscount || line.product.typed) && typed !== null ? typed : list;
@@ -273,6 +295,7 @@ function QuickSaleScreen() {
       payments: paidParts.map((part) => ({ method: part.method, amountMinor: (part.amountMinor ?? 0n).toString() })),
       ...(discountMinor > 0n ? { discountMinor: discountMinor.toString() } : {}),
       ...(customer ? { customerId: customer.id } : {}),
+      ...(chosenList && fromList ? { priceListId: fromList.id } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(desk ? { requestedPayment: mode } : {}),
       ...(balance > 0n ? { dueDate } : {}),
@@ -297,7 +320,8 @@ function QuickSaleScreen() {
         await enqueue(
           access.owner,
           "sale.create",
-          { ...body, provisionalNumber: provisional, soldAt: new Date().toISOString() },
+          // Offline, the sale names the list it was priced from, so the server prices it the same way.
+          { ...body, ...(fromList ? { priceListId: fromList.id } : {}), provisionalNumber: provisional, soldAt: new Date().toISOString() },
           {
             meta: {
               summary: priced.map((item) => `${item.line.quantity} ${unitName(item.line.unit, Number(item.line.quantity) || 1)} ${item.line.product.name}`).join(", "),
@@ -345,7 +369,7 @@ function QuickSaleScreen() {
         </p>
       ) : null}
       {!catalog ? <p className="text-sm text-muted">{t("noCatalog")}</p> : null}
-      {voice && catalog ? (
+      {voice && voiceOn && catalog ? (
         <Suspense fallback={null}>
           <VoiceSale
             products={[...(listOk ? Object.values(catalog.products) : []), ...savedList]}
@@ -372,7 +396,7 @@ function QuickSaleScreen() {
           />
         </Suspense>
       ) : null}
-      {!voice && catalog ? (
+      {!voice && voiceOn && catalog ? (
         <button type="button" className="flex min-h-14 w-full items-center justify-center gap-2 rounded-card border-2 border-primary text-base font-semibold text-primary" onClick={() => setVoice(true)} data-testid="say-sale">
           {t("voice.open")}
         </button>
@@ -382,41 +406,18 @@ function QuickSaleScreen() {
           <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
         </div>
       </FormField>
-      {matches.length > 0 ? (
-        <ul className="divide-y divide-border rounded-card border border-border bg-card" aria-label={t("matches")}>
-          {matches.map((product) => (
-            <li key={product.id}>
-              <button type="button" className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left" onClick={() => addProduct(product)}>
-                <span className="text-sm font-medium">{product.name}</span>
-                <span className="text-right text-sm text-muted">
-                  {product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}
-                  {product.trackStock ? ` · ${stockText(product.quantity, product.baseUnit, product.packs)}` : ""}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : query.trim() && catalog && !typedOk ? (
-        <p className="text-sm text-muted">{t("noMatches")}</p>
-      ) : !asked && tiles.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label={t("quickPicks")} data-testid="product-tiles">
-          {tiles.map((product) => (
-            <button
-              key={product.id}
-              type="button"
-              className="flex min-h-16 flex-col items-start justify-between rounded-card border border-border bg-card px-3 py-2 text-left hover:border-primary"
-              onClick={() => addProduct(product)}
-            >
-              <span className="line-clamp-2 text-sm font-medium leading-tight">{product.name}</span>
-              <span className="text-xs text-muted">{product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {typedOk && asked && !matches.some((item) => item.name.toLowerCase() === asked) ? (
-        <button type="button" className="min-h-12 w-full rounded-card border border-dashed border-primary px-4 text-left text-sm font-medium text-primary" data-testid="sell-typed" onClick={() => addProduct(asProduct({ name: capitaliseFirst(query.trim()), unit: "piece", lastPriceMinor: null }))}>
-          {t("typed.sell", { name: capitaliseFirst(query.trim()) })}
-        </button>
+      {Picks ? (
+        <Picks
+          query={query}
+          matches={matches}
+          tiles={tiles}
+          catalogReady={Boolean(catalog)}
+          typedOk={typedOk}
+          asked={asked}
+          onAdd={addProduct}
+          money={money}
+          stockText={stockText}
+        />
       ) : null}
       <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
         {priced.length > 0 ? (
@@ -443,6 +444,9 @@ function QuickSaleScreen() {
             </Suspense>
           ) : null}
         </fieldset>
+        <Suspense fallback={null}>
+          <SalePriceList customerId={customer?.id ?? null} chosen={chosenList} onChosen={setChosenList} onPrices={setFromList} />
+        </Suspense>
         {findsCustomers ? (
           <Card className="p-4">
             <p className="text-sm font-medium">{balance > 0n || mode === "credit" ? t("customer") : t("customerOptional")}</p>

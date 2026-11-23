@@ -166,6 +166,8 @@ function StockScreen() {
           canAdd || canReceive || canLists ? (
             <>
               {canLists ? <ActionLink href="/app/stock/lists">{t("lists")}</ActionLink> : null}
+              {can(access, Permission.STOCK_TRANSFER) ? <ActionLink href="/app/stock/transfers">{t("transfersLink")}</ActionLink> : null}
+              {can(access, Permission.STOCK_COUNT, Permission.STOCK_ADJUST) ? <ActionLink href="/app/stock/counts">{t("countsLink")}</ActionLink> : null}
               {canReceive ? (
                 <ActionLink href="/app/stock/receive" variant={canAdd ? "outline" : "primary"}>
                   {t("delivery")}
@@ -180,6 +182,8 @@ function StockScreen() {
                   </ActionLink>
                 </>
               ) : null}
+              {can(access, Permission.PRICING_LISTS_MANAGE) ? <ActionLink href="/app/stock/prices">{t("pricesLink")}</ActionLink> : null}
+              {canReceive && can(access, Permission.PURCHASES_MANAGE) ? <ActionLink href="/app/stock/delivery">{t("deliveryChargesLink")}</ActionLink> : null}
             </>
           ) : undefined
         }

@@ -7,7 +7,7 @@ export function Tab({ value, children }: { value: string; children: ReactNode })
   return (
     <TabsPrimitive.Trigger
       value={value}
-      className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted data-[state=active]:border-primary data-[state=active]:text-fg"
+      className="min-h-11 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted data-[state=active]:border-primary data-[state=active]:text-fg"
     >
       {children}
     </TabsPrimitive.Trigger>

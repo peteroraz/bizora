@@ -11,6 +11,8 @@ export type Access = {
   owner?: { tenantId: string; membershipId: string } | null;
   /** The shop currently selected (a PIN device is always in its own shop). */
   branchId?: string | null;
+  /** The one shop this person is kept to, if any: they send from and receive into it only (ADR-047). */
+  membershipBranchId?: string | null;
   /** How the business sells (ADR-016): simple, or sales desk → cashier → store keeper. */
   salesFlow?: "simple" | "desk";
   /** What staff can sell (ADR-041): products from the list, any typed item, or both. */
@@ -20,6 +22,8 @@ export type Access = {
   currency?: string;
   /** The business's time zone, for showing when things happened. */
   timezone?: string;
+  /** Saying a sale on the phone (ADR-040); Bizora operations can switch it off for a business (ADR-045). */
+  offlineVoice?: boolean;
 };
 
 export const noAccess: Access = { permissions: [], staffSession: false };

@@ -170,10 +170,10 @@ function MoneyScreen() {
             <p className="mt-1 text-sm text-muted">{t("bankLead")}</p>
             {bank && bank.open > 0 ? <p className="mt-2 text-sm">{t("toCheck", { count: bank.open, amount: money(bank.openMinor, bank.currency) })}</p> : null}
             <div className="mt-3 flex flex-wrap gap-4 text-sm font-medium">
-              <Link href="/app/money/bank" className="text-primary">
+              <Link href="/app/money/bank" className="inline-flex min-h-11 items-center text-primary">
                 {t("openInbox")}
               </Link>
-              <Link href="/app/money/bank/upload" className="text-primary">
+              <Link href="/app/money/bank/upload" className="inline-flex min-h-11 items-center text-primary">
                 {t("upload")}
               </Link>
             </div>

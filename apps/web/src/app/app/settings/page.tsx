@@ -18,6 +18,7 @@ import { AddressFields } from "../../../components/address-fields";
 import { SecurityPanel } from "../../../components/security-panel";
 import { SupportActivity } from "../../../components/support-activity";
 import { VoiceSettings } from "../../../components/voice-settings";
+import { ExportRecords } from "../../../components/export-records";
 import { SavedItemsList } from "../../../components/saved-items-list";
 import { WorkRulesSettings } from "../../../components/work-rules-settings";
 import { BrandSettings } from "../../../components/brand-settings";
@@ -48,8 +49,8 @@ type Business = {
   salesFlow?: "simple" | "desk";
   salesItems?: "products" | "typed" | "both";
 };
-type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null };
-type BranchDraft = { name: string; phone: string; address: AddressValue };
+type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null; kind?: "shop" | "warehouse" };
+type BranchDraft = { name: string; phone: string; address: AddressValue; kind: "shop" | "warehouse" };
 
 const roles = ["ADMINISTRATOR", "MANAGER", "SALES", "CASHIER", "INVENTORY", "ACCOUNTANT", "EMPLOYEE", "AUDITOR"] as const;
 const locales = ["en-NG", "pcm", "ha", "ig", "yo"] as const;
@@ -199,7 +200,7 @@ function SettingsScreen() {
     const subs: Record<string, SubdivisionOption[]> = {};
     for (const branch of loadedBranches) {
       const address = fromAddress(branch.address, branch.address?.countryCode ?? "NG");
-      drafts[branch.id] = { name: branch.name, phone: branch.phoneE164 ?? "", address };
+      drafts[branch.id] = { name: branch.name, phone: branch.phoneE164 ?? "", address, kind: branch.kind ?? "shop" };
       subs[branch.id] = await subdivisionsFor(address.countryCode || "NG");
     }
     setBranchDrafts(drafts);
@@ -319,7 +320,7 @@ function SettingsScreen() {
       if (hasPlace(draft.address)) await persistOwnerAddress({ kind: "branch", id: branchId }, draft.address);
       const response = await api(`/api/v1/branches/${branchId}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: draft.name, phoneE164: await phoneForSave(draft.phone, draft.address.countryCode || place.country) }),
+        body: JSON.stringify({ name: draft.name, kind: draft.kind, phoneE164: await phoneForSave(draft.phone, draft.address.countryCode || place.country) }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? t("branchFailed"));
@@ -347,7 +348,7 @@ function SettingsScreen() {
     setPending(true);
     const response = await api("/api/v1/branches", {
       method: "POST",
-      body: JSON.stringify({ name: new FormData(form).get("name"), businessId: business.id }),
+      body: JSON.stringify({ name: new FormData(form).get("name"), businessId: business.id, kind: new FormData(form).get("warehouse") ? "warehouse" : "shop" }),
     });
     const payload = await response.json();
     setPending(false);
@@ -457,6 +458,7 @@ function SettingsScreen() {
               </SubmitButton>
             </SafeForm>
           </Card>
+          {can(access, Permission.TENANT_MANAGE) ? <ExportRecords /> : null}
         </TabPanel>
         <TabPanel value="brand">
           <BrandSettings />
@@ -652,6 +654,14 @@ function SettingsScreen() {
                         onChange={(event) => updateBranchDraft(branch.id, { phone: event.target.value })}
                       />
                     </FormField>
+                    <label className="flex min-h-11 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={draft.kind === "warehouse"}
+                        onChange={(event) => updateBranchDraft(branch.id, { kind: event.target.checked ? "warehouse" : "shop" })}
+                      />
+                      {t("warehouse")}
+                    </label>
                     <SubmitButton pending={pending} pendingLabel={common("saving")}>
                       {common("save")}
                     </SubmitButton>
@@ -676,6 +686,10 @@ function SettingsScreen() {
                 <FormField id="new-branch" label={t("newBranch")}>
                   <NameInput id="new-branch" name="name" required />
                 </FormField>
+                <label className="flex min-h-11 items-center gap-2 text-sm">
+                  <input type="checkbox" name="warehouse" value="1" />
+                  {t("warehouse")}
+                </label>
                 <SubmitButton pending={pending} pendingLabel={common("saving")}>
                   {t("addBranch")}
                 </SubmitButton>
@@ -790,7 +804,7 @@ function SettingsScreen() {
               </Select>
             </FormField>
           </Card>
-          <VoiceSettings />
+          {access.offlineVoice !== false ? <VoiceSettings /> : null}
         </TabPanel>
         <TabPanel value="security">
           <SecurityPanel />

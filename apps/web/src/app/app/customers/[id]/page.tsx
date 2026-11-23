@@ -16,6 +16,7 @@ import { dayKey, formatCurrency, formatPhone, formatWhen } from "../../../../i18
 import type { SaleView } from "../../../../lib/sales-client";
 import { SentenceInput } from "../../../../components/typing";
 import { CustomerJobs } from "../../../../components/customer-jobs";
+import { CustomerPriceList } from "../../../../components/customer-price-list";
 
 type Customer = {
   id: string;
@@ -28,6 +29,7 @@ type Customer = {
   addressFormatted: string | null;
   address?: EditableCustomer["address"];
   credit: CustomerCreditView;
+  priceListId?: string | null;
   owingMinor: string;
 };
 type Note = { id: string; body: string; createdAt: string };
@@ -210,6 +212,7 @@ function CustomerFullScreen() {
         </div>
       )}
       <CustomerCredit customerId={customer.id} credit={customer.credit} owingMinor={customer.owingMinor} onSaved={() => void load()} />
+      {can(access, Permission.PRICING_LISTS_MANAGE) ? <CustomerPriceList customerId={customer.id} priceListId={customer.priceListId ?? null} /> : null}
       <CustomerJobs customerId={customer.id} customerName={customer.name} />
       {error ? (
         <p className="text-sm text-danger" role="alert">

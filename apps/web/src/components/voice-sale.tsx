@@ -24,7 +24,8 @@ import type { CachedProduct } from "../lib/offline/catalog";
 import { readCustomerDirectory, refreshCustomerDirectory, type DirectoryCustomer } from "../lib/offline/customers";
 import type { OutboxOwner } from "../lib/offline/outbox";
 import { cleanUp, tidyWords } from "../lib/voice/clean";
-import { detectSupport, downloadSize, engine, install, installState, prepare, VoiceError, type InstallState, type Support } from "../lib/voice/engine";
+import { track } from "../lib/pilot-events";
+import { cancelInstall, detectSupport, downloadSize, engine, install, installState, lowMemory, prepare, VoiceError, type InstallState, type Support } from "../lib/voice/engine";
 import { MAX_SECONDS, startRecording, type Recording } from "../lib/voice/recorder";
 import { CaptureBar } from "./capture-bar";
 import { useUnitName } from "./stock-quantity";
@@ -163,6 +164,12 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     setComment("");
     setProblem(null);
     setStage("review");
+    track("voice.review_shown");
+  }
+
+  function close() {
+    if (stage === "review") track("voice.review_closed");
+    onClose();
   }
 
   /** Words heard by Bizora AI on the server, read here the same way as words heard on the phone. */
@@ -174,8 +181,11 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     setProblem(null);
     setProgress({ loaded: 0, total: size ?? 0 });
     try {
+      track("voice.download_started");
       setState(await install((loaded, total) => setProgress({ loaded, total })));
+      track("voice.download_finished");
     } catch (error) {
+      track("voice.download_failed", error instanceof VoiceError ? error.code : navigator.onLine ? "failed" : "offline");
       setProblem(installProblem(error));
     } finally {
       setProgress(null);
@@ -184,6 +194,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
 
   function installProblem(error: unknown) {
     if (error instanceof VoiceError) {
+      if (error.code === "cancelled") return t("setup.cancelled");
       if (error.code === "no_room") return t("errors.noRoom", { size: megabytes(Number(error.message)) });
       if (error.code === "not_published") return t("errors.notPublished");
       if (error.code === "unsupported") return t("errors.unsupported");
@@ -222,6 +233,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
       // Trim silence, remove hum, level quiet speech (ADR-041). Nothing said: say so instead of guessing.
       const cleaned = cleanUp(recorded);
       if (!cleaned.heard) {
+        track("voice.read_failed", "nothing_heard");
         setProblem(t("errors.nothingHeard"));
         setStage("start");
         return;
@@ -237,6 +249,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
       }
       read(words);
     } catch {
+      track("voice.read_failed", "transcribe");
       setProblem(t("errors.transcribe"));
       setStage("start");
     }
@@ -309,6 +322,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     else if (paid.length === 0) mode = "credit";
     else if (paid.length === 1 && paidTotal === totalMinor) mode = paid[0]!.method as VoiceResult["mode"];
     const text = (method: string) => (by(method) ? amountText(by(method), currency) : "");
+    track("voice.sale_confirmed");
     onDone(
       {
         lines,
@@ -343,7 +357,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
             </span>
           </div>
         </div>
-        <button type="button" className="min-h-11 px-2 text-sm text-muted underline underline-offset-2" onClick={onClose}>
+        <button type="button" className="min-h-11 px-2 text-sm text-muted underline underline-offset-2" onClick={close}>
           {t("close")}
         </button>
       </div>
@@ -384,11 +398,18 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
                     <div className="h-full bg-primary transition-[width]" style={{ width: `${percent(progress)}%` }} />
                   </div>
                   <p className="text-xs text-muted">{t("setup.progress", { done: megabytes(progress.loaded), total: megabytes(progress.total || size || 0) })}</p>
+                  {/* Stopping keeps what is already saved, so trying again carries on (ADR-044). */}
+                  <Button variant="secondary" onClick={() => cancelInstall()} data-testid="voice-download-cancel">
+                    {t("setup.cancel")}
+                  </Button>
                 </div>
               ) : (
-                <Button onClick={() => void download()} data-testid="voice-download">
-                  {t("setup.download")}
-                </Button>
+                <>
+                  {lowMemory() ? <p className="text-sm text-warning">{t("setup.lowMemory")}</p> : null}
+                  <Button onClick={() => void download()} data-testid="voice-download">
+                    {problem ? t("setup.retry") : t("setup.download")}
+                  </Button>
+                </>
               )}
             </div>
           ) : (
@@ -438,6 +459,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
+            track("voice.typed_used");
             read(typed);
           }}
         >
@@ -457,6 +479,10 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
 
       {stage === "review" && review ? (
         <div className="space-y-4" data-testid="voice-review">
+          {/* Voice can mishear a number and still look complete (benchmark round 3), so every review says so. */}
+          <p className="rounded-control border border-warning bg-warning-bg px-3 py-2 text-sm text-warning" data-testid="voice-check-notice">
+            {t("checkEverything")}
+          </p>
           <FormField id="voice-heard" label={t("heardLabel")} hint={t("heardHint")}>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Textarea id="voice-heard" value={transcript} rows={2} maxLength={600} onChange={(event) => setTranscript(event.target.value)} data-testid="voice-transcript" />
@@ -676,7 +702,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
             <Button type="button" variant="ghost" onClick={() => (ready ? void startListening() : setStage("typing"))}>
               {ready ? t("recordAgain") : t("typeAgain")}
             </Button>
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={close}>
               {t("cancel")}
             </Button>
           </div>

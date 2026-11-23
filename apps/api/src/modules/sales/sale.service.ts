@@ -35,6 +35,7 @@ import { APP_ENV, DB, EMAIL } from "../../tokens.js";
 import { publicWebOrigin, type AppEnv } from "@bizora/config/env";
 import type { EmailPort } from "../email/email.port.js";
 import { renderEmail } from "../email/templates.js";
+import { choosePriceList, listPrices, tierPrice } from "../pricing/price-selection.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor, type BusinessRow, type ProductRow } from "../inventory/inventory-scope.js";
@@ -109,8 +110,28 @@ export class SaleService {
     await this.db.transaction(async (tx) => {
       const business = await requireBusiness(tx, tenant);
       const branch = await resolveBranch(tx, tenant, business.id);
+      // A warehouse keeps stock but does not sell at the counter (ADR-047). Sales already made elsewhere still count.
+      if (branch.kind === "warehouse" && source === "pos") {
+        throw new ApiError("WAREHOUSE_NO_SALES", `${branch.name} is a warehouse. Choose a shop to sell from, or move the stock to a shop first.`, 409);
+      }
       const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
-      const lines = await this.priceLines(tx, tenant, business, payload, source === "pos");
+      // A price list: chosen at the counter, or the customer's (ADR-048).
+      const priceList = await choosePriceList(tx, tenant, {
+        businessId: business.id,
+        branchId: branch.id,
+        currencyCode: business.baseCurrencyCode,
+        chosenId: payload.priceListId,
+        customerListId: customer?.priceListId ?? null,
+        live: source === "pos",
+      });
+      const lines = await this.priceLines(
+        tx,
+        tenant,
+        business,
+        payload,
+        priceList ? { id: priceList.id, day: localDate(soldAt, business.timezone) } : null,
+        source === "pos",
+      );
       // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.
       const typedAt = lines.findIndex((line) => line.saved);
       if (typedAt >= 0 && source === "pos" && !sellsTyped(business.salesItems)) {
@@ -162,6 +183,7 @@ export class SaleService {
         businessId: business.id,
         branchId: branch.id,
         customerId: customer?.id ?? null,
+        priceListId: priceList?.id ?? null,
         saleNumber: receiptNumber,
         invoiceNumber: desk || (settled && settled.balance > 0n) ? (await this.numbers.next(tx, tenant.tenantId, business.id, "invoice")).number : null,
         provisionalNumber: payload.provisionalNumber ?? null,
@@ -1280,9 +1302,18 @@ export class SaleService {
     );
   }
 
-  /** Prices each line from the product (or the price typed), checks discounts, and converts to base units. */
-  /** `live`: a sale made now at the counter. Offline, imported and photo-read sales already happened, so pack rules (ADR-046) are not applied to them. */
-  private async priceLines(tx: DbExecutor, tenant: TenantContext, business: BusinessRow, payload: SaleCreateInput, live = false) {
+  /**
+   * Prices each line from the product (or the price typed), checks discounts, and converts to base units.
+   * `live`: a sale made now at the counter. Offline, imported and photo-read sales already happened, so pack rules (ADR-046) are not applied to them.
+   */
+  private async priceLines(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    business: BusinessRow,
+    payload: SaleCreateInput,
+    priceList: { id: string; day: string } | null = null,
+    live = false,
+  ) {
     const ids = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])))];
     const rows = await tx
       .select()
@@ -1290,6 +1321,7 @@ export class SaleService {
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), inArray(products.id, ids)));
     const byId = new Map(rows.map((row) => [row.id, row]));
     const units = await productUnitsFor(tx, tenant.tenantId, ids);
+    const fromList = priceList ? await listPrices(tx, tenant.tenantId, priceList.id, ids, priceList.day) : null;
     const canDiscount = tenant.permissions.includes(Permission.SALES_DISCOUNT);
     return payload.lines.map((line, index) => {
       // Something not in the products: a service, or an item the shop does not list (ADR-035).
@@ -1312,8 +1344,11 @@ export class SaleService {
       const quantity = round(entered * factor, 1000n);
       if (quantity <= 0n) throw new ApiError("VALIDATION_ERROR", "Enter a larger quantity.", 400, [{ field: `lines.${index}.quantity`, message: "Too small." }]);
       const pack = productUnits.find((unit) => unit.unitCode === line.unit);
+      // The price list's price for this unit and quantity, else the everyday price (ADR-048). Selling below either
+      // is a discount, which needs a manager.
       const listPrice =
-        line.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null));
+        tierPrice(fromList?.get(`${product.id}:${line.unit}`), entered) ??
+        (line.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null)));
       const unitPrice = line.unitPriceMinor !== undefined ? BigInt(line.unitPriceMinor) : listPrice;
       if (unitPrice === null) {
         throw new ApiError("PRICE_REQUIRED", `Enter a price for ${product.name}.`, 400, [{ field: `lines.${index}.unitPriceMinor`, message: "Price needed." }]);

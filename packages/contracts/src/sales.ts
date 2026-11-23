@@ -79,6 +79,8 @@ export const saleCreateSchema = z.object({
   /** The number the device printed while offline, e.g. DEV3-000045. */
   provisionalNumber: z.string().trim().max(24).optional(),
   customerId: z.string().uuid().optional(),
+  /** Sell at a price list's prices (ADR-048). Left out, the customer's list (if any) or the everyday prices. */
+  priceListId: z.string().uuid().optional(),
   lines: z.array(saleLineInputSchema).min(1).max(100),
   payments: z.array(salePaymentInputSchema).max(3).default([]),
   /** Discount on the whole sale, in kobo. */

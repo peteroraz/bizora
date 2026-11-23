@@ -37,6 +37,32 @@ Run by `.github/workflows/voice-benchmark.yml` with `apps/web/scripts/voice-benc
 | **whisper small.en q8 + prompt + cap (Best accuracy)** | 249 | 12.4 | 20.2 | 9.6 | 47.0 | 19/36 / 2/36 | 0.30 |
 | moonshine base + cap | 123 | 10.1 | 33.0 | 27.1 | 51.7 | 7/36 / 0/36 | 0.03 |
 
+## Round 3 (23 Nov 2026): what ships, scored on the sale read
+
+Adds **Pidgin-influenced sentences** (6 sentences in two voices) and **fast (175 wpm) and slow (105 wpm) speech** (6 sentences each): 24 recordings. Crowd noise is at 10 dB. Beyond words wrong, each recording is scored on the **sale Bizora reads from it**, against the sale read from the true words:
+
+- **Quantity / money / product right:** every line's quantity; prices, total and amount paid; product words.
+- **Failed:** nothing usable was read, or the review has to ask (no price, no quantity, unclear amount). The trader is asked to correct it, which is the safe outcome.
+- **False confidence:** the sale looks complete, with no question from the parser, but something in it is wrong. The trader must spot it on the review screen.
+
+| Model | Set | Sales right | Quantity right % | Money right % | Product right % | Failed (asked to correct) % | False confidence % |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Whisper tiny.en (was shipped) | Spoken sales | 2/36 | 58.3 | 27.8 | 30.6 | 55.6 | 13.9 |
+| Whisper tiny.en (was shipped) | Pidgin, fast, slow | 1/24 | 50.0 | 16.7 | 12.5 | 75.0 | 0 |
+| **Standard (base.en + prompt + cap)** | Spoken sales | 10/36 | 58.3 | 44.4 | 52.8 | 36.1 | 22.2 |
+| **Standard** | Spoken sales + crowd | 1/36 | 47.2 | 2.8 | 25.0 | 72.2 | 5.6 |
+| **Standard** | Pidgin, fast, slow | 1/24 | 45.8 | 33.3 | 25.0 | 62.5 | 12.5 |
+| **Best accuracy (small.en + prompt + cap)** | Spoken sales | 19/36 | 91.7 | 83.3 | 77.8 | 8.3 | 36.1 |
+| **Best accuracy** | Spoken sales + crowd | 2/36 | 50.0 | 25.0 | 30.6 | 58.3 | 16.7 |
+| **Best accuracy** | Pidgin, fast, slow | 10/24 | 79.2 | 62.5 | 58.3 | 33.3 | 16.7 |
+
+Words wrong on the Pidgin, fast and slow set: tiny 44.4%, Standard 31.7%, Best accuracy 14.9% (with crowd noise: 187.1%, 64.0%, 48.6%).
+
+**Read with care:**
+
+- **False confidence here counts parser questions only.** In the app, the review also warns when a product or customer is not found, or a price differs from the list price. Those warnings would catch some of these cases, so the real rate should be lower, but it has not been measured with a shop's own lists.
+- **Even so, it is too high to trust voice without checking.** With Best accuracy, about one sale in three that is wrong comes back without a question. The review step is mandatory and stays so; voice is **experimental for the pilot**, switched on per business by the owner.
+
 ## What it showed
 
 - **Size helps.** Accents are read better as the model grows: tiny 21.6%, base 15.7%, small 12.4% of words wrong. With 8-bit weights, base is almost as good (15.7% against 14.6%) at about half the download.
@@ -45,6 +71,9 @@ Run by `.github/workflows/voice-benchmark.yml` with `apps/web/scripts/voice-benc
 - **Beam search** made no difference with this library and was left off.
 - **Moonshine base** was best on clean sentences and is very fast, but it can't take a prompt and did worse on sales and in noise. It is worth looking at again if the library adds prompting for it.
 - **No model reads sales well in loud crowd noise.** The review step and typing stay essential, and traders should hold the phone close.
+
+- **Pidgin-influenced speech** is read surprisingly well by Best accuracy (10 of 24 right) and poorly by Standard (1 of 24). The parser itself reads all six Pidgin-influenced sentences correctly from the true words, and asks when no payment is said ("she go pay tomorrow").
+- **Fast and slow speech** lower accuracy for every model.
 
 ## Not measured
 

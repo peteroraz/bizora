@@ -246,6 +246,8 @@ export const updateBusinessSchema = z.object({
 export const updateBranchSchema = z.object({
   name: z.string().min(1).max(160).optional(),
   phoneE164: optionalPhoneSchema,
+  /** A warehouse keeps stock but does not sell at the counter (ADR-047). */
+  kind: z.enum(["shop", "warehouse"]).optional(),
 });
 
 export const updateOrganizationSchema = z.object({
@@ -269,6 +271,8 @@ export const acceptInvitationSchema = z.object({
 export const createBranchSchema = z.object({
   name: z.string().min(1).max(160),
   businessId: z.string().uuid().optional(),
+  /** A warehouse keeps stock but does not sell at the counter (ADR-047). */
+  kind: z.enum(["shop", "warehouse"]).optional(),
 });
 
 /** Owners close a shop (ADR-032). Anything left in it (stock, cash, staff, customers) moves into another shop. */

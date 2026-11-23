@@ -89,6 +89,8 @@ export const organizations = pgTable(
     addressId: uuid("address_id"),
     phoneE164: varchar("phone_e164", { length: 20 }),
     traderProfile: jsonb("trader_profile"),
+    /** A sample business for demonstrations (migration 0039, ADR-045): marked everywhere, removable with a script. */
+    isSample: boolean("is_sample").notNull().default(false),
     ...timestamps,
   },
   (table) => [
@@ -212,6 +214,8 @@ export const branches = pgTable(
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lockedBy: uuid("locked_by"),
     lockNote: varchar("lock_note", { length: 240 }),
+    /** A warehouse keeps stock but does not sell at the counter (migration 0041, ADR-047). */
+    kind: varchar("kind", { length: 12 }).$type<"shop" | "warehouse">().notNull().default("shop"),
     ...timestamps,
   },
   (table) => [
@@ -427,6 +431,37 @@ export const organizationPlans = pgTable("organization_plans", {
   limitOverrides: jsonb("limit_overrides").$type<Partial<Record<"max_branches" | "max_staff" | "max_devices" | "ai_daily_reads", number>>>().notNull().default({}),
 });
 
+/** Switches for one business (migration 0039, ADR-045). No row: the product default. */
+export const businessFeatures = pgTable(
+  "business_features",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => organizations.id),
+    feature: varchar("feature", { length: 32 }).notNull(),
+    enabled: boolean("enabled").notNull(),
+    reason: varchar("reason", { length: 500 }).notNull(),
+    changedByStaffId: uuid("changed_by_staff_id"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.feature] })],
+);
+
+/** Pilot measures (migration 0039, ADR-045): what happened, never who or what was said. */
+export const pilotEvents = pgTable(
+  "pilot_events",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => organizations.id),
+    event: varchar("event", { length: 48 }).notNull(),
+    detail: varchar("detail", { length: 48 }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("pilot_events_time_idx").on(table.occurredAt, table.event), index("pilot_events_tenant_idx").on(table.tenantId, table.occurredAt)],
+);
+
 export const sessions = pgTable(
   "sessions",
   {
@@ -521,6 +556,8 @@ export const customers = pgTable(
     statementToken: varchar("statement_token", { length: 64 }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
+    /** Buys at this price list's prices (migration 0042, ADR-048). */
+    priceListId: uuid("price_list_id"),
   },
   (table) => [
     index("customers_tenant_business_idx").on(table.tenantId, table.businessId),
@@ -800,6 +837,10 @@ export const products = pgTable(
     gtin: varchar("gtin", { length: 14 }),
     mpn: varchar("mpn", { length: 64 }),
     reference: varchar("reference", { length: 64 }),
+    /** What it last cost to buy, per base unit: the supplier's price, and with charges (migration 0042, ADR-048). */
+    lastPurchaseCostMinor: bigint("last_purchase_cost_minor", { mode: "bigint" }),
+    lastLandedCostMinor: bigint("last_landed_cost_minor", { mode: "bigint" }),
+    lastPurchasedAt: timestamp("last_purchased_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -961,6 +1002,9 @@ export const stockMovements = pgTable(
     membershipId: uuid("membership_id"),
     deviceId: uuid("device_id"),
     actorType: varchar("actor_type", { length: 16 }).notNull().default("HUMAN"),
+    /** The part of the value that is delivery and other charges, and the delivery it came in (migration 0042). */
+    chargesMinor: bigint("charges_minor", { mode: "bigint" }).notNull().default(0n),
+    receiptId: uuid("receipt_id"),
   },
   (table) => [
     uniqueIndex("stock_movements_tenant_id_id_key").on(table.tenantId, table.id),
@@ -1094,6 +1138,8 @@ export const sales = pgTable(
     releasedAt: timestamp("released_at", { withTimezone: true }),
     releasedBy: uuid("released_by"),
     releasedMembershipId: uuid("released_membership_id"),
+    /** The price list the sale was priced from, if any (migration 0042). */
+    priceListId: uuid("price_list_id"),
   },
   (table) => [
     uniqueIndex("sales_tenant_id_id_key").on(table.tenantId, table.id),
@@ -1664,6 +1710,187 @@ export const workPermits = pgTable(
   },
   (table) => [index("work_permits_membership_idx").on(table.tenantId, table.membershipId, table.endsAt)],
 );
+
+/** Transfers between branches with a lifecycle (migration 0041, ADR-047). */
+export const stockTransfers = pgTable(
+  "stock_transfers",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    fromBranchId: uuid("from_branch_id").notNull(),
+    toBranchId: uuid("to_branch_id").notNull(),
+    status: varchar("status", { length: 12 }).$type<"requested" | "approved" | "dispatched" | "received" | "cancelled">().notNull(),
+    documentNumber: varchar("document_number", { length: 24 }),
+    note: varchar("note", { length: 240 }),
+    requestedBy: uuid("requested_by"),
+    requestedMembershipId: uuid("requested_membership_id"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    dispatchedBy: uuid("dispatched_by"),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    receivedBy: uuid("received_by"),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    receiveNote: varchar("receive_note", { length: 240 }),
+    cancelledBy: uuid("cancelled_by"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelReason: varchar("cancel_reason", { length: 240 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("stock_transfers_tenant_business_id_key").on(table.tenantId, table.businessId, table.id)],
+);
+
+export const stockTransferLines = pgTable(
+  "stock_transfer_lines",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    transferId: uuid("transfer_id").notNull(),
+    lineNo: smallint("line_no").notNull(),
+    productId: uuid("product_id").notNull(),
+    quantity: bigint("quantity", { mode: "bigint" }).notNull(),
+    enteredQuantity: bigint("entered_quantity", { mode: "bigint" }).notNull(),
+    enteredUnit: varchar("entered_unit", { length: 16 }).notNull(),
+    valueMinor: bigint("value_minor", { mode: "bigint" }),
+    receivedQuantity: bigint("received_quantity", { mode: "bigint" }),
+    outMovementId: uuid("out_movement_id"),
+    inMovementId: uuid("in_movement_id"),
+    shortMovementId: uuid("short_movement_id"),
+  },
+  (table) => [uniqueIndex("stock_transfer_lines_line_key").on(table.transferId, table.lineNo)],
+);
+
+/** Count sessions: many products counted in one place, posted together (migration 0041, ADR-047). */
+export const stockCountSessions = pgTable(
+  "stock_count_sessions",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    status: varchar("status", { length: 12 }).$type<"draft" | "counting" | "submitted" | "approved" | "posted" | "cancelled">().notNull().default("counting"),
+    name: varchar("name", { length: 80 }).notNull(),
+    note: varchar("note", { length: 240 }),
+    createdBy: uuid("created_by"),
+    createdMembershipId: uuid("created_membership_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    submittedBy: uuid("submitted_by"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    postedAt: timestamp("posted_at", { withTimezone: true }),
+    decisionNote: varchar("decision_note", { length: 240 }),
+    cancelledBy: uuid("cancelled_by"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("stock_count_sessions_tenant_business_id_key").on(table.tenantId, table.businessId, table.id)],
+);
+
+export const stockCountSessionLines = pgTable(
+  "stock_count_session_lines",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    systemQuantity: bigint("system_quantity", { mode: "bigint" }).notNull(),
+    countedQuantity: bigint("counted_quantity", { mode: "bigint" }).notNull(),
+    difference: bigint("difference", { mode: "bigint" }).notNull(),
+    enteredQuantity: bigint("entered_quantity", { mode: "bigint" }).notNull(),
+    enteredUnit: varchar("entered_unit", { length: 16 }).notNull(),
+    reason: varchar("reason", { length: 20 }),
+    note: varchar("note", { length: 240 }),
+    countedBy: uuid("counted_by"),
+    countedMembershipId: uuid("counted_membership_id"),
+    deviceId: uuid("device_id"),
+    countedAt: timestamp("counted_at", { withTimezone: true }).notNull(),
+    movementId: uuid("movement_id"),
+  },
+  (table) => [uniqueIndex("stock_count_session_lines_product_key").on(table.sessionId, table.productId)],
+);
+
+/** Price lists and their prices (migration 0042, ADR-048). */
+export const priceLists = pgTable(
+  "price_lists",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    name: varchar("name", { length: 60 }).notNull(),
+    nameKey: varchar("name_key", { length: 60 }).notNull(),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    branchId: uuid("branch_id"),
+    active: boolean("active").notNull().default(true),
+    staffCanChoose: boolean("staff_can_choose").notNull().default(false),
+    position: integer("position").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("price_lists_tenant_business_id_key").on(table.tenantId, table.businessId, table.id)],
+);
+
+export const priceListPrices = pgTable(
+  "price_list_prices",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    priceListId: uuid("price_list_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    unitCode: varchar("unit_code", { length: 16 }).notNull(),
+    minQuantity: bigint("min_quantity", { mode: "bigint" }).notNull().default(1000n),
+    priceMinor: bigint("price_minor", { mode: "bigint" }).notNull(),
+    effectiveFrom: date("effective_from", { mode: "string" }),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+  },
+  (table) => [index("price_list_prices_product_idx").on(table.tenantId, table.productId)],
+);
+
+/** Which suppliers sell a product, with their code, last cost and terms (migration 0042, ADR-048). */
+export const supplierProducts = pgTable(
+  "supplier_products",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    supplierSku: varchar("supplier_sku", { length: 64 }),
+    lastCostMinor: bigint("last_cost_minor", { mode: "bigint" }),
+    currencyCode: char("currency_code", { length: 3 }).notNull(),
+    preferred: boolean("preferred").notNull().default(false),
+    leadTimeDays: integer("lead_time_days"),
+    minimumOrderQuantity: bigint("minimum_order_quantity", { mode: "bigint" }),
+    purchaseUnit: varchar("purchase_unit", { length: 16 }),
+    lastReceivedAt: timestamp("last_received_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+  },
+  (table) => [uniqueIndex("supplier_products_key").on(table.tenantId, table.supplierId, table.productId)],
+);
+
+/** A delivery of several products with charges spread over them (migration 0042, ADR-048). */
+export const stockReceipts = pgTable("stock_receipts", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  supplierId: uuid("supplier_id"),
+  documentNumber: varchar("document_number", { length: 24 }),
+  goodsMinor: bigint("goods_minor", { mode: "bigint" }).notNull(),
+  chargesMinor: bigint("charges_minor", { mode: "bigint" }).notNull().default(0n),
+  charges: jsonb("charges").$type<{ kind: string; amountMinor: string; paidFrom: string }[]>().notNull().default([]),
+  note: varchar("note", { length: 240 }),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** A store keeper's stock change waiting for a manager or owner to approve and complete it (ADR-034). */
 export const stockRequests = pgTable(

@@ -21,12 +21,14 @@ import { InventoryModule } from "./modules/inventory/inventory.module.js";
 import { SalesModule } from "./modules/sales/sales.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { CaptureModule } from "./modules/capture/capture.module.js";
+import { ExportsModule } from "./modules/exports/exports.module.js";
 import { DebtorsModule } from "./modules/debtors/debtors.module.js";
 import { MoneyModule } from "./modules/money/money.module.js";
 import { ShopsModule } from "./modules/shops/shops.module.js";
 import { WorkRulesModule } from "./modules/work-rules/work-rules.module.js";
 import { JobsModule } from "./modules/jobs/jobs.module.js";
 import { SupplierModule } from "./modules/suppliers/supplier.module.js";
+import { PricingModule } from "./modules/pricing/pricing.module.js";
 import { BrandingModule } from "./modules/branding/branding.module.js";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module.js";
 import { LedgerModule } from "./modules/ledger/ledger.module.js";
@@ -77,12 +79,14 @@ export class AppModule {
         SalesModule,
         NotificationsModule,
         CaptureModule,
+        ExportsModule,
         DebtorsModule,
         MoneyModule,
         ShopsModule,
         WorkRulesModule,
         JobsModule,
         SupplierModule,
+        PricingModule,
         ReconciliationModule,
     BrandingModule,
       ],

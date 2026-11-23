@@ -1,7 +1,10 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { adminReasonSchema, success } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
 import type { SupportActor } from "../../common/support-actor.js";
+import { FeatureService } from "../entitlements/feature.service.js";
+import { AdminAuditService } from "./admin-audit.service.js";
+import { AdminMeasuresService } from "./admin-measures.service.js";
 import { AdminLimitsService } from "./admin-limits.service.js";
 import { AdminRecordsService, SUPPORT_PAGES, type SupportPage } from "./admin-records.service.js";
 import { AdminCan, AdminGuard, CurrentAdmin, requestMeta, type AdminRequest } from "./admin.guard.js";
@@ -25,7 +28,17 @@ export class AdminBusinessController {
   constructor(
     @Inject(AdminRecordsService) private readonly records: AdminRecordsService,
     @Inject(AdminLimitsService) private readonly limits: AdminLimitsService,
+    @Inject(FeatureService) private readonly features: FeatureService,
+    @Inject(AdminAuditService) private readonly adminAudit: AdminAuditService,
+    @Inject(AdminMeasuresService) private readonly measures: AdminMeasuresService,
   ) {}
+
+  /** For support (ADR-045): sync refusals, voice problems and sign-ins of the last 7 days. Codes and counts only. */
+  @Get("health")
+  @AdminCan("businesses.read")
+  async health(@Param("id", ParseUUIDPipe) id: string, @Req() req: AdminRequest) {
+    return success(await this.measures.health(id), req.correlationId ?? "admin");
+  }
 
   @Get("support-view")
   @AdminCan("records.read")
@@ -59,6 +72,22 @@ export class AdminBusinessController {
   @AdminCan("businesses.read")
   async getLimits(@Param("id") id: string, @Req() req: AdminRequest) {
     return success(await this.limits.get(id), req.correlationId ?? "admin");
+  }
+
+  /** Switches for this business (ADR-045). */
+  @Get("features")
+  @AdminCan("businesses.read")
+  async getFeatures(@Param("id", ParseUUIDPipe) id: string, @Req() req: AdminRequest) {
+    return success({ features: await this.features.forAdmin(id) }, req.correlationId ?? "admin");
+  }
+
+  @Put("features")
+  @AdminCan("limits.manage")
+  async setFeature(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown, @CurrentAdmin() admin: AdminStaffMember, @Req() req: AdminRequest) {
+    const actor = actorFor(admin, reasonOf(body), req);
+    const change = await this.features.set(id, body, actor);
+    await this.adminAudit.record({ staffId: admin.staffId, staffEmail: admin.email, action: "business.feature_changed", targetType: "business", targetId: id, tenantId: id, reason: actor.reason, metadata: change, ip: actor.ip ?? null });
+    return success({ features: await this.features.forAdmin(id) }, req.correlationId ?? "admin");
   }
 
   @Put("limits")

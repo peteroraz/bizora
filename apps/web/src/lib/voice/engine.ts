@@ -144,7 +144,7 @@ export async function modelPublished(): Promise<boolean> {
 
 export class VoiceError extends Error {
   constructor(
-    public readonly code: "no_room" | "not_published" | "download_failed" | "unsupported" | "transcribe_failed" | "busy",
+    public readonly code: "no_room" | "not_published" | "download_failed" | "unsupported" | "transcribe_failed" | "busy" | "cancelled",
     message: string,
   ) {
     super(message);
@@ -162,6 +162,14 @@ class Engine {
   private ready: Promise<"wasm" | "webgpu"> | null = null;
   private next = 1;
   private pending = new Map<number, Pending>();
+  private stopLoad: ((error: VoiceError) => void) | null = null;
+
+  /** Stops a download in progress (ADR-044). Files already saved stay, so trying again carries on from there. */
+  cancel() {
+    const stop = this.stopLoad;
+    this.reset();
+    stop?.(new VoiceError("cancelled", "The download was stopped."));
+  }
 
   load(options: { device: "wasm" | "webgpu"; onProgress?: (loaded: number, total: number) => void }): Promise<"wasm" | "webgpu"> {
     if (this.ready) return this.ready;
@@ -169,6 +177,7 @@ class Engine {
     this.worker = worker;
     const files = new Map<string, { loaded: number; total: number }>();
     this.ready = new Promise<"wasm" | "webgpu">((resolve, reject) => {
+      this.stopLoad = reject;
       worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
         const message = event.data;
         if (message.type === "progress") {
@@ -181,6 +190,7 @@ class Engine {
           }
           options.onProgress?.(loaded, total);
         } else if (message.type === "ready") {
+          this.stopLoad = null;
           resolve(message.device);
         } else if (message.type === "result") {
           this.pending.get(message.id)?.resolve(message.text);
@@ -240,6 +250,17 @@ export const engine = new Engine();
  * Downloads the model and runtime once, checks there is room first, and notes which files make it up so a later
  * visit can tell whether the phone removed any of them.
  */
+/** Stops the download in progress; what is already saved is kept for next time. */
+export function cancelInstall() {
+  engine.cancel();
+}
+
+/** Phones that say they have under 2 GB of memory may struggle to run the model; typing the sale is suggested. */
+export function lowMemory() {
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return memory !== undefined && memory < 2;
+}
+
 export async function install(onProgress: (loaded: number, total: number) => void): Promise<InstallState> {
   const support = await detectSupport();
   if (!support.ok) throw new VoiceError("unsupported", support.missing.join(", "));

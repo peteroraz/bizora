@@ -13,7 +13,8 @@
     "test:integration": "vitest run",
     "db:generate": "echo \"Write SQL migrations in drizzle/; schema lives in src/db/schema.ts\"",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "sample": "tsx src/db/sample-business.ts"
   },
   "dependencies": {
     "@bizora/auth": "workspace:*",

@@ -69,6 +69,7 @@ export function AdminShell({ environment, children }: { environment: string; chi
   const me = state.me;
   const links = [
     { href: "/", label: t("nav.find"), show: true, active: pathname === "/" || pathname.startsWith("/businesses") || pathname.startsWith("/people") },
+    { href: "/measures", label: t("nav.measures"), show: adminCan(me.roles, "businesses.read"), active: pathname.startsWith("/measures") },
     { href: "/staff", label: t("nav.staff"), show: adminCan(me.roles, "staff.manage"), active: pathname.startsWith("/staff") },
     { href: "/audit", label: t("nav.audit"), show: adminCan(me.roles, "audit.read"), active: pathname.startsWith("/audit") },
   ];

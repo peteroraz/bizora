@@ -1030,6 +1030,8 @@ export class CustomerService {
       ...this.summary(row),
       updatedAt: row.updatedAt.toISOString(),
       createdBy: row.createdBy,
+      /** The price list this customer buys at, if any (ADR-048). */
+      priceListId: row.priceListId,
       address,
       addressFormatted: address
         ? formatAddressDisplay({

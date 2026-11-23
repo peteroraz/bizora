@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useTranslations } from "next-intl";
 import { LazySheet } from "../../components/lazy-sheet";
 import { NotificationBell } from "../../components/notification-bell";
@@ -71,7 +71,7 @@ export type ShellBranch = { id: string; name: string; businessId: string };
 
 export type ShellProfile = {
   user?: { displayName: string; email: string | null; emailVerifiedAt?: string | null; kind?: string } | null;
-  organization?: { name: string } | null;
+  organization?: { name: string; isSample?: boolean } | null;
   /** Changes when the company logo changes (ADR-021); null when there is no logo. */
   logoVersion?: string | null;
   tenant?: {
@@ -86,6 +86,8 @@ export type ShellProfile = {
     membershipId?: string;
   };
   onboardingCompleted?: boolean;
+  /** Switches for this business (ADR-045). Missing: as before. */
+  features?: Partial<Record<"offline_voice" | "photo_reads" | "support_view", boolean>>;
   membership?: { businessId: string | null; branchId: string | null; defaultBranchId?: string | null } | null;
   businesses: ShellBusiness[];
   branches: ShellBranch[];
@@ -126,13 +128,16 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       permissions: profile.tenant?.permissions ?? [],
       ...(profile.tenant?.role ? { role: profile.tenant.role } : {}),
       staffSession: Boolean(profile.tenant?.deviceId),
-      owner: tenantId && membershipId ? { tenantId, membershipId } : null,
+      // The shop goes with the owner, so work saved offline keeps the shop it was done in (ADR-044).
+      owner: tenantId && membershipId ? { tenantId, membershipId, ...(profile.tenant?.branchId ? { branchId: profile.tenant.branchId } : {}) } : null,
       branchId: profile.tenant?.branchId ?? null,
+      membershipBranchId: profile.membership?.branchId ?? null,
       salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
       salesItems: currentBusiness?.salesItems ?? "products",
       ...(currentBusiness?.countryCode ? { country: currentBusiness.countryCode.trim() } : {}),
       ...(currentBusiness?.baseCurrencyCode ? { currency: currentBusiness.baseCurrencyCode.trim() } : {}),
       ...(currentBusiness?.timezone ? { timezone: currentBusiness.timezone } : {}),
+      offlineVoice: profile.features?.offline_voice !== false,
     }),
     [
       profile.tenant?.permissions,
@@ -146,41 +151,17 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       currentBusiness?.countryCode,
       currentBusiness?.baseCurrencyCode,
       currentBusiness?.timezone,
+      profile.features?.offline_voice,
     ],
   );
-  const [outbox, setOutbox] = useState<{ pending: number; rejected: { id: string; error: { message: string } | null }[] }>({
-    pending: 0,
-    rejected: [],
-  });
-
-  // Send work saved offline whenever the device is online, and show what is still waiting. The sync code loads
-  // after the screen, so it does not add to the JavaScript every screen needs first (Spec §8 budget).
+  // Waiting sales load after the screen has opened, so they are not part of the first script (quick sale budget).
+  const syncSlot = useRef<HTMLSpanElement>(null);
+  const [SyncStatus, setSyncStatus] = useState<ComponentType<{ owner: { tenantId: string; membershipId: string } | null; isSample: boolean; buttonHost: HTMLElement | null }> | null>(null);
   useEffect(() => {
-    if (!tenantId || !membershipId) return;
-    const owner = { tenantId, membershipId };
-    let stopped = false;
-    let cleanup = () => undefined as void;
-    void Promise.all([import("../../lib/offline/outbox"), import("../../lib/offline/sync")]).then(([queue, sync]) => {
-      if (stopped) return;
-      const refresh = () => {
-        void queue
-          .summary(owner)
-          .then((next) => setOutbox({ pending: next.pending, rejected: next.rejected }))
-          .catch(() => undefined);
-      };
-      refresh();
-      const unsubscribe = queue.subscribe(refresh);
-      const stop = sync.startBackgroundSync(owner);
-      cleanup = () => {
-        unsubscribe();
-        stop();
-      };
-    });
-    return () => {
-      stopped = true;
-      cleanup();
-    };
-  }, [tenantId, membershipId]);
+    const load = () => void import("./sync-status").then((module) => setSyncStatus(() => module.SyncStatus));
+    if (document.readyState === "complete") window.setTimeout(load, 0);
+    else window.addEventListener("load", () => window.setTimeout(load, 0), { once: true });
+  }, []);
 
   // Keep a copy of products and this shop's stock on the phone for looking up with no network.
   const currentBranchId = profile.tenant?.branchId ?? null;
@@ -223,7 +204,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
 
   const [AccountMenu, setAccountMenu] = useState<ComponentType<AccountMenuProps> | null>(null);
   const accountTrigger = (
-    <button className="rounded-pill" aria-label={t("accountMenu")}>
+    <button className="flex h-11 w-11 items-center justify-center rounded-pill" aria-label={t("accountMenu")}>
       <Avatar name={profile.user?.displayName ?? t("account")} />
     </button>
   );
@@ -485,27 +466,9 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
               {switchError}
             </p>
           ) : null}
-          {outbox.pending > 0 ? (
-            <Badge tone="warning" role="status">
-              {t("syncWaiting", { count: outbox.pending })}
-            </Badge>
-          ) : null}
+          <span ref={syncSlot} className="contents" />
         </header>
-        {outbox.rejected.length > 0 && access.owner ? (
-          <div className="flex flex-wrap items-start gap-3 border-b border-border bg-card px-4 py-3 text-sm" role="alert">
-            <div className="flex-1">
-              <p className="font-medium text-danger">{t("syncRejected", { count: outbox.rejected.length })}</p>
-              <ul className="mt-1 list-disc pl-5 text-muted">
-                {outbox.rejected.map((item) => (
-                  <li key={item.id}>{item.error?.message}</li>
-                ))}
-              </ul>
-            </div>
-            <Button variant="secondary" onClick={() => access.owner && void import("../../lib/offline/outbox").then((queue) => access.owner && queue.dismissRejected(access.owner))}>
-              {t("syncDismiss")}
-            </Button>
-          </div>
-        ) : null}
+        {SyncStatus ? <SyncStatus owner={access.owner ?? null} isSample={profile.organization?.isSample === true} buttonHost={syncSlot.current} /> : null}
         {lockWarning ? (
           <div className="flex flex-wrap items-center gap-3 border-b border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="alert" data-testid="lock-warning">
             <p className="flex-1 font-medium">{t("lockSoon")}</p>

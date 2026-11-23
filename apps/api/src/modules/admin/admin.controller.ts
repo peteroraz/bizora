@@ -10,6 +10,7 @@ import { InvitationService } from "../rbac/invitation.service.js";
 import { ShopDeviceService } from "../staff/shop-device.service.js";
 import { AdminAuditService } from "./admin-audit.service.js";
 import { AdminDirectoryService } from "./admin-directory.service.js";
+import { AdminMeasuresService } from "./admin-measures.service.js";
 import { AdminCan, AdminGuard, CurrentAdmin, requestMeta, type AdminRequest } from "./admin.guard.js";
 import type { AdminStaffMember } from "./admin-session.service.js";
 
@@ -33,7 +34,15 @@ export class AdminController {
     @Inject(ShopDeviceService) private readonly devices: ShopDeviceService,
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
+    @Inject(AdminMeasuresService) private readonly measures: AdminMeasuresService,
   ) {}
+
+  /** Pilot measures across businesses (ADR-045). Sample businesses are listed but left out of the totals. */
+  @Get("pilot/measures")
+  @AdminCan("businesses.read")
+  async pilotMeasures(@Query("days") days: string | undefined, @Req() req: AdminRequest) {
+    return success(await this.measures.overview(days), req.correlationId ?? "admin");
+  }
 
   @Get("businesses")
   @AdminCan("businesses.read")

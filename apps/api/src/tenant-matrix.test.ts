@@ -26,9 +26,19 @@ function idFor(path: string, param: string): string {
   if (param === "type") return "receipt";
   if (param === "kind") return "sale";
   if (param === "code") return "NG";
+  if (param === "page") return "sales";
   if (param === "lineId") return has("jobs") ? ids.jobLine! : randomUUID();
   if (param === "photoId" || param === "entryId") return randomUUID();
   if (param === "customerId") return ids.customer!;
+  if (param === "priceId") return ids.price!;
+  if (param === "productId") return ids.product!;
+  // Admin routes are not a business sign-in. The id in /businesses/:id is the tenant.
+  if (path.startsWith("/api/admin/")) {
+    if (path.includes("/people/")) return ids.user!;
+    if (path.includes("/invitations/")) return ids.invitation!;
+    if (path.includes("/devices/")) return randomUUID();
+    return ids.tenant!;
+  }
   const table: [string, string][] = [
     ["branches", ids.branch!],
     ["businesses", ids.business!],
@@ -46,7 +56,15 @@ function idFor(path: string, param: string): string {
     ["saved-items", ids.savedItem!],
     ["shop-devices", randomUUID()],
     ["staff", ids.membership!],
+    ["catalog/brands", ids.brand!],
+    ["catalog/categories", ids.category!],
+    ["catalog/items", ids.item!],
+    ["inventory/counts", ids.countSession!],
+    ["inventory/transfers", ids.transfer!],
+    ["pricing/lists", ids.priceList!],
+    ["pricing/products", ids.product!],
     ["stock/counts", ids.count!],
+    ["stock/receipts", ids.receipt!],
     ["stock/requests", randomUUID()],
     ["suppliers", ids.supplier!],
     ["transfers", ids.sale!],
@@ -123,7 +141,7 @@ async function routes() {
   return (instance._router ?? instance.router)!.stack
     .filter((layer) => layer.route)
     .map((layer) => ({ method: Object.keys(layer.route!.methods)[0]!, path: layer.route!.path }))
-    .filter((route) => route.path.startsWith("/api/v1/") && !/\/api\/v1\/(auth|public|reference|health|ready|telemetry)\b/.test(route.path));
+    .filter((route) => route.path.startsWith("/api/admin/") || (route.path.startsWith("/api/v1/") && !/\/api\/v1\/(auth|public|reference|health|ready)\b/.test(route.path)));
 }
 
 describe("tenant isolation matrix (ADR-043)", () => {
@@ -162,6 +180,20 @@ describe("tenant isolation matrix (ADR-043)", () => {
     await request(h.http).patch(`/api/v1/businesses/${b.businessId}`).set(auth(bt)).send({ salesItems: "both" }).expect(200);
     await request(h.http).post("/api/v1/sales").set(auth(bt)).send({ lines: [{ description: "Bravotenant bread", quantity: "1", unitPriceMinor: "150000", saved: true }], payments: [{ method: "cash", amountMinor: "150000" }] }).expect(201);
     ids.savedItem = (await request(h.http).get("/api/v1/saved-items").set(auth(bt))).body.data.items[0].id;
+    ids.tenant = b.tenantId;
+    ids.user = b.userId;
+    // Catalog, transfers, counts, price lists and deliveries (the routes added after the first matrix).
+    ids.category = (await request(h.http).post("/api/v1/catalog/categories").set(auth(bt)).send({ name: "Bravotenant grains" }).expect(201)).body.data.category.id;
+    ids.brand = (await request(h.http).post("/api/v1/catalog/brands").set(auth(bt)).send({ name: "Bravotenant Mills" }).expect(201)).body.data.brand.id;
+    ids.item = (await request(h.http).post("/api/v1/catalog/items").set(auth(bt)).send({ name: "Bravotenant oil", categoryId: ids.category, brandId: ids.brand, variants: [{ baseUnit: "bottle", priceMinor: "100000" }] }).expect(201)).body.data.item.id;
+    ids.warehouse = (await request(h.http).post("/api/v1/branches").set(auth(bt)).send({ name: "Bravotenant store", kind: "warehouse" }).expect(201)).body.data.branch.id;
+    ids.transfer = (await request(h.http).post("/api/v1/inventory/transfers").set(auth(bt)).send({ toBranchId: ids.warehouse, lines: [{ productId: ids.product, quantity: "1", unit: "bag" }] }).expect(201)).body.data.transfer.id;
+    ids.countSession = (await request(h.http).post("/api/v1/inventory/counts").set(auth(bt)).send({ name: "Bravotenant session" }).expect(201)).body.data.count.id;
+    ids.priceList = (await request(h.http).post("/api/v1/pricing/lists").set(auth(bt)).send({ name: "Bravotenant prices" }).expect(201)).body.data.id;
+    await request(h.http).put(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).send({ prices: [{ productId: ids.product, unitCode: "bag", priceMinor: "7000000" }] }).expect(200);
+    ids.price = (await request(h.http).get(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).expect(200)).body.data.prices[0].id;
+    ids.receipt = (await request(h.http).post("/api/v1/stock/receipts").set(auth(bt)).send({ branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100000" }], charges: [{ kind: "transport", amountMinor: "1000", paidFrom: "cash" }] }).expect(201)).body.data.id;
+    await request(h.http).put(`/api/v1/suppliers/${ids.supplier}/products`).set(auth(bt)).send({ productId: ids.product, supplierSku: "BRAVO-RICE" }).expect(200);
     // A has its own records too, so lists are not empty for the wrong reason.
     await product(h.http, a.token, "Alpha beans", "4000000");
     before = await fingerprint(b.tenantId);
@@ -179,7 +211,9 @@ describe("tenant isolation matrix (ADR-043)", () => {
       const url = route.path.replace(/:([A-Za-z]+)/g, (_, param: string) => idFor(route.path, param));
       const call = request(h.http)[route.method as "get" | "post" | "patch" | "put" | "delete"](url).set(auth(a.token)).set("idempotency-key", randomUUID());
       const response = route.method === "get" || route.method === "delete" ? await call : await call.send(BODIES[`${route.method.toUpperCase()} ${route.path}`] ?? BODY);
-      const allowed = route.method === "get" ? [403, 404] : [400, 403, 404, 409, 422];
+      const admin = route.path.startsWith("/api/admin/");
+      // A business sign-in is not an Admin portal sign-in: 401 when the portal is on, 404 when it is not.
+      const allowed = route.method === "get" ? (admin ? [401, 403, 404] : [403, 404]) : admin ? [400, 401, 403, 404, 409, 422] : [400, 403, 404, 409, 422];
       const leaked = leaks(JSON.stringify(response.body ?? "") + (response.text ?? ""));
       if (process.env.MATRIX_DEBUG) console.log("PROBE", response.status, route.method.toUpperCase(), route.path);
       if (!allowed.includes(response.status) || leaked.length) failures.push(`${route.method.toUpperCase()} ${route.path} → ${response.status}${leaked.length ? ` leaked ${leaked.join(", ")}` : ""}`);
@@ -211,6 +245,14 @@ describe("tenant isolation matrix (ADR-043)", () => {
       ["post", "/api/v1/invitations", { email: "probe@a.test", role: "CASHIER", businessId: b.businessId, branchId: b.branchId }],
       ["post", "/api/v1/money/expenses", { id: uuidv7(), amountMinor: "100", paidFrom: "cash", payee: "x", branchId: b.branchId }],
       ["post", "/api/v1/money/pos-cashouts", { amountMinor: "100", feeMinor: "0", feePaidBy: "pos", branchId: b.branchId }],
+      // The server records the event on the signed-in business, never on a tenant id from the body.
+      ["post", "/api/v1/telemetry/events", { events: [{ name: "voice.review_shown", detail: "probe" }] }],
+      ["post", "/api/v1/stock/receipts", { branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100" }], charges: [{ kind: "transport", amountMinor: "10", paidFrom: "cash" }] }],
+      ["post", "/api/v1/inventory/transfers", { fromBranchId: b.branchId, toBranchId: ids.warehouse, lines: [{ productId: ids.product, quantity: "1", unit: "bag" }] }],
+      ["post", "/api/v1/inventory/counts", { branchId: b.branchId, name: "Probe count" }],
+      ["post", "/api/v1/pricing/lists", { name: "Probe prices" }],
+      ["put", "/api/v1/customers/" + ids.customer + "/price-list", { priceListId: ids.priceList }],
+      ["put", "/api/v1/suppliers/" + ids.supplier + "/products", { productId: ids.product, supplierSku: "PROBE" }],
     ];
     const failures: string[] = [];
     for (const [method, path, body] of tries) {
