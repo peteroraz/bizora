@@ -66,6 +66,7 @@ export { uuidv7, isUuidV7, uuidv7Time } from "./ids.js";
 export * from "./sync.js";
 export * from "./ledger.js";
 export * from "./stock.js";
+export * from "./stock-operations.js";
 export * from "./sales.js";
 export * from "./csv.js";
 export type { PermissionCode } from "./permissions.js";

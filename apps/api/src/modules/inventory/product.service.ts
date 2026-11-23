@@ -19,6 +19,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { type ProductRow, type ProductUnitRow, productUnitsFor, requireBusiness, requireProduct, resolveBranch } from "./inventory-scope.js";
 import { mainPhotos } from "./product-photo.service.js";
 import { StockService } from "./stock.service.js";
+import { TransferService } from "./transfer.service.js";
 
 type BalanceRow = typeof stockBalances.$inferSelect;
 
@@ -36,6 +37,7 @@ export class ProductService {
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(StockService) private readonly stock: StockService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(TransferService) private readonly transfers: TransferService,
   ) {}
 
   async list(tenant: TenantContext, query: { q?: string; page?: number; category?: string; branchId?: string }) {
@@ -125,6 +127,12 @@ export class ProductService {
       .where(and(...filters))
       .orderBy(asc(branches.name));
     const current = balances.find((row) => row.balance.branchId === tenant.branchId)?.balance ?? null;
+    const transit = await this.transfers.inTransit(this.db, tenant.tenantId, product.id);
+    // A place with stock on its way but none yet still shows, with what is coming.
+    const waitingOnly = [...transit.keys()].filter((branchId) => !balances.some((row) => row.balance.branchId === branchId) && (!tenant.membershipBranchId || branchId === tenant.membershipBranchId));
+    const waitingPlaces = waitingOnly.length
+      ? await this.db.select({ id: branches.id, name: branches.name }).from(branches).where(and(eq(branches.tenantId, tenant.tenantId), inArray(branches.id, waitingOnly)))
+      : [];
     return {
       ...this.present(tenant, product, units, current),
       photoUrl: (await mainPhotos(this.db, tenant.tenantId, [product.id])).get(product.id) ?? null,
@@ -133,7 +141,22 @@ export class ProductService {
         branchId: row.balance.branchId,
         branchName: row.branchName,
         ...this.presentBalance(tenant, product, row.balance),
-      })),
+        // Stock status (ADR-047): on its way here, or sent from here and not yet received.
+        inTransitIn: (transit.get(row.balance.branchId)?.incoming ?? 0n).toString(),
+        inTransitOut: (transit.get(row.balance.branchId)?.outgoing ?? 0n).toString(),
+      })).concat(
+        waitingPlaces.map((place) => ({
+          branchId: place.id,
+          branchName: place.name,
+          quantity: "0",
+          belowZero: false,
+          inTransitIn: (transit.get(place.id)?.incoming ?? 0n).toString(),
+          inTransitOut: (transit.get(place.id)?.outgoing ?? 0n).toString(),
+        })) as never[],
+      ),
+      inTransit: [...transit.entries()]
+        .filter(([branchId]) => !tenant.membershipBranchId || branchId === tenant.membershipBranchId)
+        .map(([branchId, value]) => ({ branchId, incoming: value.incoming.toString(), outgoing: value.outgoing.toString() })),
     };
   }
 

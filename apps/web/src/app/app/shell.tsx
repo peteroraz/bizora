@@ -128,6 +128,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       staffSession: Boolean(profile.tenant?.deviceId),
       owner: tenantId && membershipId ? { tenantId, membershipId } : null,
       branchId: profile.tenant?.branchId ?? null,
+      membershipBranchId: profile.membership?.branchId ?? null,
       salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
       salesItems: currentBusiness?.salesItems ?? "products",
       ...(currentBusiness?.countryCode ? { country: currentBusiness.countryCode.trim() } : {}),

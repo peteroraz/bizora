@@ -6,7 +6,10 @@ import { NotificationsModule } from "../notifications/notifications.module.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { SyncModule } from "../sync/sync.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
+import { CountSessionService } from "./count-session.service.js";
 import { InventoryController } from "./inventory.controller.js";
+import { StockOperationsController } from "./stock-operations.controller.js";
+import { TransferService } from "./transfer.service.js";
 import { InventorySyncHandler } from "./inventory-sync.handler.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
@@ -15,8 +18,8 @@ import { StockService } from "./stock.service.js";
 
 @Module({
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, NotificationsModule],
-  controllers: [InventoryController],
-  providers: [ProductService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard],
+  controllers: [InventoryController, StockOperationsController],
+  providers: [ProductService, TransferService, CountSessionService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard],
   exports: [StockService, ProductService],
 })
 export class InventoryModule {}

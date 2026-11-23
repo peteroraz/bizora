@@ -164,6 +164,7 @@ export class TenantController {
       tenantId: tenant.tenantId,
       businessId,
       name: payload.name,
+      kind: payload.kind ?? "shop",
       createdBy: tenant.userId,
       updatedBy: tenant.userId,
     });
