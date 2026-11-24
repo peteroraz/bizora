@@ -19,6 +19,7 @@ import { SecurityPanel } from "../../../components/security-panel";
 import { SupportActivity } from "../../../components/support-activity";
 import { VoiceSettings } from "../../../components/voice-settings";
 import { ExportRecords } from "../../../components/export-records";
+import { BusinessUnits } from "../../../components/business-units";
 import { SavedItemsList } from "../../../components/saved-items-list";
 import { WorkRulesSettings } from "../../../components/work-rules-settings";
 import { BrandSettings } from "../../../components/brand-settings";
@@ -610,6 +611,7 @@ function SettingsScreen() {
                   </span>
                 </label>
                 {savedItemsSetting !== "products" ? <SavedItemsList /> : null}
+                {can(access, Permission.CATALOG_MANAGE) ? <BusinessUnits /> : null}
               </fieldset>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{t("modules")}</legend>

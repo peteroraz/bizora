@@ -1911,9 +1911,23 @@ export class SaleService {
       .where(and(eq(savedItems.id, id), eq(savedItems.tenantId, tenant.tenantId)));
   }
 
-  /** A unit used at the counter joins the business list, so the next sale can offer it. */
+  /**
+   * A unit typed at the counter joins the business list after two sales (ADR-053).
+   * One sale can be a typo, so it stays off the list. The owner can add a unit in Settings at once.
+   */
   private async rememberUnit(tx: DbExecutor, tenant: TenantContext, businessId: string, unit: string) {
     if ((UNIT_CODES as readonly string[]).includes(unit) || !FLEXIBLE_UNIT.test(unit)) return;
+    const [known] = await tx
+      .select({ id: businessUnits.id })
+      .from(businessUnits)
+      .where(and(eq(businessUnits.tenantId, tenant.tenantId), eq(businessUnits.businessId, businessId), eq(businessUnits.code, unit)))
+      .limit(1);
+    if (known) return;
+    const [used] = await tx
+      .select({ sales: sql<number>`count(distinct ${saleLines.saleId})::int` })
+      .from(saleLines)
+      .where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.businessId, businessId), eq(saleLines.enteredUnit, unit)));
+    if (Number(used?.sales ?? 0) < 2) return;
     await tx
       .insert(businessUnits)
       .values({

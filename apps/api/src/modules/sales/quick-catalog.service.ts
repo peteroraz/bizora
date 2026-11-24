@@ -25,7 +25,7 @@ import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { businessUnits, costEstimates, itemAliases, products, savedItems } from "../../db/schema.js";
+import { businessUnits, costEstimates, itemAliases, products, saleLines, savedItems } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { requireBusiness } from "../inventory/inventory-scope.js";
@@ -502,13 +502,44 @@ export class QuickCatalogService {
       })
       .onConflictDoNothing({ target: [businessUnits.tenantId, businessUnits.businessId, businessUnits.code] })
       .returning();
-    if (!inserted) throw new ApiError("UNIT_EXISTS", "That unit is already in the list.", 409, [{ field: "code", message: "Already there." }]);
+    if (!inserted) {
+      const [existing] = await this.db
+        .select()
+        .from(businessUnits)
+        .where(and(eq(businessUnits.tenantId, tenant.tenantId), eq(businessUnits.businessId, business.id), eq(businessUnits.code, payload.code)))
+        .limit(1);
+      if (existing && !existing.active) {
+        const [revived] = await this.db
+          .update(businessUnits)
+          .set({ active: true, displayName: payload.displayName, pluralName: payload.pluralName ?? existing.pluralName })
+          .where(and(eq(businessUnits.id, existing.id), eq(businessUnits.tenantId, tenant.tenantId)))
+          .returning();
+        if (revived) {
+          return { unit: { id: revived.id, code: revived.code, displayName: revived.displayName, pluralName: revived.pluralName, standard: false, active: true } };
+        }
+      }
+      throw new ApiError("UNIT_EXISTS", "That unit is already in the list.", 409, [{ field: "code", message: "Already there." }]);
+    }
     return { unit: { id, code: payload.code, displayName: payload.displayName, pluralName: payload.pluralName ?? null, standard: false, active: true } };
   }
 
   async patchUnit(tenant: TenantContext, id: string, raw: unknown) {
     const payload = businessUnitPatchSchema.parse(raw);
     const business = await requireBusiness(this.db, tenant);
+    const [current] = await this.db
+      .select()
+      .from(businessUnits)
+      .where(and(eq(businessUnits.id, id), eq(businessUnits.tenantId, tenant.tenantId), eq(businessUnits.businessId, business.id)))
+      .limit(1);
+    if (!current) throw new ApiError("NOT_FOUND", "That unit was not found.", 404);
+    if (payload.active === false) {
+      const [used] = await this.db
+        .select({ id: saleLines.id })
+        .from(saleLines)
+        .where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.businessId, business.id), eq(saleLines.enteredUnit, current.code)))
+        .limit(1);
+      if (used) throw new ApiError("UNIT_IN_USE", "This unit is on a sale, so it stays in the list.", 409);
+    }
     const changes = {
       ...(payload.displayName ? { displayName: payload.displayName } : {}),
       ...(payload.pluralName !== undefined ? { pluralName: payload.pluralName || null } : {}),
@@ -563,7 +594,7 @@ export class QuickCatalogService {
     const standard = UNIT_CODES.map((code) => ({ code, displayName: capitaliseFirst(code), pluralName: null as string | null, standard: true, active: true }));
     const extra = custom
       .filter((unit) => !(UNIT_CODES as readonly string[]).includes(unit.code))
-      .map((unit) => ({ code: unit.code, displayName: unit.displayName, pluralName: unit.pluralName, standard: false, active: unit.active }));
+      .map((unit) => ({ id: unit.id, code: unit.code, displayName: unit.displayName, pluralName: unit.pluralName, standard: false, active: unit.active }));
     return [...standard, ...extra];
   }
 

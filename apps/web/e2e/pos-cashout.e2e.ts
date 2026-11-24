@@ -57,3 +57,39 @@ test("cash already in the drawer is not profit, and a POS cash-out counts only i
   await expect(page.getByTestId("profit-card")).toContainText("Fees for POS cash-outs");
   await expect(page.getByTestId("profit-not-from-sales")).toContainText("₦50,000.00 came in that was not from sales");
 });
+
+test("asks before giving out more cash than the drawer should have", async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const email = `over.${suffix}@bizora.test`;
+  const registered = await request.post("/api/v1/auth/register", {
+    data: { acceptTerms: true, email, password, displayName: "Tunde Owner", organizationName: `Tunde Stores ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+  });
+  const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
+  expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Tunde Stores", branchName: "Main" } })).ok()).toBeTruthy();
+  const me = (await (await request.get("/api/v1/auth/me", { headers })).json()).data.tenant;
+  const cashierEmail = `over.cashier.${suffix}@bizora.test`;
+  const invited = await request.post("/api/v1/invitations", { headers, data: { email: cashierEmail, role: "CASHIER", businessId: me.businessId, branchId: me.branchId } });
+  await request.post("/api/v1/invitations/accept", { data: { token: (await invited.json()).data.invitation.token, displayName: "Bimpe Cashier", password } });
+
+  const cashier = await signIn(browser, cashierEmail);
+  await cashier.page.goto("/app/money/cash/count");
+  await cashier.page.getByLabel("Cash counted").pressSequentially("10000");
+  await cashier.page.getByRole("button", { name: "Save" }).click();
+  await expect(cashier.page.getByTestId("count-result")).toBeVisible();
+  await cashier.page.goto("/app/money/pos-cashout");
+  await cashier.page.getByLabel("Cash given to the customer").pressSequentially("50000");
+  const warning = cashier.page.getByTestId("pos-cashout-over");
+  await expect(warning).toBeVisible();
+  await expect(cashier.page.getByText("The drawer should have ₦10,000.00. Give out ₦50,000.00 anyway?")).toBeVisible();
+  await expect(cashier.page.getByRole("button", { name: "Save cash-out" })).toBeDisabled();
+  await warning.check();
+  await cashier.page.getByRole("button", { name: "Save cash-out" }).click();
+  await expect(cashier.page.getByTestId("pos-cashout-saved")).toHaveText("Saved. ₦50,000.00 given out, fee ₦0.00.");
+  await cashier.context.close();
+
+  const { page, context } = await signIn(browser, email);
+  await page.goto("/app/money/cash");
+  await expect(page.getByTestId("cash-expected")).toHaveText("-₦40,000.00");
+  await context.close();
+});

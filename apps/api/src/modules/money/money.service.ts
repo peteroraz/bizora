@@ -417,6 +417,29 @@ export class MoneyService {
     return this.movementView(row as typeof moneyMovements.$inferSelect);
   }
 
+  /**
+   * The cash the drawer should hold today, for the shop this person would cash out from (ADR-053).
+   * One number, so the counter can confirm giving out more. It does not open the cash page.
+   */
+  async drawerExpected(tenant: TenantContext) {
+    const business = await requireBusiness(this.db, tenant);
+    const branch = await resolveBranch(this.db, tenant, business.id);
+    const today = localDate(new Date(), business.timezone);
+    await this.db.transaction((tx) => this.chart.ensure(tx, tenant.tenantId, business.id, tenant.userId));
+    const accounts = await this.cashAccounts(this.db, tenant.tenantId, business.id, [branch.id]);
+    const accountId = accounts.get(branch.id);
+    let expected = 0n;
+    if (accountId) {
+      const [row] = await this.db
+        .select({ balance: sql<string>`coalesce(sum(${journalLines.debitMinor} - ${journalLines.creditMinor}), 0)::text` })
+        .from(journalLines)
+        .innerJoin(journalEntries, and(eq(journalEntries.tenantId, journalLines.tenantId), eq(journalEntries.id, journalLines.entryId)))
+        .where(and(eq(journalLines.tenantId, tenant.tenantId), eq(journalLines.accountId, accountId), lte(journalEntries.entryDate, today)));
+      expected = BigInt(row?.balance ?? "0");
+    }
+    return { expectedMinor: expected.toString(), currency: business.baseCurrencyCode.trim() };
+  }
+
   async voidMovement(tenant: TenantContext, id: string, raw: unknown) {
     const { reason } = moneyReasonSchema.parse(raw);
     await this.db.transaction(async (tx) => {
