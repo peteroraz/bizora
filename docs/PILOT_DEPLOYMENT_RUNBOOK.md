@@ -34,6 +34,7 @@ gcloud run jobs executions list --job=bizora-migrate --project=bizora-staging --
 - the image tag is the SHA of the last merge;
 - the last migrate execution succeeded;
 - `SELECT max(id) FROM schema_migrations` shows `0039_pilot_operations.sql` (Cloud SQL Studio, or the proxy).
+- `SELECT extname FROM pg_extension WHERE extname = 'pg_trgm'` returns a row (ADR-067). If it does not, the app's database user was not allowed to add it. Search still works, but slowly on big catalogs. Run `CREATE EXTENSION pg_trgm;` once as the `postgres` user in Cloud SQL Studio, then run the migrate job again: migration 0052 then adds the trigram indexes.
 
 ## 2. The repository checks pass
 
@@ -132,6 +133,14 @@ node --experimental-strip-types scripts/perf-baseline.ts https://bizora-staging.
 - recording a sale is under 3 s.
 
 **Evidence:** add the tables to `docs/PILOT_PERFORMANCE_BASELINE.md`, under a "Staging" heading. Then make the filled business a sample (see step 12) and remove it.
+
+For a pilot business with a large product list, also run the catalog check against staging (it makes up to 50,000 made-up products):
+
+```bash
+node --experimental-strip-types scripts/perf-catalog.ts https://bizora-staging.baseportals.app --sizes 1000,10000,50000
+```
+
+**Worked when:** searches are under 1 s at the 95th percentile at 50,000 products, and nothing fails.
 
 ## 9. Real Android phones
 

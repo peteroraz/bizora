@@ -11,7 +11,7 @@ import {
   isValidGtin,
   variantName,
 } from "@bizora/contracts";
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -50,21 +50,27 @@ export class ProductService {
     const filters: SQL[] = [eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)];
     const needle = query.q?.trim();
     if (needle) {
-      // Name, category and every code (ADR-046): barcode and GTIN exactly, SKU, MPN and reference in any case, brand by name.
+      // Name, category and every code (ADR-046): barcode and GTIN exactly, SKU, MPN and reference in any case, brand by
+      // name, and a supplier's own code (ADR-048). Each is its own part of a UNION, so each can use its index: trigram
+      // indexes for the names (ADR-067), B-tree for the codes. One OR across them all would read every product. The
+      // archived filter is repeated in the parts whose indexes cover products in use only.
       const code = needle.toLowerCase();
-      const match = or(
-        ilike(products.name, like(needle)),
-        eq(products.barcode, needle),
-        eq(products.gtin, needle),
-        ilike(products.category, like(needle)),
-        sql`lower(${products.sku}) = ${code}`,
-        sql`lower(${products.mpn}) = ${code}`,
-        sql`lower(${products.reference}) = ${code}`,
-        sql`${products.catalogItemId} IN (SELECT i.id FROM catalog_items i JOIN brands b ON b.tenant_id = i.tenant_id AND b.id = i.brand_id WHERE i.tenant_id = ${tenant.tenantId} AND b.name ILIKE ${like(needle)})`,
-      );
-      // A supplier's own code for the product finds it too (ADR-048).
-      const bySupplierCode = sql`EXISTS (SELECT 1 FROM supplier_products sp WHERE sp.tenant_id = ${products.tenantId} AND sp.product_id = ${products.id} AND lower(sp.supplier_sku) = ${code})`;
-      if (match) filters.push(or(match, bySupplierCode) as SQL);
+      const pattern = like(needle);
+      const t = tenant.tenantId;
+      const b = business.id;
+      filters.push(sql`${products.id} IN (
+        SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND archived_at IS NULL AND name ILIKE ${pattern}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND archived_at IS NULL AND category ILIKE ${pattern}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND barcode = ${needle}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND gtin = ${needle}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND archived_at IS NULL AND lower(sku) = ${code}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND lower(mpn) = ${code}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND lower(reference) = ${code}
+        UNION SELECT p.id FROM products p JOIN catalog_items i ON i.tenant_id = p.tenant_id AND i.id = p.catalog_item_id
+          JOIN brands br ON br.tenant_id = i.tenant_id AND br.id = i.brand_id
+          WHERE p.tenant_id = ${t} AND p.business_id = ${b} AND br.name ILIKE ${pattern}
+        UNION SELECT sp.product_id FROM supplier_products sp WHERE sp.tenant_id = ${t} AND sp.business_id = ${b} AND lower(sp.supplier_sku) = ${code}
+      )`);
     }
     if (query.category?.trim()) filters.push(eq(products.category, query.category.trim()));
     const page = Math.max(1, query.page ?? 1);

@@ -26,7 +26,7 @@ import {
   unitFromText,
   type ImportRowResult,
 } from "@bizora/contracts";
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
@@ -38,6 +38,9 @@ import { AuditService } from "../audit/audit.service.js";
 import { ProductService } from "../inventory/product.service.js";
 import { StockService } from "../inventory/stock.service.js";
 import { SaleService } from "./sale.service.js";
+
+/** A product import this big refreshes the planner's statistics on products when it is saved (ADR-067). */
+const ANALYZE_AFTER_ROWS = 200;
 
 const round = (numerator: bigint, denominator: bigint) => (numerator * 2n + denominator) / (denominator * 2n);
 const decimal = (thousandths: bigint) => {
@@ -138,6 +141,9 @@ export class ImportService {
       else await this.productService.create(tenant, plan.body);
     }
     await this.recordImport(tenant, business.id, "products", payload.source, results.length);
+    // Many new products at once: Postgres learns about them now, not a minute later when it would have looked
+    // itself, so searches straight after a big import do not run on a stale plan (ADR-067).
+    if (plans.length >= ANALYZE_AFTER_ROWS) await this.db.execute(sql`ANALYZE products`).catch(() => undefined);
     return this.outcome(results, true);
   }
 
