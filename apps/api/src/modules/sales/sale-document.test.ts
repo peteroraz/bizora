@@ -66,10 +66,36 @@ describe("sale documents", () => {
   it("marks paid and cancelled documents, and history-only sales have none", () => {
     const paid: DocumentInput = { ...base, sale: { ...base.sale, status: "completed", saleNumber: "R-000002", invoiceNumber: null, collectedAt: new Date(), paidMinor: 135000n, balanceMinor: 0n }, payments: [{ method: "transfer", amountMinor: 135000n }] };
     expect(availableDocuments(paid.sale)).toEqual(["receipt"]);
-    expect(text(documentModel(paid, "receipt"))).toContain("Paid in full. Thank you");
+    expect(text(documentModel(paid, "receipt"))).not.toContain("Paid in full");
+    expect(documentModel(paid, "receipt").totals).toContainEqual(["Paid (Bank transfer)", "₦1,350.00"]);
     expect(text(documentModel({ ...paid, sale: { ...paid.sale, status: "voided", voidReason: "Wrong item" } }, "receipt"))).toContain("CANCELLED: Wrong item");
     expect(availableDocuments({ ...paid.sale, historyOnly: true })).toEqual([]);
     expect([unitText("tin", "1"), unitText("carton", "2"), unitText("kg", "2.5")]).toEqual(["tin", "cartons", "kg"]);
+  });
+
+  it("prints no Paid in full line on a paid receipt or a paid invoice", () => {
+    const paid: DocumentInput = {
+      ...base,
+      sale: {
+        ...base.sale,
+        status: "completed",
+        saleNumber: "R-000003",
+        invoiceNumber: "INV-000003",
+        collectedAt: new Date("2026-11-16T11:00:00Z"),
+        paidMinor: 135000n,
+        balanceMinor: 0n,
+      },
+      payments: [{ method: "cash", amountMinor: 135000n }],
+    };
+    const receipt = documentModel(paid, "receipt");
+    const invoice = documentModel(paid, "invoice");
+    expect(text(receipt)).not.toContain("Paid in full");
+    expect(text(invoice)).not.toContain("Paid in full");
+    expect(receipt.notices).toEqual([]);
+    expect(invoice.notices).toEqual([]);
+    expect(receipt.totals).toContainEqual(["Paid (Cash)", "₦1,350.00"]);
+    expect(invoice.totals).toContainEqual(["Paid (Cash)", "₦1,350.00"]);
+    expect(invoice.details).toContainEqual(["Receipt no.", "R-000003"]);
   });
 
   it("renders a PDF with the naira font embedded", async () => {

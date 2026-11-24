@@ -129,8 +129,6 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
       text: `${money(sale.balanceMinor)} is owed on credit${sale.dueDate ? ` and should be paid by ${formatDate(sale.dueDate)}` : ""}.`,
       tone: "warning",
     });
-  else if (type === "invoice") notices.push({ text: `Paid in full. Receipt ${sale.saleNumber ?? ""}.`, tone: "info" });
-  else notices.push({ text: "Paid in full. Thank you for your custom.", tone: "info" });
 
   return {
     type,

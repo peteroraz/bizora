@@ -32,7 +32,7 @@ Each business has its own sequences (`document_sequences`, ADR-012):
 | Credit invoice | The sale has an invoice number and something is owed | Items, total, payments, balance owing and the payment due date |
 | Receipt | The money has been taken | Items, total, how it was paid, and the balance and due date if anything is owed |
 
-- An invoice that was later paid in full says "Paid in full", with the receipt number.
+- A paid receipt or invoice does not say "Paid in full". The payments in the totals already show that (ADR-054).
 - Cancelled sales keep their documents, marked **CANCELLED** with the reason.
 - `documentModel` builds the content with no I/O and is unit-tested. `renderPdf` (pdfkit) lays it out on A5.
 - The text is embedded in DejaVu Sans, because the PDF built-in fonts have no ₦ sign. The font and pdfkit ship in the API image, and the Dockerfile checks that they do.
