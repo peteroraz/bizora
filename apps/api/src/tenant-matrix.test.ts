@@ -264,6 +264,9 @@ describe("tenant isolation matrix (ADR-043)", () => {
       ["post", "/api/v1/pricing/lists", { name: "Probe prices" }],
       ["put", "/api/v1/customers/" + ids.customer + "/price-list", { priceListId: ids.priceList }],
       ["put", "/api/v1/suppliers/" + ids.supplier + "/products", { productId: ids.product, supplierSku: "PROBE" }],
+      // A report for B's shop (ADR-058).
+      ["get", `/api/v1/sales/report?branchId=${b.branchId}`, {}],
+      ["get", `/api/v1/sales/report.csv?branchId=${b.branchId}`, {}],
     ];
     const failures: string[] = [];
     for (const [method, path, body] of tries) {

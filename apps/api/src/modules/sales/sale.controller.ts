@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Permission, success } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
@@ -10,6 +10,7 @@ import { TenantGuard } from "../tenant/tenant.guard.js";
 import { SALE_DOCUMENT_TYPES, type SaleDocumentType } from "./sale-document.js";
 import { ReturnService } from "./return.service.js";
 import { SaleService } from "./sale.service.js";
+import { assertPeriod, SalesReportService } from "./sales-report.service.js";
 
 /** Anyone who handles sales: the sales person (own), the cashier and store keeper (their desk), managers (all). */
 const SEE_SALES = [Permission.SALES_READ_ALL, Permission.SALES_READ_OWN, Permission.SALES_COLLECT, Permission.SALES_RELEASE];
@@ -20,6 +21,7 @@ export class SaleController {
   constructor(
     @Inject(SaleService) private readonly sales: SaleService,
     @Inject(ReturnService) private readonly returns: ReturnService,
+    @Inject(SalesReportService) private readonly reports: SalesReportService,
   ) {}
 
   @Post()
@@ -48,6 +50,30 @@ export class SaleController {
   @RequireAnyPermission(Permission.SALES_READ_ALL, Permission.SALES_READ_OWN)
   async summary(@CurrentTenant() tenant: TenantContext, @Query("date") date?: string) {
     return success(await this.sales.summary(tenant, date), tenant.correlationId);
+  }
+
+  /** Sales for a week, month or year, with the period before (ADR-058). */
+  @Get("report")
+  @RequirePermissions(Permission.REPORTS_SALES_READ)
+  async report(@CurrentTenant() tenant: TenantContext, @Query("period") period?: string, @Query("date") date?: string, @Query("branchId") branchId?: string) {
+    assertPeriod(period);
+    return success(await this.reports.report(tenant, { ...(period ? { period } : {}), ...(date ? { date } : {}), ...(branchId ? { branchId } : {}) }), tenant.correlationId);
+  }
+
+  @Get("report.csv")
+  @RequirePermissions(Permission.REPORTS_SALES_READ)
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  async reportCsv(
+    @CurrentTenant() tenant: TenantContext,
+    @Res({ passthrough: true }) response: { setHeader: (name: string, value: string) => void },
+    @Query("period") period?: string,
+    @Query("date") date?: string,
+    @Query("branchId") branchId?: string,
+  ) {
+    assertPeriod(period);
+    const file = await this.reports.csv(tenant, { ...(period ? { period } : {}), ...(date ? { date } : {}), ...(branchId ? { branchId } : {}) });
+    response.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+    return file.text;
   }
 
   @Get("top-items")

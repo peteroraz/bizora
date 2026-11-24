@@ -33,6 +33,7 @@ function SalesScreen() {
   const access = useAccess();
   const canSell = can(access, Permission.SALES_CREATE);
   const canDeal = can(access, Permission.SALES_VOID);
+  const canReport = can(access, Permission.REPORTS_SALES_READ);
   const desk = access.salesFlow === "desk";
   const all = can(access, Permission.SALES_READ_ALL);
   const seesDay = can(access, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL);
@@ -119,8 +120,13 @@ function SalesScreen() {
         title={t("title")}
         intro={tab !== "day" ? t(`tabLead.${tab}`) : summary?.mine ? t("mineLead") : t("lead")}
         actions={
-          canSell || canDeal ? (
+          canSell || canDeal || canReport ? (
             <>
+              {canReport ? (
+                <ActionLink href="/app/sales/report" data-testid="sales-report-link">
+                  {t("reportLink")}
+                </ActionLink>
+              ) : null}
               {canDeal ? <ActionLink href="/app/sales/needs-you">{t("needsYou.link")}</ActionLink> : null}
               {canSell ? <ActionLink href="/app/sales/import">{t("import")}</ActionLink> : null}
               {canSell ? (
