@@ -215,6 +215,18 @@ function QuickSaleScreen() {
   const balance = desk ? 0n : total - paid;
 
   /** Tapping a product again adds one more to its line instead of a second line. */
+  // The Scan button is fetched only once the screen has loaded, so it never counts against the sale screen's budget.
+  const [afterLoad, setAfterLoad] = useState(false);
+  useEffect(() => {
+    if (document.readyState === "complete") {
+      setAfterLoad(true);
+      return;
+    }
+    const loaded = () => setAfterLoad(true);
+    window.addEventListener("load", loaded, { once: true });
+    return () => window.removeEventListener("load", loaded);
+  }, []);
+
   /** A scanned barcode adds its product straight to the sale; anything else is searched as typed (ADR-066). */
   function scanned(code: string) {
     const matches = catalog ? Object.values(catalog.products).filter((product) => product.barcode === code) : [];
@@ -428,9 +440,11 @@ function QuickSaleScreen() {
       <FormField id="sale-search" label={t("findProduct")}>
         <div className="flex gap-2">
           <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
-          <Suspense fallback={null}>
-            <ScanButton onCode={scanned} />
-          </Suspense>
+          {afterLoad ? (
+            <Suspense fallback={null}>
+              <ScanButton onCode={scanned} />
+            </Suspense>
+          ) : null}
         </div>
       </FormField>
       {Picks ? (
