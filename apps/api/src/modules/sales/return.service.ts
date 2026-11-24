@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { parseQuantity, saleReturnSchema } from "@bizora/contracts";
+import { parseQuantity, Permission, saleReturnSchema } from "@bizora/contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
@@ -77,6 +77,19 @@ export class ReturnService {
         );
       }
       if (sale.historyOnly) throw new ApiError("NOT_RETURNABLE", "This sale was brought in as history; record the return as a new sale.", 409);
+      // The business's returns rule (ADR-059): later than that, only the owner (or an administrator) accepts goods back.
+      if (business.returnsWithinDays) {
+        const soldDay = localDate(sale.soldAt, business.timezone);
+        const today = localDate(new Date(), business.timezone);
+        const daysAgo = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${soldDay}T00:00:00Z`)) / 86_400_000);
+        if (daysAgo > business.returnsWithinDays && !tenant.permissions.includes(Permission.TENANT_MANAGE)) {
+          throw new ApiError(
+            "RETURN_TOO_LATE",
+            `This sale was ${daysAgo} days ago, and goods are taken back within ${business.returnsWithinDays} days. Ask the owner to accept this return.`,
+            403,
+          );
+        }
+      }
 
       const lines = await tx.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id)));
       const byId = new Map(lines.map((line) => [line.id, line]));

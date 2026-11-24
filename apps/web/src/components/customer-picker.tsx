@@ -13,7 +13,7 @@ import { readCustomerDirectory } from "../lib/offline/customers";
 // The add-customer form (name and phone boxes, the country's phone rules) loads when it is opened (JS budget).
 const CustomerQuickAdd = lazy(() => import("./customer-quick-add"));
 
-export type PickedCustomer = { id: string; name: string; credit?: { allowed: boolean; limitMinor: string | null } };
+export type PickedCustomer = { id: string; name: string; credit?: { allowed: boolean; limitMinor: string | null; termsDays?: number | null } };
 
 /** Find a customer by phone number or name (works with the full list and with the cashier's counter lookup). */
 export function CustomerPicker({ id, value, onChange }: { id: string; value: PickedCustomer | null; onChange: (customer: PickedCustomer | null) => void }) {

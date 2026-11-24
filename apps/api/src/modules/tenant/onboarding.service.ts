@@ -306,6 +306,8 @@ export class OnboardingService {
         ...(payload.salesItems ? { salesItems: payload.salesItems } : {}),
         ...(payload.rememberItems !== undefined ? { rememberItems: payload.rememberItems } : {}),
         ...(payload.quickCatalog !== undefined ? { quickCatalog: payload.quickCatalog } : {}),
+        ...(payload.returnsWithinDays !== undefined ? { returnsWithinDays: payload.returnsWithinDays } : {}),
+        ...(payload.returnsOnReceipt !== undefined ? { returnsOnReceipt: payload.returnsOnReceipt } : {}),
         ...(setup
           ? {
               businessType: payload.businessType ?? business.businessType,

@@ -25,6 +25,8 @@ export const customerWriteSchema = z
     creditAllowed: z.boolean().optional(),
     /** Most they may owe at once, in kobo. Empty: no limit. */
     creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas)."), z.null()]).optional(),
+    /** Standard credit terms in days: a credit sale is due that many days later (ADR-059). Empty: none. */
+    creditTermsDays: z.number().int().min(1).max(365).nullable().optional(),
   })
   .superRefine((value, ctx) => {
     const walkIn = value.isWalkIn === true;
@@ -49,6 +51,8 @@ export const customerWriteSchema = z
 export const customerCreditSchema = z.object({
   creditAllowed: z.boolean(),
   creditLimitMinor: z.union([z.string().trim().regex(/^\d{1,15}$/, "Enter a whole amount in the smallest unit of the currency (kobo, cents, pesewas)."), z.null()]).optional(),
+  /** Standard credit terms in days (ADR-059). Empty: none, so each credit sale needs its date and a comment. */
+  creditTermsDays: z.number().int().min(1).max(365).nullable().optional(),
 });
 
 export const customerNoteSchema = z.object({

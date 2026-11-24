@@ -203,6 +203,7 @@ export class SaleService {
       // Desk: the customer takes an invoice to the cashier; the receipt number comes with the payment (ADR-017).
       const receiptNumber = desk ? null : (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
       const now = new Date();
+      onTerms(payload, customer, total, business.timezone);
       const settled = desk
         ? null
         : await this.settle(tx, tenant, business, branch, {
@@ -439,6 +440,7 @@ export class SaleService {
       const customer = customerId ? await this.requireCustomer(tx, tenant, business.id, customerId) : null;
       const now = new Date();
       const receiptNumber = sale.saleNumber ?? (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
+      onTerms(payload, customer, sale.totalMinor, business.timezone);
       const otherLines = await tx
         .select({ total: saleLines.lineTotalMinor })
         .from(saleLines)
@@ -1135,7 +1137,7 @@ export class SaleService {
         balanceMinor: sale.balanceMinor,
         voidReason: sale.voidReason,
       },
-      business: { name: extra.business.name, phone: extra.business.phoneE164, timezone: extra.business.timezone },
+      business: { name: extra.business.name, phone: extra.business.phoneE164, timezone: extra.business.timezone, returnsWithinDays: extra.business.returnsWithinDays, returnsOnReceipt: extra.business.returnsOnReceipt },
       branch: { name: extra.branch.name, address: address || null, phone: extra.branch.phoneE164 },
       customerName: extra.customerName,
       customerAddress: addressText(extra.customerAddress),
@@ -2195,4 +2197,23 @@ export class SaleService {
       customerId: sale.customerId,
     };
   }
+}
+
+/**
+ * A customer on standard credit terms (ADR-059): when money is left owing, the sale is due that many days from today
+ * and needs no written comment. A date or comment the person gave is kept.
+ */
+function onTerms(
+  payload: { payments: { amountMinor: string }[]; dueDate?: string | undefined; comment?: string | undefined },
+  customer: { creditAllowed: boolean; creditTermsDays: number | null } | null | undefined,
+  total: bigint,
+  timeZone: string,
+) {
+  if (!customer?.creditAllowed || !customer.creditTermsDays) return;
+  const paid = payload.payments.reduce((sum, payment) => sum + BigInt(payment.amountMinor), 0n);
+  if (paid >= total) return;
+  const due = new Date(`${localDate(new Date(), timeZone)}T00:00:00Z`);
+  due.setUTCDate(due.getUTCDate() + customer.creditTermsDays);
+  payload.dueDate ??= due.toISOString().slice(0, 10);
+  payload.comment ??= `On ${customer.creditTermsDays}-day terms.`;
 }

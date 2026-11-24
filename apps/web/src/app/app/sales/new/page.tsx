@@ -252,7 +252,7 @@ function QuickSaleScreen() {
     if (balance > 0n && !customer) return t("creditNeedsCustomer");
     if (balance > 0n && customer && customer.credit?.allowed === false) return t("creditCustomerNotApproved", { name: customer.name });
     if (balance > 0n && !dueDate) return t("creditNeedsDate");
-    if (balance > 0n && !comment.trim()) return t("creditNeedsComment");
+    if (balance > 0n && !comment.trim() && !customer?.credit?.termsDays) return t("creditNeedsComment");
     if (desk && mode === "credit" && !customer) return t("creditNeedsCustomer");
     return null;
   }
@@ -514,7 +514,7 @@ function QuickSaleScreen() {
         ) : null}
         {balance > 0n ? (
           <Suspense fallback={null}>
-            <CreditFields dueDate={dueDate} comment={comment} onDueDate={setDueDate} onComment={setComment} />
+            <CreditFields dueDate={dueDate} comment={comment} onDueDate={setDueDate} onComment={setComment} termsDays={customer?.credit?.termsDays ?? null} />
           </Suspense>
         ) : desk ? (
           <FormField id="sale-comment" label={t("deskComment")} hint={t("optional")}>

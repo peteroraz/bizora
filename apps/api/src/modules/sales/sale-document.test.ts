@@ -120,4 +120,16 @@ describe("sale documents", () => {
     const text = pdf.toString("latin1");
     expect(text.match(/\/Type \/Page\b/g)?.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("prints the returns rule on a receipt only when the owner chose to (ADR-059)", () => {
+    const paid: DocumentInput = {
+      ...base,
+      sale: { ...base.sale, status: "completed", saleNumber: "R-000009", collectedAt: new Date("2026-11-16T10:00:00Z"), paidMinor: 135000n, balanceMinor: 0n },
+      payments: [{ method: "cash", amountMinor: 135000n }],
+    };
+    const shown = documentModel({ ...paid, business: { ...paid.business, returnsWithinDays: 7, returnsOnReceipt: true } }, "receipt");
+    expect(shown.details).toContainEqual(["Returns", "Within 7 days of the sale"]);
+    expect(documentModel({ ...paid, business: { ...paid.business, returnsWithinDays: 7, returnsOnReceipt: false } }, "receipt").details.some((row) => row[0] === "Returns")).toBe(false);
+    expect(documentModel({ ...paid, business: { ...paid.business, returnsWithinDays: 7, returnsOnReceipt: true } }, "invoice").details.some((row) => row[0] === "Returns")).toBe(false);
+  });
 });
