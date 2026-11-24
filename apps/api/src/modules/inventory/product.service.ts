@@ -282,7 +282,11 @@ export class ProductService {
       .select({ count: sql<number>`count(*)::int` })
       .from(products)
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.catalogItemId, item.id), isNull(products.archivedAt)));
-    const values = this.values({ ...payload, trackStock: item.itemType === "physical" ? (payload.trackStock ?? existing.trackStock) : false });
+    const values = this.values({
+      ...payload,
+      trackStock: item.itemType === "physical" ? (payload.trackStock ?? existing.trackStock) : false,
+      tracksSerials: payload.tracksSerials ?? existing.tracksSerials,
+    });
     // Without permission to see cost, the existing default cost is kept as it is.
     const seesCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     if (!seesCost) delete (values as Partial<typeof values>).defaultCostMinor;
@@ -295,6 +299,7 @@ export class ProductService {
     if (text(values.lowStockLevel) !== text(existing.lowStockLevel)) changes.lowStockLevel = [text(existing.lowStockLevel), text(values.lowStockLevel)];
     if ((values.category ?? null) !== (existing.category ?? null)) changes.category = [existing.category ?? null, values.category ?? null];
     if (values.trackStock !== existing.trackStock) changes.trackStock = [String(existing.trackStock), String(values.trackStock)];
+    if (values.tracksSerials !== existing.tracksSerials) changes.tracksSerials = [String(existing.tracksSerials), String(values.tracksSerials)];
     const reason = payload.changeReason?.trim() || null;
     if ((changes.price || changes.cost) && !reason) {
       throw new ApiError("REASON_REQUIRED", "Say why the price or cost is changing.", 400, [{ field: "changeReason", message: "Say why." }]);
@@ -502,6 +507,7 @@ export class ProductService {
       mpn: product.mpn,
       reference: product.reference,
       trackStock: product.trackStock,
+      tracksSerials: product.tracksSerials,
       archived: product.archivedAt !== null,
       updatedAt: product.updatedAt,
       ...(seeCost ? { defaultCostMinor: product.defaultCostMinor?.toString() ?? null } : {}),
@@ -531,6 +537,8 @@ export class ProductService {
       lowStockLevel: payload.lowStockLevel ? (payload.lowStockLevel === "0" ? 0n : (parseQuantity(payload.lowStockLevel) as bigint)) : null,
       barcode: payload.barcode?.trim() || null,
       trackStock: payload.trackStock ?? true,
+      // Serial numbers only mean something for stock that is counted (ADR-062).
+      tracksSerials: (payload.trackStock ?? true) && (payload.tracksSerials ?? false),
       sku: payload.sku?.trim() || null,
       gtin: payload.gtin?.trim() || null,
       mpn: payload.mpn?.trim() || null,

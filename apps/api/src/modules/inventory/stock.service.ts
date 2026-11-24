@@ -40,6 +40,7 @@ import {
   resolveBranch,
   unitFactor,
 } from "./inventory-scope.js";
+import { SerialService } from "./serial.service.js";
 
 /** "1 bag", "2 bags", "1.5 kg": for messages to people. */
 const unitWord = (unit: string, quantity: bigint) => (quantity === 1000n || ["kg", "g", "ml", "l", "dozen"].includes(unit) ? unit : `${unit}s`);
@@ -115,6 +116,7 @@ export class StockService {
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NotificationService) private readonly notifications: NotificationService,
+    @Inject(SerialService) private readonly serials: SerialService,
   ) {}
 
   async applyMovement(tx: DbExecutor, context: Context, input: MovementInput) {
@@ -281,6 +283,16 @@ export class StockService {
       ...(options.receiptId ? { receiptId: options.receiptId } : {}),
       ...(options.occurredAt ? { occurredAt: options.occurredAt } : {}),
     });
+    // One serial number or IMEI per unit, for a product that keeps them (ADR-062).
+    await this.serials.receive(
+      tx,
+      tenant,
+      { businessId: context.business.id, branchId: context.branch.id, branchName: context.branch.name, product: context.product },
+      result.id,
+      quantity,
+      payload.serials,
+      options.occurredAt ?? new Date(),
+    );
     // What it cost to buy, for the product and for this supplier (ADR-048). Only a cost someone entered counts.
     if (payload.totalCostMinor) {
       await recordPurchaseCost(tx, tenant, {

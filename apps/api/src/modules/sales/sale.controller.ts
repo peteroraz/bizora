@@ -141,6 +141,15 @@ export class SaleController {
     return success({ sale: await this.sales.void(tenant, id, body) }, tenant.correlationId);
   }
 
+  /** Serial numbers or IMEIs of the units sold, recorded after the sale (ADR-062). */
+  @Post(":id/serials")
+  @HttpCode(200)
+  @RequireAnyPermission(Permission.SALES_CREATE, Permission.SALES_RELEASE, Permission.SALES_VOID)
+  @Idempotent()
+  async serials(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success({ sale: await this.sales.addSerials(tenant, id, body) }, tenant.correlationId);
+  }
+
   /** Goods a customer brings back (ADR-030): those who may cancel sales record returns. */
   @Post(":id/returns")
   @RequirePermissions(Permission.SALES_VOID)

@@ -13,6 +13,7 @@ import { DocumentNumberService } from "../documents/document-number.service.js";
 import { findBranch, requireBusiness } from "../inventory/inventory-scope.js";
 import { ChartOfAccountsService } from "../ledger/chart-of-accounts.service.js";
 import { StockService } from "../inventory/stock.service.js";
+import { SerialService } from "../inventory/serial.service.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 
 type SaleLine = typeof saleLines.$inferSelect;
@@ -41,6 +42,7 @@ export class ReturnService {
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ChartOfAccountsService) private readonly chart: ChartOfAccountsService,
+    @Inject(SerialService) private readonly serials: SerialService,
   ) {}
 
   async returnGoods(tenant: TenantContext, saleId: string, raw: unknown) {
@@ -90,6 +92,8 @@ export class ReturnService {
         amount: bigint;
         cost: bigint;
         backToStock: boolean;
+        wholeLine: boolean;
+        serials?: string[];
       }[] = [];
       const seen = new Set<string>();
       for (const requested of payload.lines) {
@@ -112,7 +116,7 @@ export class ReturnService {
         const amount = last ? net - before.amount : (net * entered) / line.enteredQuantity;
         const lineCost = line.costMinor ?? 0n;
         const cost = last ? lineCost - before.cost : (lineCost * entered) / line.enteredQuantity;
-        planned.push({ line, quantity, entered, amount, cost, backToStock: requested.backToStock });
+        planned.push({ line, quantity, entered, amount, cost, backToStock: requested.backToStock, wholeLine: last, ...(requested.serials ? { serials: requested.serials } : {}) });
       }
 
       const total = planned.reduce((sum, item) => sum + item.amount, 0n);
@@ -201,6 +205,15 @@ export class ReturnService {
           costMinor: item.cost,
           backToStock: movementId !== null,
           stockMovementId: movementId,
+        });
+        // The units that came back, for a product with serial numbers (ADR-062).
+        await this.serials.returned(tx, tenant, {
+          saleId: sale.id,
+          saleLineId: item.line.id,
+          ...(item.serials ? { serials: item.serials } : {}),
+          wholeLine: item.wholeLine,
+          backToStock: movementId !== null,
+          returnNumber: number,
         });
       }
 

@@ -11,6 +11,8 @@ export type ProductView = {
   lowStockLevel: string | null;
   barcode: string | null;
   trackStock: boolean;
+  /** A serial number or IMEI is kept for each unit (ADR-062). */
+  tracksSerials?: boolean;
   archived?: boolean;
   defaultCostMinor?: string | null;
   stock: { quantity: string; belowZero: boolean; low?: boolean; valueMinor?: string };

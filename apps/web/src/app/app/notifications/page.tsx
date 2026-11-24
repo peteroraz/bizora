@@ -20,6 +20,7 @@ const KINDS = [
   "sale.credit_offline",
   "sale.closed_shop",
   "sale.typed_like_product",
+  "sale.serial_conflict",
   "transfer.waiting",
   "transfer.not_received",
   "stock.request",

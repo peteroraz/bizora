@@ -11,6 +11,7 @@ import { SaleCollect } from "../../../../components/sale-collect";
 import { SaleComments } from "../../../../components/sale-comments";
 import { SaleDocuments } from "../../../../components/sale-documents";
 import { SaleReturnPanel, SaleReturnsList } from "../../../../components/sale-returns";
+import { SaleLineSerials } from "../../../../components/sale-serials";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatDay, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
@@ -144,6 +145,7 @@ function SaleScreen() {
                     {BigInt(line.returnedQuantity) > 0n ? (
                       <span className="block text-xs text-warning">{t("lineReturned", { quantity: quantityToString(BigInt(line.returnedQuantity)) })}</span>
                     ) : null}
+                    <SaleLineSerials saleId={full.id} line={line} open={full.status !== "voided"} onSaved={(next) => setSale({ ...next, view: "full" } as Loaded)} />
                   </span>
                   <span className="tabular-nums">{money(line.lineTotalMinor)}</span>
                 </li>

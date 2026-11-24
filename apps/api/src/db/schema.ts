@@ -830,6 +830,8 @@ export const products = pgTable(
     lowStockLevel: bigint("low_stock_level", { mode: "bigint" }),
     barcode: varchar("barcode", { length: 64 }),
     trackStock: boolean("track_stock").notNull().default(true),
+    /** Each unit has a serial number or IMEI (migration 0050, ADR-062). */
+    tracksSerials: boolean("tracks_serials").notNull().default(false),
     /**
      * The item this product is a variant of (migration 0040, ADR-046). Left out on insert, the database trigger
      * makes the product its own item (same ID), so every product always has one.

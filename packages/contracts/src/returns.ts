@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
-import { decimalQuantity, unitCodeSchema } from "./stock.js";
+import { decimalQuantity, serialListSchema, unitCodeSchema } from "./stock.js";
 
 /**
  * Returns (ADR-030): goods a customer brings back, and goods sent back to a supplier. Each posts a balanced entry
@@ -23,6 +23,8 @@ export const saleReturnSchema = z.object({
         quantity: decimalQuantity,
         /** False when the goods cannot be sold again (broken, expired): they do not go back on the shelf. */
         backToStock: z.boolean().default(true),
+        /** Which units came back, for a product that keeps serial numbers (ADR-062). */
+        serials: serialListSchema.optional(),
       }),
     )
     .min(1, "Choose what is coming back.")

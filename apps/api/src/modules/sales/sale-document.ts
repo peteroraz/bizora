@@ -37,7 +37,8 @@ export type DocumentInput = {
   customerAddress?: string | null;
   servedBy: string | null;
   cashier: string | null;
-  lines: { description: string; enteredQuantity: bigint; enteredUnit: string; unitPriceMinor: bigint; lineTotalMinor: bigint }[];
+  /** `serials`: serial numbers or IMEIs of the units sold (ADR-062), printed under the item. */
+  lines: { description: string; serials?: string[]; enteredQuantity: bigint; enteredUnit: string; unitPriceMinor: bigint; lineTotalMinor: bigint }[];
   payments: { method: string; amountMinor: bigint; label?: string }[];
 };
 
@@ -143,7 +144,8 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
     details,
     lines: input.lines.map((line) => {
       const quantity = quantityToString(line.enteredQuantity);
-      return { description: line.description, quantity: `${quantity} ${unitText(line.enteredUnit, quantity)}`, price: money(line.unitPriceMinor), total: money(line.lineTotalMinor) };
+      const serials = line.serials?.length ? `\nSerial no.: ${line.serials.join(", ")}` : "";
+      return { description: `${line.description}${serials}`, quantity: `${quantity} ${unitText(line.enteredUnit, quantity)}`, price: money(line.unitPriceMinor), total: money(line.lineTotalMinor) };
     }),
     totals,
     notices,
