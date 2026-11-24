@@ -3201,5 +3201,15 @@
     "buy": "Buy {quantity}",
     "covered": "On the way already",
     "setTarget": "Running low"
+  },
+  "scan": {
+    "button": "Scan",
+    "title": "Scan a barcode",
+    "hint": "Point the back camera at the barcode. It reads it by itself.",
+    "cancel": "Cancel",
+    "typeInstead": "Type the code instead",
+    "notSupported": "This phone's browser cannot read barcodes. Type the code instead.",
+    "cameraRefused": "The camera is not allowed for Bizora. Allow it in the browser's settings, or type the code.",
+    "cameraFailed": "The camera could not start. Type the code instead."
   }
 }

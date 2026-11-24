@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
+import { ScanButton } from "../../../../components/scan-button";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { can } from "../../../../lib/access";
 import { useAccess, usePlace } from "../../../../lib/access-context";
@@ -348,7 +349,10 @@ function NewProductScreen() {
               </>
             ) : null}
             <FormField id="product-barcode" label={t("barcode")} hint={t("optional")}>
-              <Input id="product-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={64} inputMode="numeric" />
+              <div className="flex gap-2">
+                <Input id="product-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={64} inputMode="numeric" />
+                <ScanButton onCode={setBarcode} />
+              </div>
             </FormField>
             <FormField id="product-sku" label={t("sku")} hint={t("skuHint")}>
               <Input id="product-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={64} autoCapitalize="characters" />
