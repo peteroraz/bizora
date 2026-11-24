@@ -821,6 +821,8 @@ export const products = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     businessId: uuid("business_id").notNull(),
     name: varchar("name", { length: 160 }).notNull(),
+    /** Spaces and punctuation ignored, so a typed name can be found without reading every product (migration 0045, ADR-052). */
+    compactKey: varchar("compact_key", { length: 160 }).notNull().default(""),
     category: varchar("category", { length: 60 }),
     baseUnit: varchar("base_unit", { length: 16 }).notNull(),
     priceMinor: bigint("price_minor", { mode: "bigint" }),
@@ -852,6 +854,7 @@ export const products = pgTable(
     uniqueIndex("products_tenant_id_id_key").on(table.tenantId, table.id),
     uniqueIndex("products_tenant_business_id_key").on(table.tenantId, table.businessId, table.id),
     index("products_business_updated_idx").on(table.tenantId, table.businessId, table.updatedAt, table.id),
+    index("products_compact_key_idx").on(table.tenantId, table.businessId, table.compactKey).where(sql`${table.archivedAt} is null`),
     foreignKey({
       name: "products_business_fk",
       columns: [table.tenantId, table.businessId],
@@ -903,10 +906,15 @@ export const itemAliases = pgTable(
     productId: uuid("product_id"),
     alias: varchar("alias", { length: 160 }).notNull(),
     aliasKey: varchar("alias_key", { length: 160 }).notNull(),
+    /** The alias with spaces and punctuation ignored (migration 0045, ADR-052). */
+    compactKey: varchar("compact_key", { length: 160 }).notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by"),
   },
-  (table) => [uniqueIndex("item_aliases_key").on(table.tenantId, table.businessId, table.aliasKey)],
+  (table) => [
+    uniqueIndex("item_aliases_key").on(table.tenantId, table.businessId, table.aliasKey),
+    index("item_aliases_compact_idx").on(table.tenantId, table.businessId, table.compactKey),
+  ],
 );
 
 /** A unit this business sells in, such as cup or mudu, kept beside the standard list (ADR-049). */
@@ -1232,6 +1240,8 @@ export const saleLines = pgTable(
     lineTotalMinor: bigint("line_total_minor", { mode: "bigint" }).notNull(),
     /** product, quick, or service. A snapshot of what the line was when it was sold (ADR-049). */
     lineKind: varchar("line_kind", { length: 16 }).notNull().default("product"),
+    /** Set on a live sale when the typed name is close to one product. The line stays typed (migration 0045, ADR-052). */
+    possibleProductId: uuid("possible_product_id"),
     costMinor: bigint("cost_minor", { mode: "bigint" }),
     stockMovementId: uuid("stock_movement_id"),
   },
@@ -1239,6 +1249,7 @@ export const saleLines = pgTable(
     uniqueIndex("sale_lines_sale_line_key").on(table.saleId, table.lineNo),
     foreignKey({ name: "sale_lines_sale_fk", columns: [table.tenantId, table.businessId, table.saleId], foreignColumns: [sales.tenantId, sales.businessId, sales.id] }),
     foreignKey({ name: "sale_lines_product_fk", columns: [table.tenantId, table.businessId, table.productId], foreignColumns: [products.tenantId, products.businessId, products.id] }),
+    foreignKey({ name: "sale_lines_possible_product_fk", columns: [table.tenantId, table.businessId, table.possibleProductId], foreignColumns: [products.tenantId, products.businessId, products.id] }),
   ],
 );
 

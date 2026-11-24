@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
-import { savedItemKey } from "./sale-light.js";
+import { compactItemKey, savedItemKey } from "./sale-light.js";
 import { FLEXIBLE_UNIT, parseQuantity } from "./stock-units.js";
 
-export { savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal } from "./sale-light.js";
+export { compactItemKey, savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal } from "./sale-light.js";
 
 export { SALE_PAGE_SIZE, IMPORT_MAX_ROWS } from "./constants.js";
 
@@ -287,9 +287,12 @@ export function matchSaleItems<T>(query: string, items: SaleMatchInput<T>[], lim
   for (const entry of items) {
     const key = savedItemKey(entry.name);
     const aliasKeys = (entry.aliases ?? []).map((alias) => savedItemKey(alias));
+    const compact = compactItemKey(query);
+    const nameCompact = compactItemKey(entry.name);
+    const aliasCompacts = (entry.aliases ?? []).map((alias) => compactItemKey(alias));
     const codeHit = (entry.codes ?? []).some((code) => code?.trim().toLowerCase() === askedCode);
-    const nameExact = Boolean(codeHit || key === asked);
-    const aliasExact = aliasKeys.some((alias) => alias === asked);
+    const nameExact = Boolean(codeHit || key === asked || (compact.length > 0 && nameCompact === compact));
+    const aliasExact = aliasKeys.some((alias) => alias === asked) || (compact.length > 0 && aliasCompacts.some((alias) => alias === compact));
     let via: SaleMatchVia | null = null;
     if (nameExact) via = "exact";
     else if (aliasExact) via = "alias";
@@ -309,6 +312,9 @@ export function matchSaleItems<T>(query: string, items: SaleMatchInput<T>[], lim
 /** True when the typed text is exactly this listed product's name or one of its other names. A prefix is not exact. */
 export function isExactListedName(query: string, name: string, aliases: string[] = []) {
   const asked = savedItemKey(query);
-  if (!asked) return false;
-  return savedItemKey(name) === asked || aliases.some((alias) => savedItemKey(alias) === asked);
+  const compact = compactItemKey(query);
+  if (!asked && !compact) return false;
+  if (asked && (savedItemKey(name) === asked || aliases.some((alias) => savedItemKey(alias) === asked))) return true;
+  if (!compact) return false;
+  return compactItemKey(name) === compact || aliases.some((alias) => compactItemKey(alias) === compact);
 }

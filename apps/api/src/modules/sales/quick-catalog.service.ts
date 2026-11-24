@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   capitaliseFirst,
+  compactItemKey,
   costEstimateSchema,
   itemAliasSchema,
   matchSaleItems,
@@ -256,6 +257,7 @@ export class QuickCatalogService {
       productId: item.productId,
       alias: capitaliseFirst(alias).slice(0, 160),
       aliasKey: key,
+      compactKey: compactItemKey(alias),
       createdBy: tenant.userId,
     });
     await this.audit.record({
@@ -323,6 +325,7 @@ export class QuickCatalogService {
             savedItemId: keep.id,
             alias: drop.name,
             aliasKey: dropKey,
+            compactKey: compactItemKey(drop.name),
             createdBy: tenant.userId,
           });
         }

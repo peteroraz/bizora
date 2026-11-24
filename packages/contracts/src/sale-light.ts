@@ -15,6 +15,14 @@ export function savedItemKey(name: string) {
   return name.trim().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim().toLowerCase().slice(0, 160);
 }
 
+/**
+ * The same item with spaces and punctuation ignored: "Rice 50kg", "rice-50kg" and "Rice50kg" are one key.
+ * Sizes stay different: "Peak Milk 400g" is not "Peak Milk 900g". Kept in step with bizora_compact_key (migration 0045).
+ */
+export function compactItemKey(name: string) {
+  return savedItemKey(name).replace(/[^a-z0-9]/g, "");
+}
+
 /** The unit price to show when the person typed the line total. The sale stores that total itself; this figure is display only and can be a kobo or two short. */
 export function unitPriceFromTotal(totalMinor: bigint, enteredThousandths: bigint) {
   if (enteredThousandths <= 0n) return 0n;

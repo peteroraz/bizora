@@ -1,6 +1,6 @@
 "use client";
 
-import { capitaliseFirst, isExactListedName, matchSaleItems, savedItemKey } from "@bizora/contracts";
+import { capitaliseFirst, compactItemKey, isExactListedName, matchSaleItems, savedItemKey } from "@bizora/contracts";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { useUnitName } from "../../../../components/stock-quantity";
@@ -97,7 +97,14 @@ export function QuickSalePicks({
     const seen = new Set([...remembered.map((item) => savedItemKey(item.name)), ...first.map((product) => product.id)]);
     return [...remembered, ...first, ...all.filter((product) => !seen.has(product.id) && !seen.has(savedItemKey(product.name)))].slice(0, 12);
   }, [catalog, recent, listOk, savedList]);
-  const taken = Boolean(askedKey) && matches.some((item) => savedItemKey(item.name) === askedKey || item.aliases?.some((alias) => savedItemKey(alias) === askedKey));
+  const askedCompact = compactItemKey(query);
+  const taken =
+    Boolean(askedKey || askedCompact) &&
+    matches.some(
+      (item) =>
+        (askedKey && (savedItemKey(item.name) === askedKey || item.aliases?.some((alias) => savedItemKey(alias) === askedKey))) ||
+        (askedCompact.length > 0 && (compactItemKey(item.name) === askedCompact || item.aliases?.some((alias) => compactItemKey(alias) === askedCompact))),
+    );
   return (
     <>
       {shown.length > 0 ? (

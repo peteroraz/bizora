@@ -14,6 +14,8 @@ export type SaleLineView = {
   discountMinor?: string;
   lineTotalMinor: string;
   costMinor?: string;
+  /** A live sale only: the one product this typed name looked like. The line was still recorded as typed. */
+  possibleProduct?: { id: string; name: string; priceMinor: string | null };
 };
 
 export type SaleView = {

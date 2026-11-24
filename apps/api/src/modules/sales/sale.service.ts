@@ -22,16 +22,18 @@ import {
   whatsAppHref,
   type SaleCreateInput,
   type SaleStatus,
+  compactItemKey,
   savedItemKey,
   sellsTyped,
 } from "@bizora/contracts";
-import { aliasedTable, and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { addresses, branches, businesses, businessUnits, customerPayments, customers, itemAliases, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, users } from "../../db/schema.js";
+import { closeProductKey } from "./near-name.js";
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
 import { APP_ENV, DB, EMAIL } from "../../tokens.js";
@@ -262,6 +264,7 @@ export class SaleService {
         tx,
       );
       if (priced.belowPrice.length > 0) await this.flagBelowPrice(tx, tenant, business.id, branch.id, id, priced.belowPrice);
+      if (priced.likeProduct.length > 0) await this.flagTypedLikeProduct(tx, tenant, business.id, branch.id, id, priced.likeProduct);
     });
     return this.get(tenant, id);
   }
@@ -870,6 +873,7 @@ export class SaleService {
       };
     }
     const customer = extra?.customer ?? null;
+    const possibleById = await this.possibleProducts(tenant.tenantId, sale.source, lines);
     const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     const seeContact = tenant.permissions.includes(Permission.CUSTOMERS_READ);
     const receiptPath = customerPath(await handleOf(this.db, sale.tenantId), "r", sale.receiptToken);
@@ -916,6 +920,7 @@ export class SaleService {
         discountMinor: line.discountMinor.toString(),
         lineTotalMinor: line.lineTotalMinor.toString(),
         ...(seeCost && line.costMinor !== null ? { costMinor: line.costMinor.toString() } : {}),
+        ...(line.possibleProductId && possibleById.get(line.possibleProductId) ? { possibleProduct: possibleById.get(line.possibleProductId) } : {}),
       })),
       payments: payments.map((payment) => ({
         id: payment.id,
@@ -1374,37 +1379,87 @@ export class SaleService {
 
   /**
    * A typed name that is one product in this business (the product's name, another name, or a remembered item
-   * already linked to it). Two products for the same name are left alone, so stock is not taken from the wrong one.
+   * already linked to it). Spaces and punctuation are ignored. Two products for the same name are left alone,
+   * so stock is not taken from the wrong one. The product list is filtered by the compact name, not read in full (ADR-052).
    */
   private async productsForTypedNames(tx: DbExecutor, tenantId: string, businessId: string, keys: string[]) {
     const found = new Map<string, string>();
     if (keys.length === 0) return found;
     const wanted = new Set(keys);
-    const named = await tx
-      .select({ id: products.id, name: products.name })
-      .from(products)
-      .where(and(eq(products.tenantId, tenantId), eq(products.businessId, businessId), isNull(products.archivedAt)));
-    const liveIds = new Set(named.map((product) => product.id));
+    const keysForCompact = new Map<string, string[]>();
+    for (const key of keys) {
+      const compact = compactItemKey(key);
+      if (!compact) continue;
+      keysForCompact.set(compact, [...(keysForCompact.get(compact) ?? []), key]);
+    }
+    const compacts = [...keysForCompact.keys()];
     const idsFor = new Map<string, Set<string>>();
-    const add = (key: string, id: string | null) => {
-      if (!id || !wanted.has(key) || !liveIds.has(id)) return;
+    const add = (key: string, id: string | null, live: Set<string>) => {
+      if (!id || !wanted.has(key) || !live.has(id)) return;
       const set = idsFor.get(key) ?? new Set<string>();
       set.add(id);
       idsFor.set(key, set);
     };
-    for (const product of named) add(savedItemKey(product.name), product.id);
-    const aliases = await tx
-      .select({ aliasKey: itemAliases.aliasKey, productId: itemAliases.productId })
-      .from(itemAliases)
-      .where(and(eq(itemAliases.tenantId, tenantId), eq(itemAliases.businessId, businessId), inArray(itemAliases.aliasKey, keys), isNotNull(itemAliases.productId)));
-    for (const alias of aliases) add(alias.aliasKey, alias.productId);
+    const named =
+      compacts.length === 0
+        ? []
+        : await tx
+            .select({ id: products.id, compactKey: products.compactKey })
+            .from(products)
+            .where(and(eq(products.tenantId, tenantId), eq(products.businessId, businessId), isNull(products.archivedAt), inArray(products.compactKey, compacts)));
+    const liveIds = new Set(named.map((product) => product.id));
+    for (const product of named) {
+      for (const key of keysForCompact.get(product.compactKey) ?? []) add(key, product.id, liveIds);
+    }
+    const aliases =
+      compacts.length === 0
+        ? []
+        : await tx
+            .select({ compactKey: itemAliases.compactKey, productId: itemAliases.productId })
+            .from(itemAliases)
+            .innerJoin(products, and(eq(products.tenantId, itemAliases.tenantId), eq(products.businessId, itemAliases.businessId), eq(products.id, itemAliases.productId), isNull(products.archivedAt)))
+            .where(and(eq(itemAliases.tenantId, tenantId), eq(itemAliases.businessId, businessId), inArray(itemAliases.compactKey, compacts), isNotNull(itemAliases.productId)));
+    const aliasLive = new Set(aliases.map((alias) => alias.productId).filter((id): id is string => Boolean(id)));
+    for (const alias of aliases) {
+      for (const key of keysForCompact.get(alias.compactKey) ?? []) add(key, alias.productId, aliasLive);
+    }
     const linked = await tx
       .select({ nameKey: savedItems.nameKey, productId: savedItems.productId })
       .from(savedItems)
+      .innerJoin(products, and(eq(products.tenantId, savedItems.tenantId), eq(products.businessId, savedItems.businessId), eq(products.id, savedItems.productId), isNull(products.archivedAt)))
       .where(and(eq(savedItems.tenantId, tenantId), eq(savedItems.businessId, businessId), inArray(savedItems.nameKey, keys), isNotNull(savedItems.productId)));
-    for (const item of linked) add(item.nameKey, item.productId);
+    const linkedLive = new Set(linked.map((item) => item.productId).filter((id): id is string => Boolean(id)));
+    for (const item of linked) add(item.nameKey, item.productId, linkedLive);
     for (const [key, ids] of idsFor) {
       if (ids.size === 1) found.set(key, [...ids][0] as string);
+    }
+    return found;
+  }
+
+  /**
+   * A typed name that is not a product, but is close to exactly one. Shorter names, and two close products, are left alone.
+   * Only products that start with the same four characters are read (ADR-052).
+   */
+  private async closeSpellings(tx: DbExecutor, tenantId: string, businessId: string, keys: string[], matched: Map<string, string>) {
+    const asked = keys
+      .filter((key) => !matched.has(key))
+      .map((key) => ({ key, compact: compactItemKey(key) }))
+      .filter((item) => item.compact.length >= 6);
+    const found = new Map<string, { id: string; name: string; priceMinor: bigint | null }>();
+    if (asked.length === 0) return found;
+    const prefixes = [...new Set(asked.map((item) => item.compact.slice(0, 4)))];
+    const prefix =
+      prefixes.length === 1 ? like(products.compactKey, `${prefixes[0]}%`) : or(...prefixes.map((item) => like(products.compactKey, `${item}%`)));
+    const rows = await tx
+      .select({ id: products.id, name: products.name, priceMinor: products.priceMinor, compactKey: products.compactKey })
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), eq(products.businessId, businessId), isNull(products.archivedAt), sql`char_length(${products.compactKey}) >= 6`, prefix));
+    for (const item of asked) {
+      const hits = rows.filter((row) => closeProductKey(item.compact, row.compactKey));
+      const ids = [...new Set(hits.map((hit) => hit.id))];
+      if (ids.length !== 1) continue;
+      const hit = hits[0];
+      if (hit) found.set(item.key, { id: hit.id, name: hit.name, priceMinor: hit.priceMinor });
     }
     return found;
   }
@@ -1497,6 +1552,53 @@ export class SaleService {
     });
   }
 
+  /** A live sale names the one product a typed line looked like. The line itself stays typed. */
+  private async possibleProducts(tenantId: string, source: string, lines: { possibleProductId: string | null }[]) {
+    const ids = source === "pos" ? [...new Set(lines.flatMap((line) => (line.possibleProductId ? [line.possibleProductId] : [])))] : [];
+    if (ids.length === 0) return new Map<string, { id: string; name: string; priceMinor: string | null }>();
+    const rows = await this.db
+      .select({ id: products.id, name: products.name, priceMinor: products.priceMinor })
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), inArray(products.id, ids)));
+    return new Map(rows.map((row) => [row.id, { id: row.id, name: row.name, priceMinor: row.priceMinor?.toString() ?? null }]));
+  }
+
+  /** The owner is told when a typed name was close to one product. The sale stays as it was typed. */
+  private async flagTypedLikeProduct(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    businessId: string,
+    branchId: string,
+    saleId: string,
+    matches: { typed: string; name: string }[],
+  ) {
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: "sale.typed_like_product",
+        entityType: "sale",
+        entityId: saleId,
+        correlationId: tenant.correlationId,
+        businessId,
+        branchId,
+        actorType: tenant.actorType ?? "HUMAN",
+        metadata: { matches },
+      },
+      tx,
+    );
+    const owners = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenant.tenantId), eq(memberships.role, "OWNER"), eq(memberships.status, "ACTIVE")));
+    await this.notifications.notify(tx, tenant.tenantId, owners.map((row) => row.id), {
+      kind: "sale.typed_like_product",
+      saleId,
+      actorName: await this.actorName(tx, tenant),
+      data: { summary: matches.map((match) => `${match.typed}, which looks like ${match.name}`).join("; ") },
+    });
+  }
+
   /**
    * Prices each line from the product (or the price typed), checks discounts, and converts to base units.
    * `live`: a sale made now at the counter. A typed name that is a product is price-checked only then.
@@ -1513,6 +1615,7 @@ export class SaleService {
   ) {
     const typedKeys = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [] : [savedItemKey(line.description)])).filter((key) => key.length > 0))];
     const matched = await this.productsForTypedNames(tx, tenant.tenantId, business.id, typedKeys);
+    const near = await this.closeSpellings(tx, tenant.tenantId, business.id, typedKeys, matched);
     const ids = [...new Set([...payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])), ...matched.values()])];
     const rows =
       ids.length === 0
@@ -1527,6 +1630,7 @@ export class SaleService {
     const canDiscount = tenant.permissions.includes(Permission.SALES_DISCOUNT);
     const lines = [];
     const belowPrice: string[] = [];
+    const likeProduct: { typed: string; name: string }[] = [];
     for (const [index, line] of payload.lines.entries()) {
       if (!("productId" in line)) {
         const productId = matched.get(savedItemKey(line.description));
@@ -1558,6 +1662,8 @@ export class SaleService {
           throw new ApiError("FORBIDDEN", `Ask a manager to give "${line.description}" free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
         }
         const description = line.description.replace(/\s+/g, " ");
+        const hint = near.get(savedItemKey(line.description));
+        if (hint) likeProduct.push({ typed: description.slice(0, 160), name: hint.name });
         lines.push({
           product: null,
           unit: line.unit ?? "piece",
@@ -1569,6 +1675,7 @@ export class SaleService {
           description,
           other: true as const,
           saved: line.saved === true,
+          possibleProductId: live && hint ? hint.id : null,
         });
         continue;
       }
@@ -1580,7 +1687,7 @@ export class SaleService {
       if (!priced) continue;
       lines.push(priced.line);
     }
-    return { lines, belowPrice };
+    return { lines, belowPrice, likeProduct };
   }
 
   /**
@@ -1711,7 +1818,7 @@ export class SaleService {
     tenant: TenantContext,
     businessId: string,
     saleId: string,
-    lines: { product: ProductRow | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; reduction?: bigint; saved?: boolean }[],
+    lines: { product: ProductRow | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; reduction?: bigint; saved?: boolean; possibleProductId?: string | null }[],
     movements: { lineIndex: number; id: string; cost: bigint }[],
   ) {
     await tx.insert(saleLines).values(
@@ -1732,6 +1839,7 @@ export class SaleService {
           discountMinor: line.reduction ?? 0n,
           lineTotalMinor: line.lineTotal,
           lineKind: line.product ? "product" : line.saved ? "quick" : "service",
+          possibleProductId: line.product ? null : (line.possibleProductId ?? null),
           costMinor: movement?.cost ?? null,
           stockMovementId: movement?.id ?? null,
         };
