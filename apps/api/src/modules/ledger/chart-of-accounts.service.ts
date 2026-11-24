@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { businessTypeFromIndustry, cashAccountCode, cashAccountName, chartOfAccountsTemplate } from "@bizora/contracts";
+import { businessTypeFromIndustry, cashAccountCode, cashAccountName, chartOfAccountsTemplate, type AccountTemplate } from "@bizora/contracts";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { ApiError } from "../../common/errors.js";
+import { ApiError, booksCouldNotSave } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { branches, businesses, ledgerAccounts } from "../../db/schema.js";
@@ -33,9 +33,12 @@ export class ChartOfAccountsService {
       .from(ledgerAccounts)
       .where(and(eq(ledgerAccounts.tenantId, tenantId), eq(ledgerAccounts.businessId, businessId)));
     const codes = new Set(existing.map((account) => account.code));
-    const missing = chartOfAccountsTemplate(businessTypeFromIndustry(business.industryCode)).filter(
-      (account) => !codes.has(account.code),
-    );
+    const roles = new Set(existing.map((account) => account.role));
+    const template = chartOfAccountsTemplate(businessTypeFromIndustry(business.industryCode));
+    // A code that is already used stays as it is. A role that already has an account is not given a second one.
+    // Expense categories share the expense role on purpose, so a new expense code is still added.
+    const missing = template.filter((account) => !codes.has(account.code) && (account.role === "expense" || !roles.has(account.role)));
+    for (const account of missing) roles.add(account.role);
 
     const shops = await executor
       .select({ id: branches.id, name: branches.name })
@@ -49,8 +52,10 @@ export class ChartOfAccountsService {
         .map((account) => Number.parseInt(account.code.split("-")[1] ?? "0", 10))
         .reduce((max, value) => Math.max(max, value), 0) + 1;
 
+    const roleFills = missingRoles(template, roles, codes);
     const rows = [
       ...missing.map((account) => ({ ...account, branchId: null as string | null })),
+      ...roleFills.map((account) => ({ ...account, branchId: null as string | null })),
       ...shops
         .filter((shop) => !withCash.has(shop.id))
         .map((shop) => ({
@@ -87,4 +92,38 @@ export class ChartOfAccountsService {
       .where(and(eq(ledgerAccounts.tenantId, tenantId), eq(ledgerAccounts.businessId, businessId)))
       .orderBy(asc(ledgerAccounts.code));
   }
+}
+
+/**
+ * A role the template needs and the business does not have yet. `service_income` prefers 4050, then 4051.
+ * Any other taken code takes the next free number in the same thousand (4000, then 4001).
+ * Existing accounts are never renamed or given a new role.
+ */
+function missingRoles(template: AccountTemplate[], roles: Set<string>, codes: Set<string>): AccountTemplate[] {
+  const needed = template.filter((account) => account.role !== "expense" && !roles.has(account.role));
+  needed.sort((a, b) => (a.role === "service_income" ? -1 : b.role === "service_income" ? 1 : a.code.localeCompare(b.code)));
+  const added: AccountTemplate[] = [];
+  for (const account of needed) {
+    if (roles.has(account.role)) continue;
+    const preferred = account.role === "service_income" ? { ...account, code: "4050", name: "Service income" } : account;
+    const code = freeCode(preferred.code, codes);
+    codes.add(code);
+    roles.add(account.role);
+    added.push({ ...preferred, code });
+  }
+  return added;
+}
+
+function freeCode(preferred: string, taken: Set<string>): string {
+  if (!taken.has(preferred)) return preferred;
+  const match = /^(\d+)(.*)$/.exec(preferred);
+  if (!match?.[1]) throw new ApiError("LEDGER_ACCOUNT_NOT_FOUND", booksCouldNotSave(null), 422);
+  const start = Number(match[1]);
+  const suffix = match[2] ?? "";
+  const floor = Math.floor(start / 1000) * 1000;
+  for (let next = start + 1; next <= floor + 999; next += 1) {
+    const code = `${next}${suffix}`;
+    if (!taken.has(code)) return code;
+  }
+  throw new ApiError("LEDGER_ACCOUNT_NOT_FOUND", booksCouldNotSave(null), 422);
 }

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, forwardRef } from "@nestjs/common";
 import {
   addressInputSchema,
   businessTypeFromIndustry,
@@ -23,6 +23,7 @@ import { addresses, branches, businesses, organizations } from "../../db/schema.
 import { DB, FINANCIAL_LEDGER } from "../../tokens.js";
 import { AddressService } from "../addresses/address.service.js";
 import { AuditService } from "../audit/audit.service.js";
+import { ChartOfAccountsService } from "../ledger/chart-of-accounts.service.js";
 import type { FinancialLedgerPort } from "./financial-ledger.port.js";
 import { TenantRepository } from "./tenant.repository.js";
 
@@ -34,6 +35,7 @@ export class OnboardingService {
     @Inject(TenantRepository) private readonly tenants: TenantRepository,
     @Inject(FINANCIAL_LEDGER) private readonly ledger: FinancialLedgerPort,
     @Inject(AddressService) private readonly addressesService: AddressService,
+    @Inject(forwardRef(() => ChartOfAccountsService)) private readonly chart: ChartOfAccountsService,
   ) {}
 
   async complete(tenant: TenantContext, raw: unknown) {
@@ -322,6 +324,9 @@ export class OnboardingService {
       .returning();
     if (!updated) {
       throw new ApiError("BUSINESS_NOT_FOUND", "Business was not found.", 404);
+    }
+    if (businessTypeFromIndustry(business.industryCode) !== businessTypeFromIndustry(updated.industryCode)) {
+      await this.db.transaction((tx) => this.chart.ensure(tx, tenant.tenantId, businessId, tenant.userId));
     }
     if (setup && canManageOrganizationSettings(tenant)) {
       await this.db
