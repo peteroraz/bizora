@@ -3,7 +3,7 @@ import { isUuidV7 } from "./ids.js";
 import { compactItemKey, savedItemKey } from "./sale-light.js";
 import { FLEXIBLE_UNIT, parseQuantity } from "./stock-units.js";
 
-export { compactItemKey, savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal } from "./sale-light.js";
+export { compactItemKey, savedItemKey, sellsProducts, sellsTyped, TYPED_ITEM_NAME_MAX, unitPriceFromTotal } from "./sale-light.js";
 
 export { SALE_PAGE_SIZE, IMPORT_MAX_ROWS } from "./constants.js";
 
