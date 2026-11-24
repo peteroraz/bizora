@@ -2126,9 +2126,11 @@
       "returns": "Goods returned by customers",
       "posFees": "Fees for POS cash-outs",
       "notFromSales": "{amount} came in that was not from sales (cash found in a count, or other money in). It is not counted as profit.",
-      "addCosts": "Add costs to calculate profit",
-      "estimated": "Estimated profit",
-      "coverage": "Cost known for {percent}% of sales"
+      "uncosted": "{amount} of sales ({percent}%) have no cost recorded.",
+      "uncostedTiny": "{amount} of sales (less than 1%) have no cost recorded.",
+      "uncostedNote": "If what you bought for them is in your expenses, this profit is right. If not, the real profit is lower.",
+      "addCostsLink": "Add costs or estimates",
+      "withEstimates": "With your cost estimates: {amount}"
     },
     "suppliersTitle": "Suppliers",
     "suppliersOwed": "You owe {amount}",

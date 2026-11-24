@@ -83,11 +83,10 @@ export type Profit = ProfitFigures & {
   expenses: { name: string; amountMinor: string }[];
   expensesAwaitingApproval: number;
   days: (ProfitFigures & { date: string })[] | null;
-  /** known when every goods line has a cost, partial when some do, unknown when none do (ADR-049). */
+  /** known when every goods line has a cost, partial when some do, unknown when none do. The figure is always profitMinor (ADR-051). */
   profitStatus?: "known" | "partial" | "unknown";
   uncostedSalesMinor?: string;
   costCoverageBps?: number;
-  knownProfitMinor?: string;
   estimatedProfitMinor?: string | null;
 };
 
