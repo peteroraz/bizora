@@ -35,7 +35,7 @@ const quantityText = (thousandths: bigint) =>
 /** Products sold on this phone recently, newest first, for the quick tiles. Kept per shop, on the phone only. */
 const RECENT_LIMIT = 24;
 // The Scan button is loaded after the screen, to keep the sale screen within its size budget (ADR-066).
-const ScanButton = lazy(() => import("../../../../components/scan-button").then((module) => ({ default: module.ScanButton })));
+const SaleScan = lazy(() => import("../../../../components/sale-scan").then((module) => ({ default: module.SaleScan })));
 const voiceModule = () => import("../../../../components/voice-sale");
 const VoiceSale = lazy(voiceModule);
 // Loaded when shown, to keep the quick sale within its script budget.
@@ -215,29 +215,6 @@ function QuickSaleScreen() {
   const balance = desk ? 0n : total - paid;
 
   /** Tapping a product again adds one more to its line instead of a second line. */
-  // The Scan button is fetched only once the screen has loaded, so it never counts against the sale screen's budget.
-  const [afterLoad, setAfterLoad] = useState(false);
-  useEffect(() => {
-    if (document.readyState === "complete") {
-      setAfterLoad(true);
-      return;
-    }
-    const loaded = () => setAfterLoad(true);
-    window.addEventListener("load", loaded, { once: true });
-    return () => window.removeEventListener("load", loaded);
-  }, []);
-
-  /** A scanned barcode adds its product straight to the sale; anything else is searched as typed (ADR-066). */
-  function scanned(code: string) {
-    const matches = catalog ? Object.values(catalog.products).filter((product) => product.barcode === code) : [];
-    if (matches.length === 1 && matches[0]) {
-      addProduct(matches[0]);
-      setQuery("");
-      return;
-    }
-    setQuery(code);
-  }
-
   function addProduct(product: CachedProduct) {
     setLines((current) => {
       const existing = current.find((line) => line.product.id === product.id);
@@ -440,9 +417,16 @@ function QuickSaleScreen() {
       <FormField id="sale-search" label={t("findProduct")}>
         <div className="flex gap-2">
           <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
-          {afterLoad ? (
+          {Picks ? (
             <Suspense fallback={null}>
-              <ScanButton onCode={scanned} />
+              <SaleScan
+                products={catalog?.products}
+                onProduct={(product) => {
+                  addProduct(product);
+                  setQuery("");
+                }}
+                onText={setQuery}
+              />
             </Suspense>
           ) : null}
         </div>
