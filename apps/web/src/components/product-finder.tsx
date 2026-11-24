@@ -4,6 +4,7 @@ import { Button, Input } from "@bizora/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { api } from "../lib/api";
+import { ScanButton } from "./scan-button";
 
 export type FoundProduct = { id: string; name: string; baseUnit: string; packs: { unitCode: string }[]; priceMinor: string | null };
 
@@ -13,11 +14,19 @@ export function ProductFinder({ id, onPick }: { id: string; onPick: (product: Fo
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<FoundProduct[] | null>(null);
 
-  async function search() {
-    const text = query.trim();
+  async function search(typed = query) {
+    const text = typed.trim();
     if (!text) return;
     const response = await api(`/api/v1/products?q=${encodeURIComponent(text)}`).catch(() => null);
-    setFound(response?.ok ? (((await response.json()) as { data: { items: FoundProduct[] } }).data.items ?? []) : []);
+    const items = response?.ok ? (((await response.json()) as { data: { items: FoundProduct[] } }).data.items ?? []) : [];
+    // A scanned code that is one product's barcode picks it at once (ADR-066).
+    if (typed !== query && items.length === 1 && items[0]) {
+      onPick(items[0]);
+      setFound(null);
+      setQuery("");
+      return;
+    }
+    setFound(items);
   }
 
   return (
@@ -38,6 +47,12 @@ export function ProductFinder({ id, onPick }: { id: string; onPick: (product: Fo
         <Button type="button" variant="outline" onClick={() => void search()}>
           {t("find")}
         </Button>
+        <ScanButton
+          onCode={(code) => {
+            setQuery(code);
+            void search(code);
+          }}
+        />
       </div>
       {found && found.length === 0 ? <p className="text-sm text-muted">{t("noProduct")}</p> : null}
       {found && found.length > 0 ? (

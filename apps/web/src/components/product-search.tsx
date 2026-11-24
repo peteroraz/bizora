@@ -4,6 +4,7 @@ import { Button, FormField, Input } from "@bizora/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { api } from "../lib/api";
+import { ScanButton } from "./scan-button";
 import { useStockText } from "./stock-quantity";
 
 export type FoundProduct = { id: string; name: string; baseUnit: string; packs: { unitCode: string; baseQuantity: string }[]; stock: { quantity: string } };
@@ -17,13 +18,21 @@ export function ProductSearch({ id, onPick, branchId }: { id: string; onPick: (p
   const [found, setFound] = useState<FoundProduct[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  async function search() {
-    if (!q.trim()) return;
+  async function search(text = q) {
+    if (!text.trim()) return;
     setProblem(null);
-    const response = await api(`/api/v1/products?q=${encodeURIComponent(q.trim())}${branchId ? `&branchId=${branchId}` : ""}`).catch(() => null);
+    const response = await api(`/api/v1/products?q=${encodeURIComponent(text.trim())}${branchId ? `&branchId=${branchId}` : ""}`).catch(() => null);
     if (!response) return setProblem(t("needsNetwork"));
     if (!response.ok) return setProblem(t("failed"));
-    setFound(((await response.json()).data.items as FoundProduct[]).filter((item) => item.stock));
+    const items = ((await response.json()).data.items as FoundProduct[]).filter((item) => item.stock);
+    // A scanned code that is one product's barcode picks it at once (ADR-066).
+    if (text !== q && items.length === 1 && items[0]) {
+      onPick(items[0]);
+      setFound(null);
+      setQ("");
+      return;
+    }
+    setFound(items);
   }
 
   return (
@@ -45,6 +54,12 @@ export function ProductSearch({ id, onPick, branchId }: { id: string; onPick: (p
         <Button type="button" variant="secondary" onClick={() => void search()}>
           {t("find")}
         </Button>
+        <ScanButton
+          onCode={(code) => {
+            setQ(code);
+            void search(code);
+          }}
+        />
       </div>
       {problem ? <p className="text-sm text-danger">{problem}</p> : null}
       {found ? (
