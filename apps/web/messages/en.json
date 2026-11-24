@@ -763,6 +763,17 @@
     "rememberItemsHint": "The next sale can suggest them, on every phone.",
     "quickCatalog": "Let me add a list of names",
     "quickCatalogHint": "Names are enough. Prices and stock can wait.",
+    "units": {
+      "title": "Units you sell in",
+      "lead": "A unit typed at the counter joins this list after two sales. Add one here and it is ready at once.",
+      "code": "Unit",
+      "add": "Add unit",
+      "turnOff": "Turn off",
+      "invalid": "Use a short word such as cup or mudu.",
+      "loadFailed": "The units could not be loaded. Check your connection.",
+      "addFailed": "That unit could not be added. Try again.",
+      "turnOffFailed": "That unit could not be turned off. Try again."
+    },
     "savedItems": {
       "title": "Typed items remembered",
       "lead": "Picked from the list next time an item is sold. Remove one that is misspelt or no longer sold; it comes back if it is sold again.",
@@ -2212,6 +2223,7 @@
       "feeOnPos": "Added on the POS (the customer paid the cash and the fee on the machine)",
       "feeInCash": "Paid in cash into the drawer",
       "summary": "The POS should show {pos}. The drawer goes down by {drawer}.",
+      "overDrawer": "The drawer should have {expected}. Give out {amount} anyway?",
       "feeTooHigh": "The fee cannot be more than the cash given.",
       "save": "Save cash-out",
       "saved": "Saved. {amount} given out, fee {fee}.",

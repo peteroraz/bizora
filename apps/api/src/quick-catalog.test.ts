@@ -87,13 +87,15 @@ describe("record first, organise later", () => {
     ogbonoId = list.items[0].id as string;
     expect(list.items[0]).toMatchObject({ name: "Ogbono", unit: "cup", lastPriceMinor: "100000", timesSold: 1, source: "typed", catalogMode: "quick", productId: null });
     const units = (await request(http).get("/api/v1/units").set(auth(cashier)).expect(200)).body.data.units as { code: string }[];
-    expect(units.map((unit) => unit.code)).toContain("cup");
+    expect(units.map((unit) => unit.code)).not.toContain("cup");
   });
 
   it("suggests the item to another person from the first letters, and does not duplicate the name", async () => {
     const suggested = (await request(http).get("/api/v1/saved-items/suggest").query({ q: "Ogb" }).set(auth(owner)).expect(200)).body.data.items;
     expect(suggested[0]).toMatchObject({ name: "Ogbono", lastPriceMinor: "100000", unit: "cup", timesSold: 1 });
     await sell(cashier, [{ description: "ogbono", quantity: "1", unit: "cup", unitPriceMinor: "120000", saved: true }], "120000").expect(201);
+    const units = (await request(http).get("/api/v1/units").set(auth(owner)).expect(200)).body.data.units as { code: string }[];
+    expect(units.map((unit) => unit.code)).toContain("cup");
     await sell(owner, [{ description: "OGBONO", quantity: "1", unit: "cup", unitPriceMinor: "120000", saved: true }], "120000").expect(201);
     await sell(owner, [{ description: "Ogbono.", quantity: "1", unit: "cup", unitPriceMinor: "90000", saved: true }], "90000").expect(201);
     const list = (await request(http).get("/api/v1/saved-items").set(auth(owner)).expect(200)).body.data.items;

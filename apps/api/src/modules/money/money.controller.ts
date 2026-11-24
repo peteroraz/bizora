@@ -69,7 +69,17 @@ export class MoneyController {
     return success({ movement: await this.money.recordMovement(tenant, body) }, tenant.correlationId);
   }
 
-  /** POS cash-out (ADR-038): whoever takes money at the counter can record it. */
+  /**
+   * What the drawer should hold, for the shop this person works in (ADR-053).
+   * The cash-out screen uses it to ask before giving out more than that. The cash page stays behind cash.expected.read.
+   */
+  @Get("drawer-expected")
+  @RequirePermissions(Permission.SALES_COLLECT)
+  async drawerExpected(@CurrentTenant() tenant: TenantContext) {
+    return success(await this.money.drawerExpected(tenant), tenant.correlationId);
+  }
+
+  /** POS cash-out (ADR-038): whoever takes money at the counter can record it. The server still records an amount above the drawer. */
   @Post("pos-cashouts")
   @RequirePermissions(Permission.SALES_COLLECT)
   @Idempotent()
