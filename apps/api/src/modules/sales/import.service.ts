@@ -156,8 +156,8 @@ export class ImportService {
                 unitCode: packUnit,
                 baseQuantity: decimal(packSize),
                 ...(packPrice !== null ? { priceMinor: packPrice.toString() } : {}),
-                ...(forSale !== null ? { forSale } : {}),
-                ...(forPurchase !== null ? { forPurchase } : {}),
+                ...(typeof forSale === "boolean" ? { forSale } : {}),
+                ...(typeof forPurchase === "boolean" ? { forPurchase } : {}),
               },
             ]
           : undefined;
