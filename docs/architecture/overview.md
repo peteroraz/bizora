@@ -45,7 +45,7 @@ The web app keeps an outbox in IndexedDB. Each queued change carries a device-ma
 
 ## Ledger
 
-Every sale, payment, expense and stock movement posts a balanced journal entry. Entries, stock movements and returns cannot be changed or deleted: database triggers refuse it. Corrections are reversing entries (ADR-013). The only exception is removing a sample business with its script (ADR-045).
+Every sale, payment, expense and stock movement posts a balanced journal entry. Profit shown to the owner is that books figure, with a note when some sales have no cost (ADR-051). Entries, stock movements and returns cannot be changed or deleted: database triggers refuse it. Corrections are reversing entries (ADR-013). The only exception is removing a sample business with its script (ADR-045).
 
 ## Sessions
 

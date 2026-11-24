@@ -167,8 +167,9 @@ describe("record first, organise later", () => {
     await request(http).post("/api/v1/saved-items/merge").set(auth(owner)).send({ keepId: ogbonoId, dropId: egusi.id }).expect(409);
     const profit = (await request(http).get("/api/v1/money/profit").set(auth(owner)).expect(200)).body.data;
     expect(profit.profitStatus).toBe("unknown");
-    expect(profit.knownProfitMinor).toBe("0");
+    expect(profit).not.toHaveProperty("knownProfitMinor");
     expect(profit.estimatedProfitMinor).toBeNull();
+    expect(BigInt(profit.profitMinor)).toBeGreaterThan(0n);
     expect(BigInt(profit.salesMinor)).toBeGreaterThan(0n);
     const top = (await request(http).get("/api/v1/sales/top-items").set(auth(owner)).expect(200)).body.data.items as { name: string; costKnown: boolean; totalMinor: string }[];
     const row = top.find((item) => item.name === "Ogbono");
@@ -180,6 +181,7 @@ describe("record first, organise later", () => {
     expect(estimated.profitStatus).toBe("unknown");
     expect(estimated.estimatedProfitMinor).not.toBeNull();
     expect(estimated.profitMinor).toBe(profit.profitMinor);
+    expect(BigInt(estimated.estimatedProfitMinor)).toBeLessThan(BigInt(estimated.profitMinor));
   });
 
   it("sells a typed product name as that product, and still remembers a name that is not one", async () => {

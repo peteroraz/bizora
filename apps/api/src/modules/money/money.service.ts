@@ -767,8 +767,9 @@ export class MoneyService {
     const goods = BigInt(coverage.goods);
     const uncosted = BigInt(coverage.uncosted);
     const profitStatus = goods === 0n || uncosted === 0n ? "known" : uncosted === goods ? "unknown" : "partial";
-    const knownProfit = BigInt(figures.profitMinor) - uncosted;
-    const estimatedProfit = coverage.estimatedCost === null ? null : knownProfit + BigInt(coverage.covered) - BigInt(coverage.estimatedCost);
+    // The books already leave out a cost that was never recorded. An estimate only fills that gap; it does not
+    // take the sale itself out of profit (ADR-051).
+    const estimatedProfit = coverage.estimatedCost === null ? null : BigInt(figures.profitMinor) - uncosted + BigInt(coverage.covered) - BigInt(coverage.estimatedCost);
     return {
       currency: business.baseCurrencyCode.trim(),
       today,
@@ -776,11 +777,10 @@ export class MoneyService {
       to,
       branchId: shop ?? null,
       ...figures,
-      /** known: every goods line has a cost. partial: some do. unknown: none do. Profit is not invented (ADR-049). */
+      /** known: every goods line has a cost. partial: some do. unknown: none do. The figure is always the books' profit (ADR-051). */
       profitStatus,
       uncostedSalesMinor: uncosted.toString(),
       costCoverageBps: goods === 0n ? 10000 : Number(((goods - uncosted) * 10000n) / goods),
-      knownProfitMinor: knownProfit.toString(),
       estimatedProfitMinor: estimatedProfit?.toString() ?? null,
       expenses: [...byExpense.values()]
         .filter((entry) => entry.amount !== 0n)

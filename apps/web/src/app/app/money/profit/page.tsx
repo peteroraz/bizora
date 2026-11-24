@@ -3,6 +3,7 @@
 import { Permission } from "@bizora/contracts";
 import { Card, PageHeader } from "@bizora/ui";
 import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BackLink } from "../../../../components/action-link";
 import { DaySwitcher } from "../../../../components/day-switcher";
@@ -10,6 +11,7 @@ import { RequireAccess } from "../../../../components/require-access";
 import { formatCurrency, formatDay } from "../../../../i18n/format";
 import { api } from "../../../../lib/api";
 import type { Profit } from "../../../../lib/money-client";
+import { uncostedSalesNote } from "../../../../lib/profit-note";
 
 type View = "day" | "month";
 
@@ -35,8 +37,8 @@ function ProfitScreen() {
   }, [load]);
 
   const money = (minor: string | bigint) => (profit ? formatCurrency(BigInt(minor), profit.currency, locale) : "");
-  const honest = !profit?.profitStatus || profit.profitStatus === "known";
-  const result = profit ? (honest ? BigInt(profit.profitMinor) : profit.estimatedProfitMinor ? BigInt(profit.estimatedProfitMinor) : null) : 0n;
+  const books = profit ? BigInt(profit.profitMinor) : 0n;
+  const missing = profit ? uncostedSalesNote(profit.salesMinor, profit.uncostedSalesMinor, profit.profitStatus) : null;
   const nothing = profit && profit.salesMinor === "0" && profit.expensesMinor === "0" && profit.costOfSalesMinor === "0" && profit.posCashoutFeesMinor === "0";
   const monthName = day ? new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`)) : "";
 
@@ -80,13 +82,28 @@ function ProfitScreen() {
       {profit ? (
         <Card className="space-y-4" data-testid="profit-card">
           <div>
-            <p className="text-sm text-muted">{result === null ? t("profit.addCosts") : !honest ? t("profit.estimated") : result < 0n ? t("profit.loss") : t("profit.profit")}</p>
-            {result === null ? null : (
-              <p className={`text-3xl font-semibold tabular-nums ${result < 0n ? "text-danger" : "text-success"}`} data-testid="profit-amount">
-                {money(result < 0n ? -result : result)}
+            <p className="text-sm text-muted">{books < 0n ? t("profit.loss") : t("profit.profit")}</p>
+            <p className={`text-3xl font-semibold tabular-nums ${books < 0n ? "text-danger" : "text-success"}`} data-testid="profit-amount">
+              {money(books < 0n ? -books : books)}
+            </p>
+            {profit.estimatedProfitMinor != null ? (
+              <p className="text-sm text-muted" data-testid="profit-estimate">
+                {t("profit.withEstimates", { amount: money(profit.estimatedProfitMinor) })}
               </p>
-            )}
-            {!honest && profit.costCoverageBps !== undefined ? <p className="mt-1 text-xs text-muted">{t("profit.coverage", { percent: Math.round(profit.costCoverageBps / 100) })}</p> : null}
+            ) : null}
+            {missing ? (
+              <div className="mt-2 space-y-1 text-sm text-muted" data-testid="profit-uncosted">
+                <p>
+                  {missing.percent === "under1"
+                    ? t("profit.uncostedTiny", { amount: money(missing.amountMinor) })
+                    : t("profit.uncosted", { amount: money(missing.amountMinor), percent: missing.percent })}
+                </p>
+                <p>{t("profit.uncostedNote")}</p>
+                <Link href="/app/stock/organize" className="inline-flex min-h-11 items-center text-primary">
+                  {t("profit.addCostsLink")}
+                </Link>
+              </div>
+            ) : null}
             {profit.expensesAwaitingApproval > 0 ? <p className="mt-1 text-xs text-warning">{t("profit.waiting", { count: profit.expensesAwaitingApproval })}</p> : null}
           </div>
           {nothing ? (

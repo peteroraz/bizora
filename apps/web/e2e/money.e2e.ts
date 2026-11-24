@@ -77,6 +77,7 @@ test("expenses, the cash in the drawer, a blind count, money to the bank and the
   // Profit: ₦10,000 sales − ₦6,000 cost − ₦1,500 transport − ₦500 short = ₦2,000.
   await page.goto("/app/money/profit");
   await expect(page.getByTestId("profit-amount")).toHaveText("₦2,000.00");
+  await expect(page.getByTestId("profit-uncosted")).toHaveCount(0);
   await expect(page.getByTestId("profit-card")).toContainText("Transport and delivery");
   await expect(page.getByTestId("profit-card")).toContainText("Cash short or over");
   await page.getByRole("tab", { name: "This month" }).click();
