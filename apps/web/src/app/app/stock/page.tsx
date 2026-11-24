@@ -52,6 +52,7 @@ function StockScreen() {
   const common = useTranslations("common");
   const batchText = useTranslations("batches");
   const serialText = useTranslations("serials");
+  const reorderText = useTranslations("reorder");
   const locale = useLocale();
   const access = useAccess();
   const stockText = useStockText();
@@ -175,6 +176,7 @@ function StockScreen() {
         actions={
           canAdd || canReceive || canLists ? (
             <>
+              <ActionLink href="/app/stock/to-buy">{reorderText("toBuyLink")}</ActionLink>
               {canLists ? <ActionLink href="/app/stock/lists">{t("lists")}</ActionLink> : null}
               {items.some((item) => item.tracksSerials) ? <ActionLink href="/app/stock/serials">{serialText("findLink")}</ActionLink> : null}
               {can(access, Permission.STOCK_TRANSFER) ? <ActionLink href="/app/stock/transfers">{t("transfersLink")}</ActionLink> : null}

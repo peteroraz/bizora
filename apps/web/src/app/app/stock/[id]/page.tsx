@@ -19,6 +19,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
 import { ProductBuying } from "../../../../components/product-buying";
+import { ReorderRules } from "../../../../components/reorder-rules";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
@@ -813,6 +814,8 @@ function ProductScreen() {
       ) : null}
 
       <ProductBuying productId={product.id} currency={product.currency} />
+
+      {product.trackStock && !product.archived ? <ReorderRules productId={product.id} shops={shops} onChanged={() => void load()} /> : null}
 
       {can(access, Permission.PRODUCTS_MANAGE) && !product.archived ? (
         <div className="space-y-3">

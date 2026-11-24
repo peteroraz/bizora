@@ -18,13 +18,14 @@ import { InventorySyncHandler } from "./inventory-sync.handler.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
 import { SerialService } from "./serial.service.js";
+import { ReorderService } from "./reorder.service.js";
 import { StockRequestService } from "./stock-request.service.js";
 import { StockService } from "./stock.service.js";
 
 @Module({
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, NotificationsModule],
   controllers: [InventoryController, CatalogController, StockOperationsController],
-  providers: [BatchService, ProductService, CatalogService, TransferService, CountSessionService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard, AttributeService, SerialService],
+  providers: [BatchService, ProductService, CatalogService, TransferService, CountSessionService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard, AttributeService, SerialService, ReorderService],
   exports: [StockService, ProductService, SerialService],
 })
 export class InventoryModule {}

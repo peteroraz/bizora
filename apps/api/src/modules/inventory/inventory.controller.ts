@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { Permission, success } from "@bizora/contracts";
+import { ApiError } from "../../common/errors.js";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
@@ -10,6 +11,7 @@ import { BatchService } from "./batch.service.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
 import { SerialService } from "./serial.service.js";
+import { ReorderService } from "./reorder.service.js";
 import { StockRequestService } from "./stock-request.service.js";
 import { StockService } from "./stock.service.js";
 
@@ -23,6 +25,7 @@ export class InventoryController {
     @Inject(StockRequestService) private readonly requests: StockRequestService,
     @Inject(BatchService) private readonly batches: BatchService,
     @Inject(SerialService) private readonly serials: SerialService,
+    @Inject(ReorderService) private readonly reorder: ReorderService,
   ) {}
 
   /** A product's batches in a shop, earliest expiry first (ADR-061). */
@@ -51,6 +54,33 @@ export class InventoryController {
   @RequirePermissions(Permission.STOCK_READ)
   async findSerial(@CurrentTenant() tenant: TenantContext, @Query("q") q?: string) {
     return success(await this.serials.lookup(tenant, q), tenant.correlationId);
+  }
+
+  /** A product's reorder rules, for every shop and each shop's own (ADR-063). */
+  @Get("products/:id/reorder")
+  @RequirePermissions(Permission.STOCK_READ)
+  async reorderRules(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    return success(await this.reorder.rules(tenant, id), tenant.correlationId);
+  }
+
+  @Put("products/:id/reorder")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async saveReorderRule(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.reorder.save(tenant, id, body), tenant.correlationId);
+  }
+
+  @Delete("products/:id/reorder")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async removeReorderRule(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Query("branchId") branchId?: string) {
+    if (branchId !== undefined && !/^[0-9a-f-]{36}$/i.test(branchId)) throw new ApiError("VALIDATION_FAILED", "Choose a shop.", 400, [{ field: "branchId", message: "Not a shop." }]);
+    return success(await this.reorder.remove(tenant, id, branchId), tenant.correlationId);
+  }
+
+  /** What to buy for a shop: products at or below their reorder point, with how much and from whom (ADR-063). */
+  @Get("stock/to-buy")
+  @RequirePermissions(Permission.STOCK_READ)
+  async toBuy(@CurrentTenant() tenant: TenantContext, @Query("branchId") branchId?: string) {
+    return success(await this.reorder.toBuy(tenant, branchId), tenant.correlationId);
   }
 
   /** Stock changes waiting for a manager or owner (ADR-034). */

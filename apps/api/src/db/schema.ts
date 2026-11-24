@@ -1994,6 +1994,24 @@ export const supplierProducts = pgTable(
   (table) => [uniqueIndex("supplier_products_key").on(table.tenantId, table.supplierId, table.productId)],
 );
 
+/** Reorder rules: minimum, target, maximum, usual supplier and lead time, for every shop or one (migration 0051, ADR-063). */
+export const reorderRules = pgTable("reorder_rules", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  branchId: uuid("branch_id"),
+  reorderPoint: bigint("reorder_point", { mode: "bigint" }),
+  minQuantity: bigint("min_quantity", { mode: "bigint" }),
+  targetQuantity: bigint("target_quantity", { mode: "bigint" }),
+  maxQuantity: bigint("max_quantity", { mode: "bigint" }),
+  leadTimeDays: integer("lead_time_days"),
+  preferredSupplierId: uuid("preferred_supplier_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by"),
+});
+
 /** A delivery of several products with charges spread over them (migration 0042, ADR-048). */
 export const stockReceipts = pgTable("stock_receipts", {
   id: uuid("id").primaryKey(),
