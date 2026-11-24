@@ -37,6 +37,8 @@ function NewProductScreen() {
   const t = useTranslations("stock");
   const batchText = useTranslations("batches");
   const [tracksBatches, setTracksBatches] = useState(false);
+  const serialText = useTranslations("serials");
+  const [tracksSerials, setTracksSerials] = useState(false);
   const unitName = useUnitName();
   const access = useAccess();
   const seeCost = can(access, Permission.PRICES_COST_READ);
@@ -104,6 +106,7 @@ function NewProductScreen() {
         barcode: barcode.trim() || null,
         trackStock,
         ...(trackStock && tracksBatches ? { tracksBatches: true } : {}),
+        ...(trackStock && tracksSerials ? { tracksSerials: true } : {}),
         packs: packs
           .filter((pack) => pack.size.trim())
           .map((pack) => ({ unitCode: pack.unitCode, baseQuantity: quantity(pack.size), ...(kobo(pack.price) ? { priceMinor: kobo(pack.price) } : {}) })),
@@ -274,13 +277,22 @@ function NewProductScreen() {
               </FormField>
             ) : null}
             {trackStock ? (
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-1" checked={tracksBatches} onChange={(event) => setTracksBatches(event.target.checked)} />
-                <span>
-                  <span className="block font-medium">{batchText("keep")}</span>
-                  <span className="block text-muted">{batchText("keepHint")}</span>
-                </span>
-              </label>
+              <>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={tracksBatches} onChange={(event) => setTracksBatches(event.target.checked)} />
+                  <span>
+                    <span className="block font-medium">{batchText("keep")}</span>
+                    <span className="block text-muted">{batchText("keepHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={tracksSerials} onChange={(event) => setTracksSerials(event.target.checked)} />
+                  <span>
+                    <span className="block font-medium">{serialText("keep")}</span>
+                    <span className="block text-muted">{serialText("keepHint")}</span>
+                  </span>
+                </label>
+              </>
             ) : null}
             <FormField id="product-barcode" label={t("barcode")} hint={t("optional")}>
               <Input id="product-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={64} inputMode="numeric" />

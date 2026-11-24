@@ -35,6 +35,8 @@ export const productWriteSchema = z.object({
   trackStock: z.boolean().optional(),
   /** Keep this product's stock in batches with expiry dates (ADR-061). */
   tracksBatches: z.boolean().optional(),
+  /** Keep a serial number or IMEI for each unit (ADR-062). */
+  tracksSerials: z.boolean().optional(),
   packs: z.array(packUnitInputSchema).max(5).optional(),
   /** Codes (ADR-046). A SKU is unique among the business's products in use; barcodes may repeat. */
   sku: z.string().trim().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/, "Use letters, numbers, spaces and . _ - / only.").optional().nullable(),
@@ -68,6 +70,19 @@ export const batchInputSchema = z.object({
   expiryDate: day.optional(),
   manufacturedDate: day.optional(),
 });
+/** A serial number or IMEI as stored: no spaces, in capitals (ADR-062). */
+export const normalizeSerial = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+/** Serial numbers typed or scanned one per line, or separated by commas. */
+export const splitSerials = (text: string) => text.split(/[\n,;]+/).map(normalizeSerial).filter(Boolean);
+export const SERIALS_PER_LINE_MAX = 100;
+export const serialSchema = z
+  .string()
+  .transform(normalizeSerial)
+  .pipe(z.string().min(1, "Enter the serial number.").max(64).regex(/^[A-Z0-9][A-Z0-9./-]*$/, "Use letters, numbers and . / - only."));
+export const serialListSchema = z
+  .array(serialSchema)
+  .max(SERIALS_PER_LINE_MAX)
+  .refine((list) => new Set(list).size === list.length, "The same serial number is there twice.");
 
 export const stockReceiveSchema = z.object({
   id: clientId.optional(),
@@ -86,6 +101,8 @@ export const stockReceiveSchema = z.object({
   /** When stock bought on credit must be paid for. */
   payBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30.").optional(),
   batch: batchInputSchema.optional(),
+  /** One serial number or IMEI per unit, for a product that keeps them (ADR-062). */
+  serials: serialListSchema.optional(),
   note,
 });
 
@@ -146,4 +163,9 @@ export const productPhotoUploadSchema = z
     contentType: z.enum(["image/jpeg", "image/png"]),
     dataBase64: z.string().min(16).max(Math.ceil(PRODUCT_PHOTO_MAX_BYTES / 3) * 4 + 4, "That photo is too large."),
   })
+  .strict();
+
+/** Serial numbers for a sale's lines, recorded after the sale (ADR-062). */
+export const saleSerialsSchema = z
+  .object({ lines: z.array(z.object({ saleLineId: z.string().uuid(), serials: serialListSchema.refine((list) => list.length > 0, "Enter at least one.") })).min(1).max(100) })
   .strict();

@@ -286,6 +286,7 @@ export class ProductService {
       ...payload,
       trackStock: item.itemType === "physical" ? (payload.trackStock ?? existing.trackStock) : false,
       tracksBatches: payload.tracksBatches ?? existing.tracksBatches,
+      tracksSerials: payload.tracksSerials ?? existing.tracksSerials,
     });
     // Without permission to see cost, the existing default cost is kept as it is.
     const seesCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
@@ -300,6 +301,7 @@ export class ProductService {
     if ((values.category ?? null) !== (existing.category ?? null)) changes.category = [existing.category ?? null, values.category ?? null];
     if (values.trackStock !== existing.trackStock) changes.trackStock = [String(existing.trackStock), String(values.trackStock)];
     if (values.tracksBatches !== existing.tracksBatches) changes.tracksBatches = [String(existing.tracksBatches), String(values.tracksBatches)];
+    if (values.tracksSerials !== existing.tracksSerials) changes.tracksSerials = [String(existing.tracksSerials), String(values.tracksSerials)];
     const reason = payload.changeReason?.trim() || null;
     if ((changes.price || changes.cost) && !reason) {
       throw new ApiError("REASON_REQUIRED", "Say why the price or cost is changing.", 400, [{ field: "changeReason", message: "Say why." }]);
@@ -508,6 +510,7 @@ export class ProductService {
       reference: product.reference,
       trackStock: product.trackStock,
       tracksBatches: product.tracksBatches,
+      tracksSerials: product.tracksSerials,
       archived: product.archivedAt !== null,
       updatedAt: product.updatedAt,
       ...(seeCost ? { defaultCostMinor: product.defaultCostMinor?.toString() ?? null } : {}),
@@ -539,6 +542,8 @@ export class ProductService {
       trackStock: payload.trackStock ?? true,
       // Batches only mean something for stock that is counted (ADR-061).
       tracksBatches: (payload.trackStock ?? true) && (payload.tracksBatches ?? false),
+      // Serial numbers only mean something for stock that is counted (ADR-062).
+      tracksSerials: (payload.trackStock ?? true) && (payload.tracksSerials ?? false),
       sku: payload.sku?.trim() || null,
       gtin: payload.gtin?.trim() || null,
       mpn: payload.mpn?.trim() || null,

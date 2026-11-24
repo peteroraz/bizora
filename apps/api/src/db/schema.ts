@@ -837,6 +837,8 @@ export const products = pgTable(
     trackStock: boolean("track_stock").notNull().default(true),
     /** Stock is kept in batches with expiry dates (migration 0049, ADR-061). */
     tracksBatches: boolean("tracks_batches").notNull().default(false),
+    /** Each unit has a serial number or IMEI (migration 0050, ADR-062). */
+    tracksSerials: boolean("tracks_serials").notNull().default(false),
     /**
      * The item this product is a variant of (migration 0040, ADR-046). Left out on insert, the database trigger
      * makes the product its own item (same ID), so every product always has one.

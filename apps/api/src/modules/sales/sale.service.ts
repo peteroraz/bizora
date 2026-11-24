@@ -46,6 +46,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { DocumentNumberService } from "../documents/document-number.service.js";
 import { findBranch, productUnitsFor, requireBusiness, resolveBranch, unitFactor, type BusinessRow, type ProductRow, type ProductUnitRow } from "../inventory/inventory-scope.js";
 import { StockService } from "../inventory/stock.service.js";
+import { SerialService } from "../inventory/serial.service.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
 import { BrandingService } from "../branding/branding.service.js";
@@ -129,6 +130,7 @@ export class SaleService {
     @Inject(NotificationService) private readonly notifications: NotificationService,
     @Inject(BrandingService) private readonly branding: BrandingService,
     @Inject(ReturnService) private readonly returns: ReturnService,
+    @Inject(SerialService) private readonly serials: SerialService,
     @Inject(EMAIL) private readonly email: EmailPort,
     @Inject(APP_ENV) private readonly env: AppEnv,
   ) {}
@@ -263,6 +265,11 @@ export class SaleService {
         actorType: tenant.actorType ?? "HUMAN",
       });
       await this.insertLines(tx, tenant, business.id, id, lines, []);
+      // Serial numbers or IMEIs of the units sold (ADR-062).
+      const serialsByLine = new Map(
+        payload.lines.flatMap((line, index) => ("serials" in line && line.serials?.length ? [[index + 1, line.serials] as [number, string[]]] : [])),
+      );
+      await this.serials.sellNewSale(tx, tenant, { businessId: business.id, branchId: branch.id, saleId: id, customerId: customer?.id ?? null, soldAt, live: source === "pos" }, serialsByLine);
       if (typedAt >= 0) await this.rememberTyped(tx, tenant, business.id, lines, soldAt, payload.itemSource === "voice" ? "voice" : "typed", business.rememberItems);
       if (settled) {
         await this.insertPayments(tx, tenant, business.id, id, payload.payments, settled.transfersWait);
@@ -654,6 +661,7 @@ export class SaleService {
           });
         }
       }
+      await this.serials.releaseSale(tx, tenant, sale.id);
       await tx.update(sales).set({ status: "voided", voidedAt: new Date(), voidedBy: tenant.userId, voidReason: reason }).where(and(eq(sales.tenantId, tenant.tenantId), eq(sales.id, sale.id)));
       await this.notifications.notify(tx, tenant.tenantId, [sale.membershipId, sale.collectedMembershipId], {
         kind: "sale.voided",
@@ -903,6 +911,13 @@ export class SaleService {
     }
     const customer = extra?.customer ?? null;
     const possibleById = await this.possibleProducts(tenant.tenantId, sale.source, lines);
+    const serialsByLine = await this.serials.ofLines(this.db, tenant.tenantId, lines.map((line) => line.id));
+    const lineProductIds = [...new Set(lines.flatMap((line) => (line.productId ? [line.productId] : [])))];
+    const keepsSerials = new Set(
+      lineProductIds.length
+        ? (await this.db.select({ id: products.id }).from(products).where(and(eq(products.tenantId, tenant.tenantId), inArray(products.id, lineProductIds), eq(products.tracksSerials, true)))).map((row) => row.id)
+        : [],
+    );
     const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     const seeContact = tenant.permissions.includes(Permission.CUSTOMERS_READ);
     const receiptPath = customerPath(await handleOf(this.db, sale.tenantId), "r", sale.receiptToken);
@@ -950,6 +965,8 @@ export class SaleService {
         lineTotalMinor: line.lineTotalMinor.toString(),
         ...(seeCost && line.costMinor !== null ? { costMinor: line.costMinor.toString() } : {}),
         ...(line.possibleProductId && possibleById.get(line.possibleProductId) ? { possibleProduct: possibleById.get(line.possibleProductId) } : {}),
+        serials: serialsByLine.get(line.id) ?? [],
+        keepsSerials: Boolean(line.productId && keepsSerials.has(line.productId)),
       })),
       payments: payments.map((payment) => ({
         id: payment.id,
@@ -1109,6 +1126,7 @@ export class SaleService {
       this.db.select().from(saleLines).where(and(eq(saleLines.tenantId, sale.tenantId), eq(saleLines.saleId, sale.id))).orderBy(asc(saleLines.lineNo)),
       this.db.select().from(salePayments).where(and(eq(salePayments.tenantId, sale.tenantId), eq(salePayments.saleId, sale.id))).orderBy(asc(salePayments.createdAt)),
     ]);
+    const serialsOnDocument = await this.serials.ofLines(this.db, sale.tenantId, lines.map((line) => line.id));
     const address = extra.address
       ? formatAddressDisplay({
           shopNumber: extra.address.shopNumber,
@@ -1145,6 +1163,7 @@ export class SaleService {
       cashier: extra.cashier,
       lines: lines.map((line) => ({
         description: line.description,
+        serials: serialsOnDocument.get(line.id) ?? [],
         enteredQuantity: line.enteredQuantity,
         enteredUnit: line.enteredUnit,
         unitPriceMinor: line.unitPriceMinor,
@@ -2140,6 +2159,13 @@ export class SaleService {
     }
     if (problem.resolvedAt) throw new ApiError("ALREADY_DEALT", "This has already been dealt with.", 409);
     return problem;
+  }
+
+  /** Serial numbers or IMEIs recorded after the sale (ADR-062). */
+  async addSerials(tenant: TenantContext, id: string, raw: unknown) {
+    const sale = await this.requireSale(this.db, tenant, id);
+    await this.serials.addToSale(tenant, sale.id, raw, { businessId: sale.businessId, branchId: sale.branchId, customerId: sale.customerId, soldAt: sale.soldAt, status: sale.status });
+    return this.get(tenant, id);
   }
 
   private async requireSale(executor: DbExecutor, tenant: TenantContext, id: string, lock = false): Promise<SaleRow> {

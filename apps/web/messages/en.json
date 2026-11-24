@@ -1280,7 +1280,8 @@
       "lowStockLevel": "Low-stock level",
       "category": "Category",
       "trackStock": "Counted in stock",
-      "tracksBatches": "Batches and expiry dates"
+      "tracksBatches": "Batches and expiry dates",
+      "tracksSerials": "Serial numbers"
     },
     "changedFrom": "{field}: {before} → {after}",
     "changeNone": "none",
@@ -1913,7 +1914,8 @@
       "stock_request_approved": "{name} approved: {summary}.",
       "stock_request_rejected": "{name} rejected: {summary}.",
       "work_locked_offline": "{name} recorded work offline while their shop was locked. It was kept; check it in the activity log.",
-      "work_after_hours_offline": "{name} recorded work offline outside opening hours. It was kept; check it in the activity log."
+      "work_after_hours_offline": "{name} recorded work offline outside opening hours. It was kept; check it in the activity log.",
+      "serial_conflict": "A sale made offline used a serial number already sold: {summary} The sale was kept without it."
     }
   },
   "capture": {
@@ -3091,5 +3093,48 @@
     "withinDays": "{days} days",
     "nothingExpiring": "Nothing here expires within {days} days.",
     "notice": "{expired, plural, =0 {} one {# batch is past its expiry date. } other {# batches are past their expiry date. }}{soon, plural, =0 {} one {# batch expires soon. } other {# batches expire soon. }}See expiring stock"
+  },
+  "serials": {
+    "keep": "Keep a serial number or IMEI for each unit",
+    "keepHint": "For phones, laptops, generators and anything sold with its own number. Each unit is recorded when it comes in and when it is sold, and the same number cannot be sold twice.",
+    "receiveLabel": "Serial numbers or IMEIs",
+    "receiveHint": "One for each unit, one per line. Scan or type them. Optional.",
+    "title": "{count, plural, =0 {No units by serial number here} one {# unit here by serial number} other {# units here by serial number}}",
+    "none": "Record serial numbers when stock comes in, or on the sale.",
+    "without": "{count, plural, one {# unit here has} other {# units here have}} no serial number recorded.",
+    "returnedTag": "brought back",
+    "findLink": "Find a serial number",
+    "onLine": "Serial no.: {serials}",
+    "add": "{count, plural, one {Add the serial number} other {Add serial numbers (# not recorded)}}",
+    "enterOne": "Enter a serial number.",
+    "tooMany": "{count, plural, one {Only # unit needs a serial number.} other {Only # units need a serial number.}}",
+    "save": "Save serial numbers",
+    "saving": "Saving…",
+    "failed": "Could not save. Check your connection and try again.",
+    "findTitle": "Find a serial number",
+    "findLead": "Type or scan a serial number or IMEI, or its first few characters, to see where the unit is and who bought it.",
+    "backToStock": "Back to stock",
+    "findLabel": "Serial number or IMEI",
+    "find": "Find",
+    "finding": "Finding…",
+    "tooShort": "Enter at least 3 characters.",
+    "notFound": "No unit with that serial number.",
+    "soldOn": "Sold on {number}",
+    "status": {
+      "in_stock": "In stock",
+      "sold": "Sold",
+      "returned": "Brought back",
+      "damaged": "Damaged",
+      "transferred": "Moved",
+      "reserved": "Kept for a customer"
+    },
+    "events": {
+      "received": "Came in",
+      "received_again": "Came in again",
+      "sold": "Sold",
+      "returned": "Brought back",
+      "returned_damaged": "Brought back damaged",
+      "sale_cancelled": "Sale cancelled, back in stock"
+    }
   }
 }

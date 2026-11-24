@@ -9,6 +9,7 @@ import { TenantGuard } from "../tenant/tenant.guard.js";
 import { BatchService } from "./batch.service.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
+import { SerialService } from "./serial.service.js";
 import { StockRequestService } from "./stock-request.service.js";
 import { StockService } from "./stock.service.js";
 
@@ -21,6 +22,7 @@ export class InventoryController {
     @Inject(ProductPhotoService) private readonly photos: ProductPhotoService,
     @Inject(StockRequestService) private readonly requests: StockRequestService,
     @Inject(BatchService) private readonly batches: BatchService,
+    @Inject(SerialService) private readonly serials: SerialService,
   ) {}
 
   /** A product's batches in a shop, earliest expiry first (ADR-061). */
@@ -35,6 +37,20 @@ export class InventoryController {
   @RequirePermissions(Permission.STOCK_READ)
   async expiring(@CurrentTenant() tenant: TenantContext, @Query("branchId") branchId?: string, @Query("days") days?: string) {
     return success(await this.batches.expiring(tenant, branchId, days), tenant.correlationId);
+  }
+
+  /** A product's units in a shop that can be sold, by serial number (ADR-062). */
+  @Get("products/:id/serials")
+  @RequirePermissions(Permission.STOCK_READ)
+  async productSerials(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Query("branchId") branchId?: string) {
+    return success(await this.serials.forProduct(tenant, id, branchId), tenant.correlationId);
+  }
+
+  /** Finds a unit by its serial number or IMEI, with what happened to it (ADR-062). */
+  @Get("stock/serials")
+  @RequirePermissions(Permission.STOCK_READ)
+  async findSerial(@CurrentTenant() tenant: TenantContext, @Query("q") q?: string) {
+    return success(await this.serials.lookup(tenant, q), tenant.correlationId);
   }
 
   /** Stock changes waiting for a manager or owner (ADR-034). */

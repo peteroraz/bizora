@@ -13,6 +13,8 @@ export type ProductView = {
   trackStock: boolean;
   /** Stock kept in batches with expiry dates (ADR-061). */
   tracksBatches?: boolean;
+  /** A serial number or IMEI is kept for each unit (ADR-062). */
+  tracksSerials?: boolean;
   archived?: boolean;
   defaultCostMinor?: string | null;
   stock: { quantity: string; belowZero: boolean; low?: boolean; valueMinor?: string };

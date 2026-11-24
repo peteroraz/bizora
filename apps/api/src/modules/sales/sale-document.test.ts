@@ -41,6 +41,12 @@ describe("sale documents", () => {
     expect(() => documentModel(base, "receipt")).toThrow();
   });
 
+  it("prints the serial numbers of the units sold under the item (ADR-062)", () => {
+    const phones: DocumentInput = { ...base, lines: [{ description: "Samsung A15", serials: ["352099001761481", "352099001761482"], enteredQuantity: 2000n, enteredUnit: "piece", unitPriceMinor: 67500n, lineTotalMinor: 135000n }] };
+    expect(documentModel(phones, "invoice").lines[0]?.description).toBe("Samsung A15\nSerial no.: 352099001761481, 352099001761482");
+    expect(documentModel(base, "invoice").lines[0]?.description).toBe("Peak Milk");
+  });
+
   it("turns into a credit invoice with the balance and due date, alongside the receipt for what was paid", () => {
     const credit: DocumentInput = {
       ...base,

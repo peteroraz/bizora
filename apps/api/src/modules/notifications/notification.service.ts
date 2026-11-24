@@ -7,7 +7,7 @@ import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { notifications, sales } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 
-export type NotificationKind = "sale.paid" | "sale.credit" | "sale.released" | "sale.comment" | "sale.voided" | "sale.below_price" | "sale.credit_offline" | "sale.closed_shop" | "sale.typed_like_product" | "transfer.waiting" | "transfer.not_received" | "stock.request" | "stock.request_approved" | "stock.request_rejected" | "work.locked_offline" | "work.after_hours_offline";
+export type NotificationKind = "sale.paid" | "sale.credit" | "sale.released" | "sale.comment" | "sale.voided" | "sale.below_price" | "sale.credit_offline" | "sale.closed_shop" | "sale.typed_like_product" | "sale.serial_conflict" | "transfer.waiting" | "transfer.not_received" | "stock.request" | "stock.request_approved" | "stock.request_rejected" | "work.locked_offline" | "work.after_hours_offline";
 
 const INBOX_SIZE = 30;
 

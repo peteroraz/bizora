@@ -11,6 +11,7 @@ import {
   parseQuantity,
   quantityToString,
   uuidv7,
+  splitSerials,
 } from "@bizora/contracts";
 import { Badge, Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useParams } from "next/navigation";
@@ -31,6 +32,7 @@ import { ProductPhotos } from "../../../../components/product-photos";
 // Making variants from attributes (ADR-060) loads only for people who manage products.
 const VariantMaker = lazy(() => import("../../../../components/variant-maker"));
 import { ProductBatches } from "../../../../components/product-batches";
+import { ProductSerials } from "../../../../components/product-serials";
 import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
@@ -96,6 +98,7 @@ function ProductScreen() {
   const t = useTranslations("stock");
   const common = useTranslations("common");
   const batchText = useTranslations("batches");
+  const serialText = useTranslations("serials");
   const locale = useLocale();
   const { timezone: timeZone } = usePlace();
   const access = useAccess();
@@ -203,7 +206,7 @@ function ProductScreen() {
     if (value === null || value === "") return t("changeNone");
     if (name === "price" || name === "cost") return money(value);
     if (name === "lowStockLevel") return stockText(value, product.baseUnit, product.packs);
-    if (name === "trackStock" || name === "tracksBatches") return value === "true" ? t("changeYes") : t("changeNo");
+    if (name === "trackStock" || name === "tracksBatches" || name === "tracksSerials") return value === "true" ? t("changeYes") : t("changeNo");
     return value;
   };
   const movementRow = (movement: Movement) => (
@@ -298,6 +301,7 @@ function ProductScreen() {
       {product.trackStock && product.tracksBatches ? (
         <ProductBatches productId={product.id} baseUnit={product.baseUnit} packs={product.packs} onHand={product.stock.quantity} onChanged={() => void load()} />
       ) : null}
+      {product.trackStock && product.tracksSerials ? <ProductSerials productId={product.id} onHand={product.stock.quantity} /> : null}
 
       {product.trackStock && can(access, Permission.STOCK_RECEIVE) ? (
         <Card>
@@ -337,6 +341,7 @@ function ProductScreen() {
                         },
                       }
                     : {}),
+                  ...(product.tracksSerials && splitSerials(field(form, "serials")).length > 0 ? { serials: splitSerials(field(form, "serials")) } : {}),
                 },
                 t("received"),
                 "stock.receive",
@@ -432,6 +437,18 @@ function ProductScreen() {
                   <Input id="receive-made" name="manufacturedDate" type="date" />
                 </FormField>
               </>
+            ) : null}
+            {product.tracksSerials ? (
+              <FormField id="receive-serials" label={serialText("receiveLabel")} hint={serialText("receiveHint")}>
+                <textarea
+                  id="receive-serials"
+                  name="serials"
+                  rows={3}
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  className="block min-h-11 w-full rounded-control border border-border bg-input px-3 py-2 text-base text-fg md:text-sm"
+                />
+              </FormField>
             ) : null}
             <FormField id="receive-note" label={t("note")} hint={t("receiveNoteHint")}>
               <SentenceInput id="receive-note" name="note" maxLength={240} />
@@ -716,6 +733,7 @@ function ProductScreen() {
                   barcode: product.barcode,
                   trackStock: product.trackStock,
                   ...(product.trackStock ? { tracksBatches: form.get("tracksBatches") === "on" } : {}),
+                  ...(product.trackStock ? { tracksSerials: form.get("tracksSerials") === "on" } : {}),
                   packs,
                   ...(seeCost ? { defaultCostMinor: cost ? (parseAmount(cost, product.currency) as bigint).toString() : null } : {}),
                   ...(field(form, "changeReason") ? { changeReason: field(form, "changeReason") } : {}),
@@ -765,13 +783,22 @@ function ProductScreen() {
               </FormField>
             ) : null}
             {product.trackStock ? (
-              <label className="flex items-start gap-2 text-sm sm:col-span-2">
-                <input type="checkbox" className="mt-1" name="tracksBatches" defaultChecked={product.tracksBatches ?? false} />
-                <span>
-                  <span className="block font-medium">{batchText("keep")}</span>
-                  <span className="block text-muted">{batchText("keepHint")}</span>
-                </span>
-              </label>
+              <>
+                <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                  <input type="checkbox" className="mt-1" name="tracksBatches" defaultChecked={product.tracksBatches ?? false} />
+                  <span>
+                    <span className="block font-medium">{batchText("keep")}</span>
+                    <span className="block text-muted">{batchText("keepHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                  <input type="checkbox" className="mt-1" name="tracksSerials" defaultChecked={product.tracksSerials ?? false} />
+                  <span>
+                    <span className="block font-medium">{serialText("keep")}</span>
+                    <span className="block text-muted">{serialText("keepHint")}</span>
+                  </span>
+                </label>
+              </>
             ) : null}
             <FormField id="edit-reason" label={t("changeReason")} hint={t("changeReasonHint")}>
               <SentenceInput id="edit-reason" name="changeReason" maxLength={240} />
