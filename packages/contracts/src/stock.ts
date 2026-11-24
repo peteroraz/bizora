@@ -33,6 +33,8 @@ export const productWriteSchema = z.object({
   lowStockLevel: z.union([decimalQuantity, z.literal("0")]).optional().nullable(),
   barcode: z.string().trim().max(64).optional().nullable(),
   trackStock: z.boolean().optional(),
+  /** Keep this product's stock in batches with expiry dates (ADR-061). */
+  tracksBatches: z.boolean().optional(),
   packs: z.array(packUnitInputSchema).max(5).optional(),
   /** Codes (ADR-046). A SKU is unique among the business's products in use; barcodes may repeat. */
   sku: z.string().trim().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/, "Use letters, numbers, spaces and . _ - / only.").optional().nullable(),
@@ -58,6 +60,15 @@ export const productCreateSchema = productWriteSchema.extend({
   openingCostMinor: minorAmount.optional(),
 });
 
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30.");
+
+/** The batch stock came in under, for a product that keeps batches (ADR-061). Each part is optional. */
+export const batchInputSchema = z.object({
+  batchNumber: z.string().trim().max(64).optional(),
+  expiryDate: day.optional(),
+  manufacturedDate: day.optional(),
+});
+
 export const stockReceiveSchema = z.object({
   id: clientId.optional(),
   productId: z.string().uuid(),
@@ -72,6 +83,7 @@ export const stockReceiveSchema = z.object({
   supplierId: z.string().uuid().optional(),
   /** When stock bought on credit must be paid for. */
   payBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30.").optional(),
+  batch: batchInputSchema.optional(),
   note,
 });
 
@@ -85,6 +97,8 @@ export const stockAdjustSchema = z
     unit: unitCodeSchema,
     /** Taking stock off or adding it by hand always says what happened (7f). */
     note: requiredNote,
+    /** Taking stock off one batch (expired, damaged), for a product that keeps batches (ADR-061). */
+    batchId: z.string().uuid().optional(),
   })
   .refine(
     (value) =>

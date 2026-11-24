@@ -6,6 +6,7 @@ import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
+import { BatchService } from "./batch.service.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
 import { StockRequestService } from "./stock-request.service.js";
@@ -19,7 +20,22 @@ export class InventoryController {
     @Inject(StockService) private readonly stock: StockService,
     @Inject(ProductPhotoService) private readonly photos: ProductPhotoService,
     @Inject(StockRequestService) private readonly requests: StockRequestService,
+    @Inject(BatchService) private readonly batches: BatchService,
   ) {}
+
+  /** A product's batches in a shop, earliest expiry first (ADR-061). */
+  @Get("products/:id/batches")
+  @RequirePermissions(Permission.STOCK_READ)
+  async productBatches(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Query("branchId") branchId?: string) {
+    return success(await this.batches.forProduct(tenant, id, branchId), tenant.correlationId);
+  }
+
+  /** Stock past its expiry date, or close to it (ADR-061). */
+  @Get("stock/expiring")
+  @RequirePermissions(Permission.STOCK_READ)
+  async expiring(@CurrentTenant() tenant: TenantContext, @Query("branchId") branchId?: string, @Query("days") days?: string) {
+    return success(await this.batches.expiring(tenant, branchId, days), tenant.correlationId);
+  }
 
   /** Stock changes waiting for a manager or owner (ADR-034). */
   @Get("stock/requests")

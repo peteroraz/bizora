@@ -84,6 +84,7 @@ export class StockReceiptService {
             unit: line.unit,
             totalCostMinor: line.totalCostMinor,
             paidFrom: payload.paidFrom,
+            ...(line.batch ? { batch: line.batch } : {}),
             ...(supplier ? { supplierId: supplier.id } : {}),
             ...(payload.payBy ? { payBy: payload.payBy } : {}),
             ...(payload.note ? { note: payload.note } : {}),

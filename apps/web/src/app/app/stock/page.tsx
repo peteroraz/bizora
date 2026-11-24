@@ -50,6 +50,7 @@ function totalsOf(items: { quantity: string; priceMinor: string | null; trackSto
 function StockScreen() {
   const t = useTranslations("stock");
   const common = useTranslations("common");
+  const batchText = useTranslations("batches");
   const locale = useLocale();
   const access = useAccess();
   const stockText = useStockText();
@@ -135,6 +136,14 @@ function StockScreen() {
     void loadChecks();
   }, [load, loadChecks]);
 
+  // Stock past its expiry date or close to it (ADR-061). Nothing shows for a business that keeps no batches.
+  const [expiring, setExpiring] = useState<{ expired: number; soon: number } | null>(null);
+  useEffect(() => {
+    void api("/api/v1/stock/expiring")
+      .then(async (response) => (response.ok ? setExpiring((await response.json()).data) : undefined))
+      .catch(() => undefined);
+  }, []);
+
   // What the approver says about each count (7f): optional to approve, needed to reject.
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [decisionError, setDecisionError] = useState<Record<string, string>>({});
@@ -194,6 +203,15 @@ function StockScreen() {
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
           {offlineSince ? t("offline", { when: formatWhen(offlineSince, locale, Intl.DateTimeFormat().resolvedOptions().timeZone) }) : t("offlineNever")}
         </p>
+      ) : null}
+      {expiring && expiring.expired + expiring.soon > 0 ? (
+        <a
+          href="/app/stock/expiring"
+          className={`block rounded-card border px-4 py-3 text-sm ${expiring.expired > 0 ? "border-danger bg-danger-bg text-danger" : "border-warning bg-warning-bg text-warning"}`}
+          data-testid="expiring-notice"
+        >
+          {batchText("notice", { expired: expiring.expired, soon: expiring.soon })}
+        </a>
       ) : null}
       {totals && totals.products > 0 ? (
         <Card className="p-4" data-testid="stock-totals">

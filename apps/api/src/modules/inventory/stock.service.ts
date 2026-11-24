@@ -40,6 +40,7 @@ import {
   resolveBranch,
   unitFactor,
 } from "./inventory-scope.js";
+import { addToBatch, batchesOfMovement, takeFromBatches, type BatchIn } from "./batches.js";
 
 /** "1 bag", "2 bags", "1.5 kg": for messages to people. */
 const unitWord = (unit: string, quantity: bigint) => (quantity === 1000n || ["kg", "g", "ml", "l", "dozen"].includes(unit) ? unit : `${unit}s`);
@@ -89,6 +90,11 @@ export type MovementInput = {
    * made on a phone with no network, sales typed in from a book or photo, and count corrections.
    */
   mayGoBelowZero?: boolean;
+  /** For a product that keeps batches (ADR-061): the batch stock comes in under, or the one batch it leaves from. */
+  batch?: BatchIn | null;
+  batchId?: string | null;
+  /** Stock arriving from another shop: keeps the batches it left with. */
+  batchesOfMovementId?: string | null;
   documentType?: DocumentType | null;
   occurredAt?: Date;
 };
@@ -221,7 +227,43 @@ export class StockService {
       })
       .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, branch.id), eq(stockBalances.productId, product.id)));
 
-    return { id, valueMinor: value, chargesMinor, documentNumber, quantity: next.quantity, negative };
+    const batches = product.tracksBatches ? await this.moveBatches(tx, context, id, input, occurredAt, position.quantity) : [];
+
+    return { id, valueMinor: value, chargesMinor, documentNumber, quantity: next.quantity, negative, batches };
+  }
+
+  /** Moves batch quantities with the movement (ADR-061). The value of stock is unchanged: batches hold quantities. */
+  private async moveBatches(tx: DbExecutor, context: Context, movementId: string, input: MovementInput, occurredAt: Date, onHand: bigint) {
+    const scope = {
+      tenantId: context.tenant.tenantId,
+      businessId: context.business.id,
+      branchId: context.branch.id,
+      productId: context.product.id,
+      productName: context.product.name,
+    };
+    if (input.quantity > 0n) {
+      if (input.batchesOfMovementId) {
+        const carried = await batchesOfMovement(tx, scope.tenantId, input.batchesOfMovementId);
+        const used = [];
+        let left = input.quantity;
+        for (const batch of carried) {
+          const take = batch.quantity < left ? batch.quantity : left;
+          if (take <= 0n) break;
+          used.push(...(await addToBatch(tx, scope, movementId, take, batch, occurredAt)));
+          left -= take;
+        }
+        if (left > 0n) used.push(...(await addToBatch(tx, scope, movementId, left, {}, occurredAt)));
+        return used;
+      }
+      return addToBatch(tx, scope, movementId, input.quantity, { ...(input.batch ?? {}), supplierId: input.supplierId ?? null }, occurredAt);
+    }
+    return takeFromBatches(tx, scope, movementId, -input.quantity, {
+      batchId: input.batchId ?? null,
+      today: localDate(new Date(), context.business.timezone),
+      onHand,
+      preferFresh: input.type === "sold" || input.type === "job_use",
+      refuseExpired: input.type === "sold" && !input.mayGoBelowZero,
+    });
   }
 
   // Stock in ---------------------------------------------------------------------------------------------------
@@ -277,6 +319,7 @@ export class StockService {
       paidFrom: payload.paidFrom,
       totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
       documentType: "stock_in",
+      ...(payload.batch ? { batch: payload.batch } : {}),
       ...(options.charges ? { charges: options.charges } : {}),
       ...(options.receiptId ? { receiptId: options.receiptId } : {}),
       ...(options.occurredAt ? { occurredAt: options.occurredAt } : {}),
@@ -415,6 +458,7 @@ export class StockService {
       enteredUnit: payload.unit,
       reason: payload.reason,
       note: payload.note ?? null,
+      ...(payload.batchId && payload.direction === "remove" ? { batchId: payload.batchId } : {}),
     });
     await this.record(tx, tenant, "stock.adjusted", result.id, context, { reason: payload.reason, note: payload.note, quantity: payload.quantity, unit: payload.unit, direction: payload.direction });
     return this.presentResult(tenant, result);
@@ -458,6 +502,7 @@ export class StockService {
       note: payload.note ?? null,
       transferId,
       valueMinor: -out.valueMinor,
+      batchesOfMovementId: out.id,
     });
     // The quick way (sent and received at once) is kept as a transfer too, so every transfer has one history (ADR-047).
     const now = new Date();
@@ -529,6 +574,7 @@ export class StockService {
         note,
         transferId,
         valueMinor: -out.valueMinor,
+        batchesOfMovementId: out.id,
       });
       await this.record(tx, tenant, "stock.transferred", out.id, from, { note, toBranchId, quantity: row.quantity.toString(), unit: from.product.baseUnit, shopClosed: true });
     }

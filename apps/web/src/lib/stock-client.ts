@@ -11,6 +11,8 @@ export type ProductView = {
   lowStockLevel: string | null;
   barcode: string | null;
   trackStock: boolean;
+  /** Stock kept in batches with expiry dates (ADR-061). */
+  tracksBatches?: boolean;
   archived?: boolean;
   defaultCostMinor?: string | null;
   stock: { quantity: string; belowZero: boolean; low?: boolean; valueMinor?: string };

@@ -1269,7 +1269,8 @@
       "cost": "Cost",
       "lowStockLevel": "Low-stock level",
       "category": "Category",
-      "trackStock": "Counted in stock"
+      "trackStock": "Counted in stock",
+      "tracksBatches": "Batches and expiry dates"
     },
     "changedFrom": "{field}: {before} → {after}",
     "changeNone": "none",
@@ -2941,5 +2942,37 @@
       "cleared": "This customer now buys at everyday prices.",
       "failed": "That did not save. Check your connection and try again."
     }
+  },
+  "batches": {
+    "keep": "Keep batches and expiry dates",
+    "keepHint": "For medicines, food, cosmetics and anything with a use-by date. Each delivery is kept with its batch number and expiry date, and sales take the earliest expiry first.",
+    "batchNumber": "Batch or lot number",
+    "batchNumberHint": "As printed on the pack. Optional.",
+    "expiryDate": "Expiry date",
+    "expiryDateHint": "Optional. Bizora warns you before it passes.",
+    "manufacturedDate": "Date made",
+    "title": "Batches here",
+    "lead": "Earliest expiry first. Sales take from the batch that expires first.",
+    "none": "No batches here yet. Record stock that came in with its batch and expiry date.",
+    "noNumber": "No batch number",
+    "noExpiry": "No expiry date",
+    "expiredAgo": "Expired {date}, {days, plural, one {# day} other {# days}} ago",
+    "expiresToday": "Expires today, {date}",
+    "daysLeft": "Expires {date}, {days, plural, one {# day} other {# days}} left",
+    "expired": "Expired",
+    "soon": "Expiring soon",
+    "takeOff": "Take off as expired",
+    "takenOff": "Expired stock taken off.",
+    "expiredNote": "Past its expiry date (batch {batch})",
+    "sentForApproval": "Sent to a manager to approve.",
+    "saving": "Saving…",
+    "failed": "Could not save. Check your connection and try again.",
+    "expiringTitle": "Expiring stock",
+    "expiringLead": "Stock in this shop that is past its expiry date, or close to it. Take expired stock off from the product's page.",
+    "backToStock": "Back to stock",
+    "within": "Show what expires within",
+    "withinDays": "{days} days",
+    "nothingExpiring": "Nothing here expires within {days} days.",
+    "notice": "{expired, plural, =0 {} one {# batch is past its expiry date. } other {# batches are past their expiry date. }}{soon, plural, =0 {} one {# batch expires soon. } other {# batches expire soon. }}See expiring stock"
   }
 }
