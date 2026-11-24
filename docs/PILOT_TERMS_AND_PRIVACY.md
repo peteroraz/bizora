@@ -1,34 +1,26 @@
 # Pilot terms and privacy
 
-Pilot readiness, item 25. 23 Nov 2026.
+Pilot readiness, item 25. 23 Nov 2026; the pilot section went live on 24 Nov 2026.
 
 ## What changed in the app
 
-- **Privacy notice** (`/privacy`). It now says:
-  - While Bizora is in its pilot, it **counts how it is used**: sales made offline, changes refused when a phone syncs, voice downloads that failed. The counts never include what was said or typed, amounts, names or phone numbers (ADR-045).
-  - The owner can **download all of the business's records** at any time from Settings.
+- **Terms of use** (`/terms`), **version 2026-11-24** (ADR-068). Section **13. The pilot** is now live. It says:
+  - Bizora is a test version in a pilot: it may have faults, change or be unavailable, and holds no security or data protection certification;
+  - Bizora support may see the records read-only, as section 5 explains, and every look is shown to the owner;
+  - Google Cloud keeps the records for Bizora; backups are kept but are not a promise; the owner should download their own copy;
+  - experimental features, such as saying a sale, may be wrong more often, and must be checked before confirming; features can be switched per business;
+  - **offline storage on the phone:** products, prices, stock, customer names and unsent work stay on the device until sent. Lock phones, and do not clear the browser's data while work is waiting;
+  - **voice on the phone:** speech is turned into words on the phone, and the recording is not sent or kept. It can mishear names, numbers and amounts, is tested in English only, and nothing is saved until checked and confirmed;
+  - Bizora is **not accounting, tax or legal advice**;
+  - the pilot may end, with at least 30 days' notice and time to download records.
 
-  A privacy notice can be updated without asking people to accept it again.
-- **Terms of use** (`/terms`, version 2026-11-20). **Not changed.**
-  - They already say that Bizora is free for now, provided as it is, may change, and keeps backups without promising none will fail.
-  - They already cover support access, photo reading and limits of responsibility.
-  - Changing them means a new version that every owner must accept (section 11), and they are still marked "Draft — to be reviewed by counsel". So the pilot wording below is a **proposal for counsel**, not live text.
+  Every owner is asked to accept the new version the next time they open the app. `admin-part2.test.ts` checks it.
+- **Privacy notice** (`/privacy`). Two paragraphs are added:
+  - **offline storage:** what the phone keeps, and that it is removed when Shop mode is signed out with nothing waiting;
+  - **on-phone voice:** speech is turned into words on the phone, the recording never leaves it, and only a confirmed sale is sent.
 
-## Proposed pilot section for the Terms of use (for counsel)
-
-> **13. The pilot**
->
-> Bizora is being tried with a small number of businesses before it is offered to everyone (the pilot). During the pilot:
->
-> - Some features are marked **experimental**, such as saying a sale on the phone. They may be wrong more often than other features. Check everything they fill in before you confirm it.
-> - We may switch a feature on or off for your business, for example to find a fault. You can see every change and its reason in Settings, Bizora support.
-> - We count how Bizora is used, as the Privacy notice explains, to find problems. The counts never include what was said or typed, amounts, names or phone numbers.
-> - Bizora does not take card or online payments. Record payments you received in cash, by transfer or by POS.
-> - Keep your own copy of your records: download them from Settings, as often as you like.
-> - Bizora does not hold any security or data protection certification yet, and does not claim one.
-> - The pilot may end. If it does, we will tell you at least 30 days ahead, and you can download your records before your account is closed.
-
-If counsel accepts it, bump `TERMS_VERSION` in `packages/contracts/src/identity.ts` and the version in the text. Owners will be asked to accept the new version the next time they open the app. The tests that check the version need updating in the same change.
+  Already there: the pilot measures, and the owner's records download. A privacy notice can be updated without asking people to accept it again.
+- **Both are still marked "Draft — to be reviewed by counsel".** Counsel's review is needed before general availability. If they change the terms, `TERMS_VERSION` moves again and owners accept once more.
 
 ## What must not be said
 

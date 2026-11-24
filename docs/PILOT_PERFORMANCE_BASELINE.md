@@ -103,3 +103,45 @@ node --experimental-strip-types scripts/perf-baseline.ts https://bizora-staging.
 ```
 
 The script refuses a URL that looks like production.
+
+## Pilot calls: sign-in, search, stock lookup, reports, several shops
+
+Pilot paperwork, Task 10.5. Measured on **24 Nov 2026** with `scripts/perf-pilot-calls.ts`, on the same kind of local machine: 2 vCPUs, the API (production build, one process) and Postgres 16.
+
+**What was measured.** One new business was filled through the API, as the app does it:
+- **5 shops**, each with its own sign-in session, as when a shop is chosen at the top of the screen;
+- **2,000 products** through the product import, with stock in every shop;
+- **2,000 sales** spread over the 5 shops.
+
+Filling took 80 seconds. Each call was then made 20 times, one at a time, with no other load.
+
+| Call | Count | Median ms | 95th percentile ms | Slowest ms | Errors |
+| --- | --- | --- | --- | --- | --- |
+| Sign in (email and password) | 20 | 141 | 152 | 152 | 0 |
+| Product search | 20 | 22 | 30 | 30 | 0 |
+| Product list, a later page | 20 | 16 | 21 | 21 | 0 |
+| Stock lookup (one product, all shops) | 20 | 11 | 20 | 20 | 0 |
+| Low stock | 20 | 7 | 11 | 11 | 0 |
+| Sales summary (today) | 20 | 10 | 16 | 16 | 0 |
+| Top items | 20 | 12 | 79 | 79 | 0 |
+| Profit for the month | 20 | 24 | 1,958 | 1,958 | 0 |
+| Dashboard | 20 | 9 | 17 | 17 | 0 |
+| Today's sales, one shop of 5 | 20 | 13 | 25 | 25 | 0 |
+| Low stock, one shop of 5 | 20 | 7 | 12 | 12 | 0 |
+
+**What it shows:**
+- **Sign-in takes about 0.14 s.** That is mostly the password hash, which is meant to be slow.
+- **Reads take 7 to 24 ms at the median with five shops**, the same as with one shop. A shop's own lists do not slow down because there are other shops.
+- **Profit for the month:** one call of the 20 took about 2 s; the median was 24 ms. This is worth watching on staging (runbook step 8).
+- **The 50,000-product list** is measured with `scripts/perf-catalog.ts`. Its numbers arrive with PR #71, under "Large catalogs".
+
+**Running it:**
+
+```bash
+node --experimental-strip-types scripts/perf-pilot-calls.ts http://localhost:3042 --shops 5 --products 2000 --sales 2000 --runs 20
+# Against staging (makes a business full of made-up records; never production):
+node --experimental-strip-types scripts/perf-pilot-calls.ts https://bizora-staging.baseportals.app
+```
+
+The local API runs with `NODE_ENV=development EMAIL_PROVIDER=console`, because a production configuration needs a real email provider. The script refuses a URL that looks like production.
+

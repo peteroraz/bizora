@@ -197,6 +197,8 @@
       "Authorised Bizora staff may see a business's records, read-only, to give support, fix faults, keep the service secure or meet the law, as the Terms of use explain. Customers' phone numbers and emails are partly hidden from them, and every look is recorded and shown to the owner.",
       "You can ask us to correct or delete your account data. The owner can download all of the business's records at any time, from Settings. Customer records you entered belong to your business and are removed when that business is deleted.",
       "While Bizora is being tried with a small number of businesses (the pilot), we count how it is used, to find problems and improve it: for example how many sales were made offline, whether a change sent from a phone was refused, or whether a voice download failed. These counts never include what was said or typed, amounts, names or phone numbers.",
+      "To let you work with no network, the app keeps some records on the phone or computer you use: your products, prices and stock, the names of customers you may sell to (names only, never their phone numbers or emails), and the work you do until it is sent. It stays on that device and is removed when you sign out of Shop mode, once nothing is waiting to be sent. Keep your phones locked.",
+      "When you say a sale, the speech is turned into words on the phone itself. The recording never leaves the phone and is not kept. Only the sale you check and confirm is sent. The speech model is downloaded once from Bizora and kept on the phone until you remove it in Settings.",
       "This page will be replaced after counsel reviews it. Until then, do not treat it as a finished privacy notice."
     ],
     "termsVersion": "Version {version}. These terms apply from 20 November 2026.",
@@ -304,6 +306,20 @@
         "paragraphs": [
           "These terms are governed by the laws of the Federal Republic of Nigeria. If we disagree, we will first try to settle it by talking. If that fails, the courts of Nigeria decide, unless the law of your country lets you go to your own courts.",
           "Contact us through Help in the app."
+        ]
+      },
+      {
+        "id": "pilot",
+        "title": "13. The pilot",
+        "paragraphs": [
+          "Bizora is being tried with a small number of businesses before it is offered to everyone (the pilot). During the pilot, Bizora is a test version: it may have faults, change often, or be unavailable at times, and features may be added, changed or removed. It is not a finished product, and Bizora does not hold any security or data protection certification.",
+          "Bizora support may see your business's records, read-only, to help you, fix faults and keep the service safe, as section 5 explains. Every look is recorded and shown to you in Settings, Bizora support.",
+          "Your records are kept by Google Cloud for us. We keep backups of the service, but a backup is not a promise that nothing can ever be lost. Keep your own copy: the owner can download all of the business's records from Settings, as often as they like.",
+          "Some features are marked experimental, such as saying a sale. They may be wrong more often than other features. Check everything they fill in before you confirm it. We may switch a feature on or off for your business, for example to find a fault; you can see every change and its reason in Settings.",
+          "So that you can work with no network, Bizora keeps a copy of your products, prices, stock, the names of customers you may sell to, and the work you do offline, on the phone or computer you use, until that work is sent. Anyone who can open that phone may see it. Lock your phones, sign out of phones you no longer use, and do not clear the browser's data while work is waiting to be sent: work that was never sent cannot be recovered by us.",
+          "When you say a sale, the speech is turned into words on your phone. The recording is not sent to us and is not kept. Speech can be misheard, especially names, numbers and amounts, in noise, or with accents and languages it has not been tested on. It is tested in English only. Nothing said is saved until you check it and confirm it.",
+          "Bizora helps you keep your records. It is not accounting, tax or legal advice, and it does not replace an accountant or a tax adviser. Check the figures before you rely on them for tax returns, loans or other decisions.",
+          "The pilot may end. If it does, we will tell you at least 30 days ahead, and you can download your records before your account is closed."
         ]
       }
     ]
