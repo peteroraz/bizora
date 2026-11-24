@@ -12,6 +12,8 @@ import { useAccess, usePlace } from "../../../../lib/access-context";
 import { AmountInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 import { formatCurrency } from "../../../../i18n/format";
 import { api } from "../../../../lib/api";
+import { addOfflineProduct } from "../../../../lib/offline/catalog";
+import { enqueue } from "../../../../lib/offline/outbox";
 import { photoToUpload } from "../../../../lib/capture-client";
 
 type Option = { id: string; name: string; path?: string; active?: boolean };
@@ -78,6 +80,7 @@ function NewProductScreen() {
   const [openingQuantity, setOpeningQuantity] = useState("");
   const [openingCost, setOpeningCost] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [savedOffline, setSavedOffline] = useState<{ name: string; leftOut: boolean } | null>(null);
   const [pending, setPending] = useState(false);
   // What the opening stock cost, worked out from the quantity and the cost per unit until the total is typed.
   const openingThousandths = parseQuantity(openingQuantity);
@@ -115,6 +118,8 @@ function NewProductScreen() {
       return;
     }
     setPending(true);
+    // No network: the product waits on this phone and can be sold here at once (ADR-064).
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return saveOffline(body);
     // A brand typed but not on the list is added first.
     if (!brandId && brandName.trim()) {
       const made = await api("/api/v1/catalog/brands", { method: "POST", headers: { [IDEMPOTENCY_HEADER]: uuidv7() }, body: JSON.stringify({ name: brandName.trim() }) }).catch(() => null);
@@ -127,8 +132,9 @@ function NewProductScreen() {
       headers: { [IDEMPOTENCY_HEADER]: uuidv7() },
       body: JSON.stringify(body),
     }).catch(() => null);
-    const payload = response ? await response.json().catch(() => null) : null;
-    if (response?.ok) {
+    if (!response) return saveOffline(body);
+    const payload = await response.json().catch(() => null);
+    if (response.ok) {
       const id = payload.data.product.id as string;
       // The photo is optional and sent after the item is saved; the item is kept even if the photo fails.
       if (photo) {
@@ -138,7 +144,39 @@ function NewProductScreen() {
       window.location.href = `/app/stock/${id}`;
       return;
     }
-    setError(response?.status === 409 ? t("duplicate") : (payload?.error?.message ?? t("failed")));
+    setError(response.status === 409 ? t("duplicate") : (payload?.error?.message ?? t("failed")));
+    setPending(false);
+  }
+
+  async function saveOffline(body: Record<string, unknown>) {
+    if (!access.owner) {
+      setError(t("failed"));
+      setPending(false);
+      return;
+    }
+    await enqueue(access.owner, "product.create", body);
+    const branchId = access.branchId;
+    if (branchId) {
+      const opening = typeof body.openingQuantity === "string" ? parseQuantity(body.openingQuantity) : null;
+      await addOfflineProduct(
+        access.owner.tenantId,
+        branchId,
+        {
+          id: String(body.id),
+          name: name.trim(),
+          category: category.trim() || null,
+          baseUnit,
+          priceMinor: typeof body.priceMinor === "string" ? body.priceMinor : null,
+          packs: [],
+          lowStockLevel: null,
+          barcode: barcode.trim() || null,
+          trackStock: body.trackStock !== false,
+          archived: false,
+        },
+        opening ? opening.toString() : null,
+      ).catch(() => undefined);
+    }
+    setSavedOffline({ name: name.trim(), leftOut: Boolean(photo) || (!brandId && Boolean(brandName.trim())) });
     setPending(false);
   }
 
@@ -151,7 +189,22 @@ function NewProductScreen() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeader title={t("newTitle")} intro={t("newLead")} />
-      <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
+      {savedOffline ? (
+        <Card data-testid="product-saved-offline">
+          <p className="text-sm font-medium">{t("savedOfflineTitle", { name: savedOffline.name })}</p>
+          <p className="text-sm text-muted">{t("savedOfflineLead")}</p>
+          {savedOffline.leftOut ? <p className="mt-1 text-sm text-warning">{t("savedOfflineLeftOut")}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => window.location.reload()}>
+              {t("addAnother")}
+            </Button>
+            <Link href="/app/stock" className="inline-flex min-h-11 items-center rounded-control border border-border px-4 text-sm">
+              {t("backToStock")}
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+      <SafeForm className={savedOffline ? "hidden" : "space-y-4"} pending={pending} onSubmit={() => void save()}>
         <FormField id="product-name" label={t("name")}>
           <SentenceInput id="product-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
         </FormField>

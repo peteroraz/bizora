@@ -12,10 +12,10 @@ import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { branches, products, stockBalances, stockCountSessionLines, stockCountSessions } from "../../db/schema.js";
+import { branches, products, stockCountSessionLines, stockCountSessions } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
-import { productUnitsFor, requireBusiness, requireProduct, resolveBranch, unitFactor } from "./inventory-scope.js";
+import { balanceAt, countTime, productUnitsFor, requireBusiness, requireProduct, resolveBranch, unitFactor } from "./inventory-scope.js";
 import { StockService } from "./stock.service.js";
 
 type SessionRow = typeof stockCountSessions.$inferSelect;
@@ -80,7 +80,7 @@ export class CountSessionService {
   }
 
   /** Counting a product (again) in this session. The expected quantity is what the system holds now. */
-  async count(tenant: TenantContext, id: string, raw: unknown) {
+  async count(tenant: TenantContext, id: string, raw: unknown, options: { countedAt?: Date } = {}) {
     const payload = parse(countSessionLineSchema, raw, "Check the count.");
     await this.db.transaction(async (tx) => {
       const session = await this.find(tx, tenant, id, { lock: true });
@@ -90,12 +90,9 @@ export class CountSessionService {
       const units = (await productUnitsFor(tx, tenant.tenantId, [product.id])).get(product.id) ?? [];
       const entered = parseCountQuantity(payload.countedQuantity) as bigint;
       const counted = (entered * unitFactor(product, units, payload.unit) + 500n) / 1000n;
-      const [balance] = await tx
-        .select({ quantity: stockBalances.quantity })
-        .from(stockBalances)
-        .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, session.branchId), eq(stockBalances.productId, product.id)))
-        .limit(1);
-      const expected = balance?.quantity ?? 0n;
+      // Counted offline: compared with the stock when it was counted, not when it arrived (ADR-064).
+      const countedAt = countTime(options.countedAt, session.createdAt);
+      const expected = await balanceAt(tx, tenant.tenantId, session.branchId, product.id, countedAt);
       const difference = counted - expected;
       const values = {
         systemQuantity: expected,
@@ -109,7 +106,7 @@ export class CountSessionService {
         countedBy: tenant.userId,
         countedMembershipId: tenant.membershipId,
         deviceId: tenant.deviceId ?? null,
-        countedAt: new Date(),
+        countedAt: countedAt ?? new Date(),
       };
       await tx
         .insert(stockCountSessionLines)

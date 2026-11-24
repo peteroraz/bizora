@@ -38,6 +38,8 @@ import {
   requireBusiness,
   requireProduct,
   resolveBranch,
+  balanceAt,
+  countTime,
   unitFactor,
 } from "./inventory-scope.js";
 
@@ -677,7 +679,7 @@ export class StockService {
   // Counts --------------------------------------------------------------------------------------------------------
 
   /** A count by someone who can adjust stock is applied at once; anyone else's count waits for approval. */
-  async count(tenant: TenantContext, raw: unknown) {
+  async count(tenant: TenantContext, raw: unknown, options: { countedAt?: Date } = {}) {
     const payload = stockCountSchema.parse(raw);
     if (payload.id) {
       const [existing] = await this.db
@@ -687,26 +689,19 @@ export class StockService {
         .limit(1);
       if (existing) return this.presentCount(existing);
     }
-    return this.db.transaction(async (tx) => this.countIn(tx, tenant, payload));
+    return this.db.transaction(async (tx) => this.countIn(tx, tenant, payload, options.countedAt));
   }
 
-  /** A count, inside the caller's transaction (ADR-033). Those who may adjust stock have it approved at once. */
-  async countIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockCountSchema.parse>) {
+  /**
+   * A count, inside the caller's transaction (ADR-033). Those who may adjust stock have it approved at once. A count
+   * made offline is compared with the stock at the time it was made (ADR-064).
+   */
+  async countIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockCountSchema.parse>, countedAt?: Date) {
     const context = await this.context(tx, tenant, payload.productId, payload.branchId);
     const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
     const counted = this.toBase(parseCountQuantity(payload.countedQuantity) as bigint, unitFactor(context.product, units, payload.unit));
-    const [balance] = await tx
-      .select({ quantity: stockBalances.quantity })
-      .from(stockBalances)
-      .where(
-        and(
-          eq(stockBalances.tenantId, tenant.tenantId),
-          eq(stockBalances.branchId, context.branch.id),
-          eq(stockBalances.productId, context.product.id),
-        ),
-      )
-      .limit(1);
-    const system = balance?.quantity ?? 0n;
+    countedAt = countTime(countedAt);
+    const system = await balanceAt(tx, tenant.tenantId, context.branch.id, context.product.id, countedAt);
     const id = payload.id ?? newId();
     await tx.insert(stockCounts).values({
       id,
@@ -721,7 +716,7 @@ export class StockService {
       countedBy: tenant.userId,
       countedMembershipId: tenant.membershipId,
       deviceId: tenant.deviceId ?? null,
-      countedAt: new Date(),
+      countedAt: countedAt ?? new Date(),
     });
     await this.record(tx, tenant, "stock.counted", id, context, { note: payload.note ?? null, countedQuantity: payload.countedQuantity, unit: payload.unit });
     if (tenant.permissions.includes(Permission.STOCK_ADJUST)) await this.decide(tx, tenant, id, "approved");
