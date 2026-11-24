@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isExactListedName, matchSaleItems, namesFromText, saleCreateSchema, savedItemKey, unitPriceFromTotal } from "./index.js";
+import { compactItemKey, isExactListedName, matchSaleItems, namesFromText, saleCreateSchema, savedItemKey, unitPriceFromTotal } from "./index.js";
 
 describe("quick catalog names and search", () => {
   it("treats spacing, case and a trailing dot as the same name, and keeps sizes apart", () => {
@@ -9,6 +9,9 @@ describe("quick catalog names and search", () => {
     expect(savedItemKey("Ogbono.")).toBe("ogbono");
     expect(savedItemKey("Peak Milk 400g")).not.toBe(savedItemKey("Peak Milk 900g"));
     expect(savedItemKey("Ogb ono")).not.toBe("ogbono");
+    expect(compactItemKey("Ogb ono")).toBe("ogbono");
+    expect(compactItemKey("Rice-50kg")).toBe(compactItemKey("Rice 50kg"));
+    expect(compactItemKey("Peak Milk 400g")).not.toBe(compactItemKey("Peak Milk 900g"));
   });
 
   it("reads a pasted name list and skips a heading", () => {
@@ -36,6 +39,9 @@ describe("quick catalog names and search", () => {
     expect(isExactListedName("rice 50kg", "Rice 50kg")).toBe(true);
     expect(isExactListedName("big rice", "Rice 50kg", ["Big rice"])).toBe(true);
     expect(isExactListedName("rice", "Rice 50kg")).toBe(false);
+    expect(isExactListedName("rice50kg", "Rice 50kg")).toBe(true);
+    expect(isExactListedName("big-rice", "Rice 50kg", ["Big rice"])).toBe(true);
+    expect(matchSaleItems("rice50kg", [{ item: "rice", name: "Rice 50kg", managed: true }], 8, now)[0]).toMatchObject({ item: "rice", via: "exact" });
   });
 
   it("shows a unit price for a typed line total, and does not treat that figure as the total", () => {

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  compactItemKey,
   productArchiveSchema,
   Permission,
   PRODUCT_PAGE_SIZE,
@@ -522,6 +523,7 @@ export class ProductService {
   private values(payload: ReturnType<typeof productWriteSchema.parse>) {
     return {
       name: payload.name,
+      compactKey: compactItemKey(payload.name),
       category: payload.category?.trim() || null,
       baseUnit: payload.baseUnit,
       priceMinor: payload.priceMinor ? BigInt(payload.priceMinor) : null,

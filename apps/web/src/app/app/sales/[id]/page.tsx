@@ -134,6 +134,13 @@ function SaleScreen() {
                       {t("lineDetail", { quantity: quantityToString(BigInt(line.enteredQuantity)), unit: unitName(line.enteredUnit, plural(line.enteredQuantity)), price: money(line.unitPriceMinor) })}
                     </span>
                     {line.costMinor !== undefined ? <span className="block text-xs text-muted">{t("lineCost", { cost: money(line.costMinor) })}</span> : null}
+                    {line.possibleProduct ? (
+                      <span className="block text-xs text-warning">
+                        {line.possibleProduct.priceMinor
+                          ? t("typedLike", { name: line.possibleProduct.name, price: money(line.possibleProduct.priceMinor) })
+                          : t("typedLikeNoPrice", { name: line.possibleProduct.name })}
+                      </span>
+                    ) : null}
                     {BigInt(line.returnedQuantity) > 0n ? (
                       <span className="block text-xs text-warning">{t("lineReturned", { quantity: quantityToString(BigInt(line.returnedQuantity)) })}</span>
                     ) : null}
