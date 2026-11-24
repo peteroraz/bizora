@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
 import { parseQuantity } from "./stock-units.js";
-import { unitCodeSchema } from "./stock.js";
+import { batchInputSchema, unitCodeSchema } from "./stock.js";
 
 /**
  * Price lists, suppliers per product and landed cost (ADR-048). Money is a string of minor units (kobo); quantities
@@ -81,6 +81,8 @@ export const stockReceiptCreateSchema = z.object({
         unit: unitCodeSchema,
         /** What the goods on this line cost, before charges. */
         totalCostMinor: positiveAmount,
+        /** For a product that keeps batches (ADR-061). */
+        batch: batchInputSchema.optional(),
       }),
     )
     .min(1)

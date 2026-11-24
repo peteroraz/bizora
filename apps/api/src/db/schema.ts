@@ -835,6 +835,8 @@ export const products = pgTable(
     lowStockLevel: bigint("low_stock_level", { mode: "bigint" }),
     barcode: varchar("barcode", { length: 64 }),
     trackStock: boolean("track_stock").notNull().default(true),
+    /** Stock is kept in batches with expiry dates (migration 0049, ADR-061). */
+    tracksBatches: boolean("tracks_batches").notNull().default(false),
     /**
      * The item this product is a variant of (migration 0040, ADR-046). Left out on insert, the database trigger
      * makes the product its own item (same ID), so every product always has one.
@@ -2045,6 +2047,30 @@ export const variantAttributeValues = pgTable("variant_attribute_values", {
   boolValue: boolean("bool_value"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid("updated_by"),
+/** Batches (lots) with expiry dates, and which batches each movement used (migration 0049, ADR-061). */
+export const stockBatches = pgTable("stock_batches", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  batchNumber: varchar("batch_number", { length: 64 }),
+  expiryDate: date("expiry_date", { mode: "string" }),
+  manufacturedDate: date("manufactured_date", { mode: "string" }),
+  supplierId: uuid("supplier_id"),
+  quantity: bigint("quantity", { mode: "bigint" }).notNull().default(0n),
+  receivedQuantity: bigint("received_quantity", { mode: "bigint" }).notNull().default(0n),
+  firstReceivedAt: timestamp("first_received_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const stockMovementBatches = pgTable("stock_movement_batches", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  movementId: uuid("movement_id").notNull(),
+  batchId: uuid("batch_id").notNull(),
+  quantity: bigint("quantity", { mode: "bigint" }).notNull(),
 });
 
 export const stockRequests = pgTable(

@@ -35,6 +35,8 @@ function quantity(text: string): string | undefined {
 
 function NewProductScreen() {
   const t = useTranslations("stock");
+  const batchText = useTranslations("batches");
+  const [tracksBatches, setTracksBatches] = useState(false);
   const unitName = useUnitName();
   const access = useAccess();
   const seeCost = can(access, Permission.PRICES_COST_READ);
@@ -101,6 +103,7 @@ function NewProductScreen() {
         lowStockLevel: quantity(lowStock) ?? null,
         barcode: barcode.trim() || null,
         trackStock,
+        ...(trackStock && tracksBatches ? { tracksBatches: true } : {}),
         packs: packs
           .filter((pack) => pack.size.trim())
           .map((pack) => ({ unitCode: pack.unitCode, baseQuantity: quantity(pack.size), ...(kobo(pack.price) ? { priceMinor: kobo(pack.price) } : {}) })),
@@ -269,6 +272,15 @@ function NewProductScreen() {
               <FormField id="product-low" label={t("lowStock", { unit: unitName(baseUnit, 2) })} hint={t("optional")}>
                 <QuantityInput id="product-low" value={lowStock} onChange={(event) => setLowStock(event.target.value)} />
               </FormField>
+            ) : null}
+            {trackStock ? (
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-1" checked={tracksBatches} onChange={(event) => setTracksBatches(event.target.checked)} />
+                <span>
+                  <span className="block font-medium">{batchText("keep")}</span>
+                  <span className="block text-muted">{batchText("keepHint")}</span>
+                </span>
+              </label>
             ) : null}
             <FormField id="product-barcode" label={t("barcode")} hint={t("optional")}>
               <Input id="product-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={64} inputMode="numeric" />

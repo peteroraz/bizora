@@ -10,6 +10,7 @@ import { CatalogController } from "./catalog.controller.js";
 import { AttributeService } from "./attribute.service.js";
 import { CatalogService } from "./catalog.service.js";
 import { CountSessionService } from "./count-session.service.js";
+import { BatchService } from "./batch.service.js";
 import { InventoryController } from "./inventory.controller.js";
 import { StockOperationsController } from "./stock-operations.controller.js";
 import { TransferService } from "./transfer.service.js";
@@ -22,7 +23,7 @@ import { StockService } from "./stock.service.js";
 @Module({
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, NotificationsModule],
   controllers: [InventoryController, CatalogController, StockOperationsController],
-  providers: [ProductService, CatalogService, AttributeService, TransferService, CountSessionService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard],
+  providers: [BatchService, ProductService, CatalogService, TransferService, CountSessionService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard, AttributeService],
   exports: [StockService, ProductService],
 })
 export class InventoryModule {}

@@ -30,6 +30,7 @@ import { BackLink } from "../../../../components/action-link";
 import { ProductPhotos } from "../../../../components/product-photos";
 // Making variants from attributes (ADR-060) loads only for people who manage products.
 const VariantMaker = lazy(() => import("../../../../components/variant-maker"));
+import { ProductBatches } from "../../../../components/product-batches";
 import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
@@ -94,6 +95,7 @@ function ProductScreen() {
   const { id } = useParams<{ id: string }>();
   const t = useTranslations("stock");
   const common = useTranslations("common");
+  const batchText = useTranslations("batches");
   const locale = useLocale();
   const { timezone: timeZone } = usePlace();
   const access = useAccess();
@@ -201,7 +203,7 @@ function ProductScreen() {
     if (value === null || value === "") return t("changeNone");
     if (name === "price" || name === "cost") return money(value);
     if (name === "lowStockLevel") return stockText(value, product.baseUnit, product.packs);
-    if (name === "trackStock") return value === "true" ? t("changeYes") : t("changeNo");
+    if (name === "trackStock" || name === "tracksBatches") return value === "true" ? t("changeYes") : t("changeNo");
     return value;
   };
   const movementRow = (movement: Movement) => (
@@ -293,6 +295,10 @@ function ProductScreen() {
         {product.stock.low ? <Badge tone="warning" className="mt-3">{t("low")}</Badge> : null}
       </Card>
 
+      {product.trackStock && product.tracksBatches ? (
+        <ProductBatches productId={product.id} baseUnit={product.baseUnit} packs={product.packs} onHand={product.stock.quantity} onChanged={() => void load()} />
+      ) : null}
+
       {product.trackStock && can(access, Permission.STOCK_RECEIVE) ? (
         <Card>
           <p className="text-sm font-medium">{t("receiveTitle")}</p>
@@ -322,6 +328,15 @@ function ProductScreen() {
                   ...(field(form, "supplier") ? { supplier: field(form, "supplier") } : {}),
                   ...(receivePaid === "credit" && field(form, "payBy") ? { payBy: field(form, "payBy") } : {}),
                   ...(field(form, "note") ? { note: field(form, "note") } : {}),
+                  ...(product.tracksBatches && (field(form, "batchNumber") || field(form, "expiryDate"))
+                    ? {
+                        batch: {
+                          ...(field(form, "batchNumber") ? { batchNumber: field(form, "batchNumber") } : {}),
+                          ...(field(form, "expiryDate") ? { expiryDate: field(form, "expiryDate") } : {}),
+                          ...(field(form, "manufacturedDate") ? { manufacturedDate: field(form, "manufacturedDate") } : {}),
+                        },
+                      }
+                    : {}),
                 },
                 t("received"),
                 "stock.receive",
@@ -404,6 +419,19 @@ function ProductScreen() {
               <FormField id="receive-pay-by" label={t("payBy")} hint={t("payByHint")}>
                 <Input id="receive-pay-by" name="payBy" type="date" />
               </FormField>
+            ) : null}
+            {product.tracksBatches ? (
+              <>
+                <FormField id="receive-batch" label={batchText("batchNumber")} hint={batchText("batchNumberHint")}>
+                  <Input id="receive-batch" name="batchNumber" maxLength={64} autoComplete="off" />
+                </FormField>
+                <FormField id="receive-expiry" label={batchText("expiryDate")} hint={batchText("expiryDateHint")}>
+                  <Input id="receive-expiry" name="expiryDate" type="date" />
+                </FormField>
+                <FormField id="receive-made" label={batchText("manufacturedDate")} hint={t("optional")}>
+                  <Input id="receive-made" name="manufacturedDate" type="date" />
+                </FormField>
+              </>
             ) : null}
             <FormField id="receive-note" label={t("note")} hint={t("receiveNoteHint")}>
               <SentenceInput id="receive-note" name="note" maxLength={240} />
@@ -687,6 +715,7 @@ function ProductScreen() {
                   lowStockLevel: low || null,
                   barcode: product.barcode,
                   trackStock: product.trackStock,
+                  ...(product.trackStock ? { tracksBatches: form.get("tracksBatches") === "on" } : {}),
                   packs,
                   ...(seeCost ? { defaultCostMinor: cost ? (parseAmount(cost, product.currency) as bigint).toString() : null } : {}),
                   ...(field(form, "changeReason") ? { changeReason: field(form, "changeReason") } : {}),
@@ -734,6 +763,15 @@ function ProductScreen() {
               <FormField id="edit-cost" label={t("defaultCost", { unit: unitName(product.baseUnit, 1) })} hint={t("optional")}>
                 <AmountInput currency={product.currency} id="edit-cost" name="cost" defaultValue={amountInput(product.defaultCostMinor, product.currency)} />
               </FormField>
+            ) : null}
+            {product.trackStock ? (
+              <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" className="mt-1" name="tracksBatches" defaultChecked={product.tracksBatches ?? false} />
+                <span>
+                  <span className="block font-medium">{batchText("keep")}</span>
+                  <span className="block text-muted">{batchText("keepHint")}</span>
+                </span>
+              </label>
             ) : null}
             <FormField id="edit-reason" label={t("changeReason")} hint={t("changeReasonHint")}>
               <SentenceInput id="edit-reason" name="changeReason" maxLength={240} />
