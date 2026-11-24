@@ -2028,7 +2028,6 @@ export const stockReceipts = pgTable("stock_receipts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** A store keeper's stock change waiting for a manager or owner to approve and complete it (ADR-034). */
 /** Product attributes and their values on variants (migration 0048, ADR-060). */
 export const attributeDefinitions = pgTable("attribute_definitions", {
   id: uuid("id").primaryKey(),
@@ -2067,6 +2066,8 @@ export const variantAttributeValues = pgTable("variant_attribute_values", {
   boolValue: boolean("bool_value"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid("updated_by"),
+});
+
 /** Batches (lots) with expiry dates, and which batches each movement used (migration 0049, ADR-061). */
 export const stockBatches = pgTable("stock_batches", {
   id: uuid("id").primaryKey(),
@@ -2093,6 +2094,7 @@ export const stockMovementBatches = pgTable("stock_movement_batches", {
   quantity: bigint("quantity", { mode: "bigint" }).notNull(),
 });
 
+/** A store keeper's stock change waiting for a manager or owner to approve and complete it (ADR-034). */
 export const stockRequests = pgTable(
   "stock_requests",
   {
