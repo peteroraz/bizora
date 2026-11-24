@@ -125,7 +125,7 @@ export class SalesReportService {
     };
     return {
       fileName: `bizora-sales-${report.period}-${report.from}.csv`,
-      text: `﻿${rows.map((row) => row.map(cell).join(",")).join("\r\n")}\r\n`,
+      text: `\uFEFF${rows.map((row) => row.map(cell).join(",")).join("\r\n")}\r\n`,
     };
   }
 
