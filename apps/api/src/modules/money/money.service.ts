@@ -43,6 +43,9 @@ type Business = typeof businesses.$inferSelect;
 type ExpenseRow = typeof expenses.$inferSelect;
 
 /** Expense accounts a trader can pick as "what was it for". Cost of goods, losses and fx are posted by the system. */
+/** Shown on a warehouse that already has cash entries. The entries themselves are left as they were (ADR-056). */
+const WAREHOUSE_CASH_NOTE = "This warehouse still has cash from before. Move it under Money › Move money.";
+
 const CATEGORY_ROLES = ["expense", "bank_charges", "materials"];
 /** Expense-type accounts that are the cost of what was sold, not running costs. */
 const COST_OF_SALES_ROLES = new Set(["cogs", "materials"]);
@@ -484,13 +487,19 @@ export class MoneyService {
     if (date > today) throw new ApiError("VALIDATION_ERROR", "That day has not come yet.", 400);
     await this.db.transaction((tx) => this.chart.ensure(tx, tenant.tenantId, business.id, tenant.userId));
     const shopFilter = tenant.membershipBranchId ?? query.branchId;
-    const shops = await this.db
-      .select({ id: branches.id, name: branches.name })
+    const places = await this.db
+      .select({ id: branches.id, name: branches.name, kind: branches.kind })
       .from(branches)
       // Closed shops (ADR-032) are left out unless asked for by name, for their history.
       .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), ...(shopFilter ? [eq(branches.id, shopFilter)] : [isNull(branches.closedAt)])))
       .orderBy(asc(branches.createdAt));
-    if (shopFilter && shops.length === 0) throw new ApiError("BRANCH_NOT_FOUND", "Shop was not found.", 404);
+    if (shopFilter && places.length === 0) throw new ApiError("BRANCH_NOT_FOUND", "Shop was not found.", 404);
+    // A warehouse does not hold cash (ADR-056). One that already has entries stays visible so the owner can move the money.
+    const warehouseIds = places.filter((place) => place.kind === "warehouse").map((place) => place.id);
+    const withEntries = await this.warehouseCashHistory(tenant.tenantId, business.id, warehouseIds);
+    const shops = places
+      .filter((place) => place.kind !== "warehouse" || withEntries.has(place.id))
+      .map((place) => ({ ...place, note: place.kind === "warehouse" ? WAREHOUSE_CASH_NOTE : null }));
     const accounts = await this.cashAccounts(this.db, tenant.tenantId, business.id, shops.map((shop) => shop.id));
     const accountIds = [...accounts.values()];
     const opening = new Map<string, bigint>();
@@ -568,6 +577,7 @@ export class MoneyService {
         return {
           branchId: shop.id,
           name: shop.name,
+          note: shop.note,
           openingMinor: start.toString(),
           inMinor: totalIn.toString(),
           outMinor: totalOut.toString(),
@@ -607,6 +617,7 @@ export class MoneyService {
     await this.db.transaction(async (tx) => {
       const business = await requireBusiness(tx, tenant);
       const branch = await resolveBranch(tx, tenant, business.id, payload.branchId);
+      if (branch.kind === "warehouse") throw new ApiError("VALIDATION_ERROR", "A warehouse does not hold cash. Count a shop's drawer.", 400);
       // One count at a time per shop, so two counts cannot both read the same expected cash.
       await tx.execute(sql`SELECT id FROM branches WHERE tenant_id = ${tenant.tenantId} AND id = ${branch.id} FOR UPDATE`);
       await this.chart.ensure(tx, tenant.tenantId, business.id, tenant.userId);
@@ -898,6 +909,25 @@ export class MoneyService {
   private assertRange(from: string, to: string, max: number) {
     if (from > to) throw new ApiError("VALIDATION_ERROR", "The first day must come before the last.", 400);
     if (daysBetween(from, to) + 1 > max) throw new ApiError("VALIDATION_ERROR", `Choose at most ${max} days.`, 400);
+  }
+
+  /** Warehouses whose cash account already has a journal line. A zero balance with no lines stays hidden. */
+  private async warehouseCashHistory(tenantId: string, businessId: string, warehouseIds: string[]) {
+    if (warehouseIds.length === 0) return new Set<string>();
+    const rows = await this.db
+      .select({ branchId: ledgerAccounts.branchId })
+      .from(ledgerAccounts)
+      .innerJoin(journalLines, and(eq(journalLines.tenantId, ledgerAccounts.tenantId), eq(journalLines.accountId, ledgerAccounts.id)))
+      .where(
+        and(
+          eq(ledgerAccounts.tenantId, tenantId),
+          eq(ledgerAccounts.businessId, businessId),
+          eq(ledgerAccounts.role, "cash"),
+          inArray(ledgerAccounts.branchId, warehouseIds),
+        ),
+      )
+      .groupBy(ledgerAccounts.branchId);
+    return new Set(rows.map((row) => row.branchId).filter((id): id is string => id !== null));
   }
 
   private async cashAccounts(executor: DbExecutor, tenantId: string, businessId: string, shopIds: string[]) {

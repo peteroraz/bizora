@@ -70,6 +70,8 @@ export type MovementInput = {
   note?: string | null;
   supplier?: string | null;
   paidFrom?: "cash" | "bank" | "credit" | null;
+  /** The shop whose cash paid, when the stock itself landed somewhere else (a warehouse). */
+  cashBranchId?: string | null;
   /** Total cost for goods coming in. Without it, the current average (or the product's default cost) is used. */
   totalCostMinor?: bigint | null;
   /** Exact value to use (the value that left the other shop in a transfer). */
@@ -265,6 +267,7 @@ export class StockService {
       name: payload.supplier,
       unnamedWhenMissing: payload.paidFrom === "credit",
     });
+    const cashBranchId = await this.cashDrawer(tx, tenant, context.business.id, context.branch, payload.paidFrom, options.charges ?? [], payload.paidFromBranchId);
     const result = await this.applyMovement(tx, context, {
       ...(payload.id ? { id: payload.id } : {}),
       type: "received",
@@ -275,6 +278,7 @@ export class StockService {
       supplierId: supplier?.id ?? null,
       note: payload.note ?? null,
       paidFrom: payload.paidFrom,
+      ...(cashBranchId ? { cashBranchId } : {}),
       totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
       documentType: "stock_in",
       ...(options.charges ? { charges: options.charges } : {}),
@@ -896,10 +900,38 @@ export class StockService {
   async shops(tenant: TenantContext) {
     const business = await requireBusiness(this.db, tenant);
     return this.db
-      .select({ id: branches.id, name: branches.name })
+      .select({ id: branches.id, name: branches.name, kind: branches.kind })
       .from(branches)
       .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), isNull(branches.closedAt)))
       .orderBy(branches.name);
+  }
+
+  /**
+   * Cash paid for stock comes out of a shop's drawer, never a warehouse (ADR-056). A shop receiving its own goods
+   * uses its own drawer when no shop is named. A warehouse must name the shop.
+   */
+  private async cashDrawer(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    businessId: string,
+    place: BranchRow,
+    paidFrom: string | null | undefined,
+    charges: { paidFrom: "cash" | "bank" }[],
+    paidFromBranchId?: string,
+  ) {
+    const needsCash = paidFrom === "cash" || charges.some((charge) => charge.paidFrom === "cash");
+    if (!needsCash) return null;
+    if (paidFromBranchId) {
+      const shop = await findBranch(tx, tenant, businessId, paidFromBranchId);
+      if (shop.kind === "warehouse" || shop.closedAt) {
+        throw new ApiError("VALIDATION_ERROR", "Choose which shop's cash paid this, or choose bank.", 400, [{ field: "paidFromBranchId", message: "Choose a shop." }]);
+      }
+      return shop.id;
+    }
+    if (place.kind === "warehouse") {
+      throw new ApiError("VALIDATION_ERROR", "Choose which shop's cash paid this, or choose bank.", 400, [{ field: "paidFromBranchId", message: "Choose a shop." }]);
+    }
+    return place.id;
   }
 
   /** Products below zero after a sync, for the owner to check (never corrected automatically). */
@@ -967,6 +999,7 @@ export class StockService {
   }
 
   private postingLines(input: MovementInput, value: bigint, branchId: string): PostingLine[] | null {
+    const cashBranchId = input.cashBranchId ?? branchId;
     if (value === 0n || input.type === "transfer_in" || input.type === "transfer_out") return null;
     const amount = value < 0n ? -value : value;
     const stock = { account: { role: "stock" as const } };
@@ -1000,7 +1033,7 @@ export class StockService {
     // Goods sent back to a supplier (ADR-030): off what is owed to them, or money back to the drawer or the bank.
     if (input.type === "supplier_return") {
       const debit: PostingLine["account"] =
-        input.paidFrom === "cash" ? { role: "cash", branchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
+        input.paidFrom === "cash" ? { role: "cash", branchId: cashBranchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
       return [
         { account: debit, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) },
         { ...stock, creditMinor: amount },
@@ -1014,15 +1047,15 @@ export class StockService {
     }
     if (input.type === "received" || input.type === "returned") {
       const credit: PostingLine["account"] =
-        input.paidFrom === "cash" ? { role: "cash", branchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
+        input.paidFrom === "cash" ? { role: "cash", branchId: cashBranchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
       // Charges on a delivery (ADR-048) are part of the stock's value, paid from the drawer or the bank; the supplier
-      // is owed (or paid) only for the goods.
+      // is owed (or paid) only for the goods. Cash never comes out of a warehouse.
       const charges = input.type === "received" && value > 0n ? (input.charges ?? []).filter((charge) => charge.amountMinor > 0n) : [];
       const chargesTotal = charges.reduce((sum, charge) => sum + charge.amountMinor, 0n);
       const lines: PostingLine[] = [{ ...stock, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) }];
       if (amount - chargesTotal > 0n) lines.push({ account: credit, creditMinor: amount - chargesTotal });
       for (const charge of charges) {
-        lines.push({ account: charge.paidFrom === "cash" ? { role: "cash", branchId } : { role: "bank" }, creditMinor: charge.amountMinor, memo: "Delivery charges" });
+        lines.push({ account: charge.paidFrom === "cash" ? { role: "cash", branchId: cashBranchId } : { role: "bank" }, creditMinor: charge.amountMinor, memo: "Delivery charges" });
       }
       return lines;
     }

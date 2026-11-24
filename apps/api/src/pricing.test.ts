@@ -228,6 +228,7 @@ describe("price lists, suppliers per product and landed cost (ADR-048)", () => {
         branchId: warehouseId,
         supplierId: haulier,
         paidFrom: "credit",
+        paidFromBranchId: a.branchId,
         lines: [{ productId: hauled, quantity: "2", unit: "bag", totalCostMinor: "10000000" }],
         charges: [{ kind: "transport", amountMinor: "200000", paidFrom: "cash" }],
       })
@@ -237,6 +238,8 @@ describe("price lists, suppliers per product and landed cost (ADR-048)", () => {
     expect(held.rows[0]?.quantity).toBe("2000");
     const shopAfter = (await client.query<{ quantity: string }>("SELECT quantity::text FROM stock_balances WHERE product_id = $1 AND branch_id = $2", [hauled, a.branchId])).rows[0]?.quantity;
     expect(shopAfter).toBe(shopBefore);
+    const warehouseCash = await client.query("SELECT id FROM ledger_accounts WHERE role = 'cash' AND branch_id = $1", [warehouseId]);
+    expect(warehouseCash.rows).toEqual([]);
   });
 
   it("sells to a customer at their list's prices, by quantity, and at everyday prices otherwise", async () => {

@@ -196,7 +196,7 @@ describe("tenant isolation matrix (ADR-043)", () => {
     ids.priceList = (await request(h.http).post("/api/v1/pricing/lists").set(auth(bt)).send({ name: "Bravotenant prices" }).expect(201)).body.data.id;
     await request(h.http).put(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).send({ prices: [{ productId: ids.product, unitCode: "bag", priceMinor: "7000000" }] }).expect(200);
     ids.price = (await request(h.http).get(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).expect(200)).body.data.prices[0].id;
-    ids.receipt = (await request(h.http).post("/api/v1/stock/receipts").set(auth(bt)).send({ branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100000" }], charges: [{ kind: "transport", amountMinor: "1000", paidFrom: "cash" }] }).expect(201)).body.data.id;
+    ids.receipt = (await request(h.http).post("/api/v1/stock/receipts").set(auth(bt)).send({ branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", paidFromBranchId: b.branchId, lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100000" }], charges: [{ kind: "transport", amountMinor: "1000", paidFrom: "cash" }] }).expect(201)).body.data.id;
     await request(h.http).put(`/api/v1/suppliers/${ids.supplier}/products`).set(auth(bt)).send({ productId: ids.product, supplierSku: "BRAVO-RICE" }).expect(200);
     const missed = await request(h.http)
       .post("/api/v1/sync/push")

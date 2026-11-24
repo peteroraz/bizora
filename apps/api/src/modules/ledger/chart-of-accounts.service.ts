@@ -9,6 +9,7 @@ import { DB } from "../../tokens.js";
 
 /**
  * Creates a business's chart of accounts from the template for its business type, plus one cash account per shop.
+ * A warehouse does not get a cash account (ADR-056). An existing warehouse cash account is left as it is.
  * Safe to call any number of times: it only adds what is missing. Called before every posting and before reads,
  * so businesses and shops created before the ledger existed get their accounts the first time they need them.
  */
@@ -41,9 +42,9 @@ export class ChartOfAccountsService {
     for (const account of missing) roles.add(account.role);
 
     const shops = await executor
-      .select({ id: branches.id, name: branches.name })
+      .select({ id: branches.id, name: branches.name, kind: branches.kind })
       .from(branches)
-      .where(and(eq(branches.tenantId, tenantId), eq(branches.businessId, businessId)))
+      .where(and(eq(branches.tenantId, tenantId), eq(branches.businessId, businessId), eq(branches.kind, "shop")))
       .orderBy(asc(branches.createdAt), asc(branches.id));
     const withCash = new Set(existing.filter((account) => account.role === "cash").map((account) => account.branchId));
     let nextCashNumber =

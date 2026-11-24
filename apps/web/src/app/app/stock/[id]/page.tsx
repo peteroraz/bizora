@@ -102,7 +102,8 @@ function ProductScreen() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [changes, setChanges] = useState<ProductChange[]>([]);
   const [archiveReason, setArchiveReason] = useState("");
-  const [shops, setShops] = useState<{ id: string; name: string }[]>([]);
+  const [shops, setShops] = useState<{ id: string; name: string; kind: string }[]>([]);
+  const [paidFromShop, setPaidFromShop] = useState("");
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -137,7 +138,7 @@ function ProductScreen() {
 
   useEffect(() => {
     void load();
-    if (can(access, Permission.STOCK_TRANSFER)) {
+    if (can(access, Permission.STOCK_TRANSFER, Permission.STOCK_RECEIVE, Permission.PURCHASES_MANAGE)) {
       void api("/api/v1/stock/shops")
         .then(async (response) => (response.ok ? setShops((await response.json()).data.items) : undefined))
         .catch(() => undefined);
@@ -298,6 +299,8 @@ function ProductScreen() {
               if (!parseQuantity(quantity)) return setMessage({ tone: "danger", text: t("invalidQuantity") });
               if (cost && parseAmount(cost, product.currency) === null) return setMessage({ tone: "danger", text: t("invalidAmount") });
               if (receivePaid === "credit" && field(form, "supplier").length < 2) return setMessage({ tone: "danger", text: t("supplierRequired") });
+              const atWarehouse = shops.find((shop) => shop.id === access.branchId)?.kind === "warehouse";
+              if (atWarehouse && receivePaid === "cash" && !paidFromShop) return setMessage({ tone: "danger", text: t("chooseShop") });
               const ok = await submit(
                 "receive",
                 "/api/v1/stock/receive",
@@ -307,6 +310,7 @@ function ProductScreen() {
                   quantity,
                   unit: field(form, "unit"),
                   paidFrom: field(form, "paidFrom") || "credit",
+                  ...(atWarehouse && receivePaid === "cash" ? { paidFromBranchId: paidFromShop } : {}),
                   ...(cost ? { totalCostMinor: (parseAmount(cost, product.currency) as bigint).toString() } : {}),
                   ...(field(form, "supplier") ? { supplier: field(form, "supplier") } : {}),
                   ...(receivePaid === "credit" && field(form, "payBy") ? { payBy: field(form, "payBy") } : {}),
@@ -367,6 +371,20 @@ function ProductScreen() {
                 ) : null}
               </Select>
             </FormField>
+            {shops.find((shop) => shop.id === access.branchId)?.kind === "warehouse" && receivePaid === "cash" ? (
+              <FormField id="receive-cash-shop" label={t("paidFromShop")}>
+                <Select id="receive-cash-shop" value={paidFromShop} onChange={(event) => setPaidFromShop(event.target.value)} required>
+                  <option value="">{t("chooseShop")}</option>
+                  {shops
+                    .filter((shop) => shop.kind !== "warehouse")
+                    .map((shop) => (
+                      <option key={shop.id} value={shop.id}>
+                        {shop.name}
+                      </option>
+                    ))}
+                </Select>
+              </FormField>
+            ) : null}
             <FormField id="receive-supplier" label={t("supplier")} hint={receivePaid === "credit" ? undefined : t("optional")}>
               <NameInput id="receive-supplier" name="supplier" maxLength={160} list="supplier-names" required={receivePaid === "credit"} />
             </FormField>
