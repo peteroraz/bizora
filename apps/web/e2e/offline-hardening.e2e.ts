@@ -55,7 +55,12 @@ test("a sync that fails is shown, kept, and sent once when tried again", async (
 });
 
 test("a sale the server refuses is named on screen, not dropped, while others sync", async ({ page, context, request }) => {
-  const { email, headers, customerId } = await shop(request);
+  const { email, headers, productId } = await shop(request);
+  const beans = await request.post("/api/v1/products", {
+    headers,
+    data: { name: "Beans", baseUnit: "bag", priceMinor: "200000", openingQuantity: "5", openingCostMinor: "500000" },
+  });
+  expect(beans.ok()).toBeTruthy();
   await signIn(page, email);
   await page.goto("/app/sales/new");
   await expect(page.getByTestId("say-sale")).toBeVisible();
@@ -97,14 +102,16 @@ test("a sale the server refuses is named on screen, not dropped, while others sy
   await page.locator("#sale-credit-comment").fill("Balance on Friday");
   await page.getByRole("button", { name: "Record sale", exact: true }).click();
   await expect(page.getByText(/saved on this phone as/)).toBeVisible();
-  await page.getByLabel("Find a product").fill("rice");
-  await page.getByRole("button", { name: /Rice 50kg/ }).click();
+  await page.getByLabel("Find a product").fill("beans");
+  await page.getByRole("button", { name: /Beans/ }).click();
   await page.getByRole("button", { name: "Record sale", exact: true }).click();
-  // Meanwhile the owner stops credit for Emeka on another phone.
-  await request.patch(`/api/v1/customers/${customerId}/credit`, { headers, data: { creditAllowed: false, reason: "Owes too much" } });
+  // Rice is taken off the shelf on another phone, so that sale cannot be recorded. Credit that is no longer
+  // approved is kept (ADR-050); a product that no longer exists is still refused and stays on this phone.
+  expect((await request.post(`/api/v1/products/${productId}/archive`, { headers, data: { reason: "Off the shelf" } })).ok()).toBeTruthy();
   await context.setOffline(false);
   await expect(page.getByText(/could not be saved/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("alert").filter({ hasText: /could not be saved/ })).toContainText("Rice 50kg");
+  await expect(page.getByRole("button", { name: "OK, the owner will see it" })).toBeVisible();
   const sales = (await (await request.get("/api/v1/sales", { headers })).json()).data.items as unknown[];
   expect(sales).toHaveLength(1);
 });
