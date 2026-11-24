@@ -1748,7 +1748,8 @@
       "failed": "It was not sent. Check the address and your connection, then try again."
     },
     "customerOffline": "No network: showing customers saved on this phone.",
-    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online."
+    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online.",
+    "reportLink": "Sales report"
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -2941,5 +2942,56 @@
       "cleared": "This customer now buys at everyday prices.",
       "failed": "That did not save. Check your connection and try again."
     }
+  },
+  "salesReport": {
+    "title": "Sales report",
+    "lead": "Sales for a week, month or year, from your books, so they match Money › Profit.",
+    "leadOwn": "Your own sales for a week, month or year.",
+    "back": "Sales",
+    "failed": "The report did not load. Check your connection and try again.",
+    "periodLabel": "Period",
+    "periods": {
+      "week": "Week",
+      "month": "Month",
+      "year": "Year"
+    },
+    "shop": "Shop",
+    "allShops": "All shops",
+    "earlier": "Earlier",
+    "later": "Later",
+    "netSales": "Net sales",
+    "up": "Up {percent}% on the period before ({before})",
+    "down": "Down {percent}% on the period before ({before})",
+    "noComparison": "No sales in the period before to compare with.",
+    "count": "Number of sales",
+    "average": "Average sale {amount}",
+    "stillOwed": "Still owed",
+    "stillOwedHint": "What customers still owe from these sales today.",
+    "sales": "Sales",
+    "discounts": "Discounts",
+    "returns": "Returns",
+    "byDay": "By day",
+    "byMonth": "By month",
+    "showTable": "Show as a table",
+    "showChart": "Show as a chart",
+    "hoverHint": "Tap or point at a bar to see its amount.",
+    "chartLabel": "Net sales from {from} to {to}",
+    "day": "Day",
+    "month": "Month",
+    "paidWith": "Paid with",
+    "methods": {
+      "cash": "Cash",
+      "transfer": "Transfer",
+      "pos": "POS"
+    },
+    "topItems": "Best sellers",
+    "nothingSold": "Nothing sold in this period.",
+    "sold": "{quantity} {unit}, in {count, plural, one {# sale} other {# sales}}",
+    "noCost": "(cost not known)",
+    "byShop": "By shop",
+    "byStaff": "By person",
+    "byStaffHint": "What each person sold, before any returns.",
+    "person": "{name} ({count, plural, one {# sale} other {# sales}})",
+    "download": "Download as a spreadsheet (CSV)"
   }
 }
