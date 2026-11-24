@@ -1343,7 +1343,9 @@
     "savedOfflineLead": "You can sell it here now. It is added to your products when the phone is back online.",
     "savedOfflineLeftOut": "The photo and a new brand need the internet. Add them on the product's page later.",
     "addAnother": "Add another product",
-    "backToStock": "Back to stock"
+    "backToStock": "Back to stock",
+    "chooseShopTitle": "Choose a shop to see its stock",
+    "chooseShopBody": "Stock is kept shop by shop. Pick a shop at the top of the screen, where it says All shops."
   },
   "sales": {
     "title": "Sales",

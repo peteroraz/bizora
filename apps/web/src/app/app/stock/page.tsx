@@ -71,6 +71,7 @@ function StockScreen() {
   const [currency, setCurrency] = useState(place.currency);
   const [totals, setTotals] = useState<StockTotals | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [needsShop, setNeedsShop] = useState(false);
   const [pending, setPending] = useState(false);
   const [offlineSince, setOfflineSince] = useState<string | null | undefined>(undefined);
   const [counts, setCounts] = useState<PendingCount[]>([]);
@@ -102,7 +103,15 @@ function StockScreen() {
         if (needle.trim()) params.set("q", needle.trim());
         if (category) params.set("category", category);
         const response = await api(`/api/v1/products?${params.toString()}`);
+        // "All shops" is chosen: stock is kept per shop, so ask for one rather than show an empty list.
+        if (!response.ok && (await response.clone().json().catch(() => null))?.error?.code === "BRANCH_REQUIRED") {
+          setNeedsShop(true);
+          setItems([]);
+          setTotal(0);
+          return;
+        }
         if (!response.ok) throw new Error(String(response.status));
+        setNeedsShop(false);
         const data = (await response.json()).data;
         setItems(data.items);
         setTotal(data.total);
@@ -173,6 +182,7 @@ function StockScreen() {
       <PageHeader
         title={t("title")}
         intro={t("description")}
+        actionsLayout="scroll"
         actions={
           canAdd || canReceive || canLists ? (
             <>
@@ -324,7 +334,9 @@ function StockScreen() {
           {t("search")}
         </SubmitButton>
       </SafeForm>
-      {loaded && items.length === 0 ? (
+      {loaded && needsShop ? (
+        <EmptyState title={t("chooseShopTitle")} description={t("chooseShopBody")} />
+      ) : loaded && items.length === 0 ? (
         <EmptyState title={query.trim() ? t("noResults") : t("emptyTitle")} description={query.trim() ? t("description") : t("emptyBody")} />
       ) : (
         <ul className="divide-y divide-border rounded-card border border-border bg-card">
