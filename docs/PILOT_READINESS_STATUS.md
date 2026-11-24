@@ -1,115 +1,85 @@
 # Pilot readiness status
 
-Status of every item in the pre-pilot readiness sprint, as of **23 Nov 2026**.
+Every capability, labelled, as of **24 Nov 2026**. "main" means merged and on staging. "#nn" means an open PR, CI green, waiting to be merged. The verdict and blockers are in `docs/PILOT_READINESS_REPORT.md`; the gates and their tests are in `docs/PILOT_READINESS_CHECKLIST.md`.
 
-**Pull requests.** The work is in four pull requests against `main`, all opened by Claude and waiting for review and merge:
+**Labels:**
 
-| PR | What it holds |
+| Label | Meaning |
 | --- | --- |
-| #44 | A: email delivery, tenant isolation matrix, money integrity, idempotency, security review (ADR-042, ADR-043) |
-| #45 | B: offline, small screens, low bandwidth, voice pilot status (ADR-044) |
-| #46 | C: business switches, records export, pilot measures, sample business, error wording (ADR-045) |
-| #47 | D: documents, readiness checks, performance baseline, a deadlock fix |
+| **IMPLEMENTED** | Built and tested. Nothing more is needed for the pilot. |
+| **IMPLEMENTED BUT NEEDS PILOT VALIDATION** | Built and tested, but only real use can prove it: real phones, real speech, a real inbox, staging. |
+| **PARTIAL** | Some of it is built. What is missing is stated. |
+| **NOT IMPLEMENTED** | Not built. Why, and how it is handled, is stated. |
+| **NOT REQUIRED FOR PILOT** | Deliberately not built for the pilot. |
 
-Until they merge, `main` does not have their work.
+## A. The business app
 
-**Classifications.**
+| Capability | Label | Where | What is true |
+| --- | --- | --- | --- |
+| Sign up, sign in, Google sign-in, password reset | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main | Single-use reset link that expires in 30 minutes. Emails have not yet been seen arriving in a real inbox from staging. |
+| Terms of use and privacy notice | IMPLEMENTED BUT NEEDS PILOT VALIDATION | this PR | Terms version 2026-11-24 with section 13 "The pilot"; privacy covers offline storage and on-phone voice (ADR-068). Still marked draft until counsel reviews it. |
+| Onboarding | PARTIAL | main | Business type, country, currency, time zone, first shop, and a home screen checklist (products, address, customer, staff, first sale). **Missing:** a payment-methods step and a tutorial. |
+| Roles, staff, PINs on shop phones | IMPLEMENTED | main | Job functions with mapped permissions; shop phones with PINs and auto-lock. |
+| Quick sale (cash, transfer, POS, credit) | IMPLEMENTED | main | Desk flow (sales desk → cashier → store keeper) is available. Below-list prices need a manager. |
+| Typed items and the quick catalog | IMPLEMENTED | main | Items sold before they are products, matched to products by name later (ADR-041, ADR-049, ADR-052). |
+| Voice sale on the phone | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main, #61 | Experimental and switchable per business. Review is mandatory. Several sales in one recording come in #61. English only; not tried on real market speech. |
+| Receipts and invoices (PDF, WhatsApp link) | IMPLEMENTED | main, #58 | "Paid in full" is removed in #58. Serial numbers print on receipts in #66. |
+| Returns and swaps | IMPLEMENTED | main, #63 | A return time limit (owner can override) comes in #63. |
+| Customers, credit, debtors, statements | IMPLEMENTED | main, #63 | Standard credit terms (due date set by itself, no comment needed) come in #63. |
+| Sales by day; sales report by week, month and year | IMPLEMENTED | main, #62 | The report with a chart, top items, by shop and by staff, and a CSV, is in #62. |
+| Money: expenses, cash per shop, cash counts, POS cash-out, profit | IMPLEMENTED | main | Profit comes only from sales (ADR-038) and is always shown (ADR-051). |
+| Books (double entry) | IMPLEMENTED | main, #59 | Every money and stock path posts balanced entries. Missing accounts after a business changes type are added in #59 (blocker B1). |
+| Bank statement matching | IMPLEMENTED | main | |
+| Suppliers and what is owed to them | IMPLEMENTED | main | |
+| Jobs for service businesses | IMPLEMENTED | main | Jobs need a network. |
+| Products: items, variants, categories, brands, codes, units, packs | IMPLEMENTED | main | ADR-046. |
+| Price lists and supplier prices, landed cost | IMPLEMENTED | main | ADR-048. |
+| Stock in, counts, adjustments, transfers, warehouses | IMPLEMENTED | main, #60 | Warehouse cash is settled in #60. |
+| Attributes, batches and expiry, serials and IMEIs, reorder rules | IMPLEMENTED | #64–#67 | Each is off until switched on per product, so simple shops see nothing new. |
+| Product files in and out; camera scanning; fast search | IMPLEMENTED | #69–#71 | Scanning needs a browser with a barcode reader (Chrome on Android). |
+| Offline: sales, stock in, counts, customers, payments | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main | Kept through failures, reloads and tabs, sent once, kept in their shop (ADR-044, ADR-050). Not tried on real phones. |
+| Offline: new products, stock changes, count lines | IMPLEMENTED BUT NEEDS PILOT VALIDATION | #68 | Counts are compared with the stock at the time counted. |
+| Offline: expenses, money moves, cash counts, returns, jobs, photos | NOT IMPLEMENTED | | These need the network, and say so on the screen. |
+| Small screens | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main, #72 | Checked at 320 and 360 px in the browser. Not tried on real phones. |
+| Low bandwidth | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main | Quick sale is within its 170 kB budget. The voice download can be stopped, retried and removed. Not tried on real 3G. |
+| Records export | IMPLEMENTED | main | ZIP of CSV files, owner and administrators, audited. |
+| Card and online payments | NOT REQUIRED FOR PILOT | | Locked off. Payments are recorded as cash, transfer or POS. |
+| Ask Zora and other AI agents | NOT REQUIRED FOR PILOT | | Nothing acts on anyone's behalf. |
+| Advanced accounting and tax calculations | NOT REQUIRED FOR PILOT | | Locked off. The Terms say Bizora is not accounting or tax advice. |
+| Plans and billing | NOT REQUIRED FOR PILOT | | Limits are off for every business. |
+| Languages other than English | NOT REQUIRED FOR PILOT | | |
 
-| Classification | Meaning |
-| --- | --- |
-| **IMPLEMENTED** | Built and tested in code. |
-| **NEEDS PILOT VALIDATION** | Built and tested, but only real use can prove it: real phones, real speech, a real inbox, staging. |
-| **PARTIAL** | Some of it is done; what is missing is stated. |
-| **NOT IMPLEMENTED** | Not built. The reason and how it is handled are stated. |
-| **NOT REQUIRED** | Deliberately not built for the pilot. |
+## B. Running the pilot (readiness items 1–30)
 
-| # | Item | Status | Where | What is true |
+| # | Item | Label | Where | What is true |
 | --- | --- | --- | --- | --- |
-| 1 | Documents match the product | IMPLEMENTED | #47 | README, architecture overview, deployment guide and the specification pointer no longer say sales, payments or email are missing; new pilot documents in `docs/`. |
-| 2 | Readiness checklist and check script | IMPLEMENTED | #47 | `PILOT_READINESS_CHECKLIST.md` (gates G1–G19); `scripts/pilot-readiness-check.ts` checks the repository and, with `--url`, a running environment. |
-| 3 | Email provider, production-ready | IMPLEMENTED · NEEDS PILOT VALIDATION | #44 | Details below the table. |
-| 4 | Password reset | IMPLEMENTED · NEEDS PILOT VALIDATION | existing + #44 | Single-use link that expires in 30 minutes; every session is signed out on reset; "password changed" email (#44). Delivery to a real inbox not yet checked. |
-| 5 | PostgreSQL row-level security | NOT IMPLEMENTED (formally gated) | #44, ADR-043, issue #43 | Details below the table. |
-| 6 | Tenant isolation matrix, blocking in CI | IMPLEMENTED | #44 | Details below the table. |
-| 7 | Financial integrity suite | IMPLEMENTED | #44 | Sales, returns, debt payments, POS cash-out, non-sales money never counted as profit, double submits and racing requests, and a 40-step mixed run; the books balance after each. |
-| 8 | Idempotency | IMPLEMENTED | existing + #44 | Every offline operation uses its device ID as the key. #44 adds the `idempotency-key` header to the voids, approvals, rejections and cancellations that lacked it. |
-| 9 | Offline hardening | IMPLEMENTED · NEEDS PILOT VALIDATION | #45 | Details below the table. |
-| 10 | Voice | IMPLEMENTED · NEEDS PILOT VALIDATION | #45, #46 | Details below the table. |
-| 11 | Android device matrix and fixes | PARTIAL | #45 | Done: 13 screens checked at 320 and 360 px for sideways scrolling and for controls under 40 px; tap targets fixed. **Not done:** real phones (`PILOT_MOBILE_TEST_MATRIX.md` lists them). |
-| 12 | Low bandwidth | IMPLEMENTED · NEEDS PILOT VALIDATION | #45 | Voice download shows its size, progress, Stop, Retry, and can be removed in Settings. Quick sale script budget is 170 KB (169.8–169.9 used), enforced in CI. Not measured on real 3G. |
-| 13 | Upload and storage safety | IMPLEMENTED | existing | Details below the table. |
-| 14 | Business data export; backup and restore | PARTIAL | #46 | **Export done:** a ZIP of CSV files, owner and administrators, audited. **Backups:** documented (`restore.md`). **Restore drill: never run**, so no recovery point (RPO) or recovery time (RTO) is stated as fact. |
-| 15 | Support access audit tests | IMPLEMENTED | existing + #44 | Every support view needs a reason, lasts an hour, is read-only, is logged for staff and owner, and emails the owner (#44). Tests cover each. |
-| 16 | Admin portal hardening tests | IMPLEMENTED | existing + #44 | Google sign-in with PKCE and nonce; staff list; roles per ability; a header check against other sites; forged and tampered session cookies refused (#44). |
-| 17 | Pilot telemetry and measures | IMPLEMENTED (gaps stated) | #46 | `pilot_events` keeps names and short codes only. Admin portal: Pilot measures page, and Last 7 days per business. Gap: voice downloads from Settings are not counted yet. |
-| 18 | Feature switches per business | IMPLEMENTED | #46 | Offline voice, photo reads, support view; advanced accounting and payment gateways locked off in the API and the database. |
-| 19 | Demo or seed data | IMPLEMENTED | #46 | `sample create / list / remove`; marked everywhere; left out of the measures. Only a sample's records can be deleted, and only by the script. |
-| 20 | Onboarding in business language | IMPLEMENTED | existing | Home screen setup checklist: products, shop address, first customer, staff, first sale, each with a link. |
-| 21 | User-facing error messages | IMPLEMENTED | #46 | Framework messages replaced with plain words; a support code on server faults; messages written for people kept. |
-| 22 | Staging validation and deployment runbook | PARTIAL | #47 | **Runbook written** (`PILOT_DEPLOYMENT_RUNBOOK.md`). **Staging not validated:** this session has no Google Cloud access, and its network cannot reach staging. Runbook steps 1–9 are for the team. |
-| 23 | No external payment gateways | IMPLEMENTED (by design) | #46 | None exist; payments are recorded as cash, transfer or POS. The switch is locked off. |
-| 24 | No AI agents | NOT REQUIRED (confirmed absent) | existing | No agent acts on anyone's behalf. Photo reads and voice only fill drafts that a person checks and confirms. "Ask Zora" is not built. |
-| 25 | Pilot terms and privacy | PARTIAL | #47 | Privacy notice updated (measures, export). Proposed pilot section for the Terms of use in `PILOT_TERMS_AND_PRIVACY.md`, waiting for counsel. Adding it needs a new terms version. |
-| 26 | Security review | IMPLEMENTED | #44 | `PILOT_SECURITY_REVIEW.md`: no unresolved Critical or High finding in code; S-3 (Medium) needs a staging check. |
-| 27 | Dependency and supply-chain review | IMPLEMENTED | #47 | Details below the table. |
-| 28 | Performance baseline (20 and 50 people, 5,000 customers, 10,000 sales) | PARTIAL | #47 | Details below the table. |
-| 29 | Support tooling | IMPLEMENTED | #46 + existing | Admin portal: find a business or person, resend invitations and verification, sign out everywhere, stop a phone, support view, limits, switches, Last 7 days (refusals, voice problems, sessions, last sync). |
-| 30 | Tag `v0.9.0-pilot` | NOT DONE (gates not met) | — | Gates G7–G10, G12 and G17 need staging, Google Cloud or real phones. No tag. |
-
-## Details
-
-**3. Email provider.** `EmailPort` with Resend and console adapters.
-- Each send is retried up to 3 times on 429, 5xx and network errors, with one idempotency key per send.
-- Addresses are masked and tokens hidden in logs.
-- Production refuses the console provider and invitation links in replies.
-- Not yet checked: delivery to a real inbox from staging (runbook step 6).
-
-**5. Row-level security.** Not built. One shared connection pool serves 48 services, and public receipts, the Admin portal and sign-in all need paths around row-level security.
-- **Instead:** a blocking matrix probes every route as another business and fingerprints every business table before and after.
-- **Status:** blocking before general availability, not before the pilot.
-
-**6. Tenant isolation matrix.** Every route is probed as another business.
-- The data of every table with `tenant_id` is fingerprinted, so a change to the other business fails the test.
-- A route coverage gate fails when a route is added without a probe.
-- Three probes stop at validation (product photos, product edit, job lines). Their services filter by tenant; this is recorded in ADR-043.
-
-**9. Offline hardening.** Fixed:
-- a sale moved to another shop at sync time;
-- customer search needed the internet, so credit sales could not be made offline;
-- a failed sync was invisible;
-- tabs disagreed after one synced.
-
-Browser tests cover reload, a new tab, two tabs and a refused sale. Not tried on real phones.
-
-**10. Voice.**
-- **Done:**
-  - the benchmark scores the sale read from speech, not just words wrong, with Pidgin-influenced, fast and slow sets;
-  - review is mandatory and nothing is ever saved by itself;
-  - every review says to check the numbers;
-  - typing is the fallback;
-  - requirements are documented;
-  - voice can be switched off per business.
-- **Not proven:**
-  - real Nigerian market speech;
-  - false confidence is 22–36% on clean recordings, which is why review stays mandatory.
-
-**13. Upload and storage safety.**
-- Product photos and logos must be real PNG or JPEG (checked by their header, never SVG), within byte, pixel and count limits.
-- They are stored in Postgres, not a public bucket, and served with `nosniff`.
-- Photos for capture are limited by type, count and size, and are not stored.
-- Request bodies are size-limited per route.
-- Files are not re-encoded or virus-scanned.
-
-**27. Dependency and supply-chain review.** `PILOT_DEPENDENCY_REVIEW.md`:
-- `pnpm audit --prod` passes, with one ignore and its ADR;
-- 4 moderate advisories, in development tools only;
-- licences reviewed, none GPL or AGPL;
-- Gitleaks;
-- pinned voice models.
-
-**28. Performance baseline.** Measured locally, not on staging (`PILOT_PERFORMANCE_BASELINE.md`).
-- No errors.
-- Each call takes 6–55 ms on its own.
-- Under 50 people in one business, the 2-CPU machine was the limit.
-- Found and fixed a deadlock when a new business's first products were added at once.
-- Staging run: runbook step 8.
+| 1 | Documents match the product | IMPLEMENTED | main, this PR | README, architecture, deployment and the pilot documents; inventory status in #72. |
+| 2 | Readiness checklist and check script | IMPLEMENTED | main, this PR | `PILOT_READINESS_CHECKLIST.md` in four sections, each gate linked to its test; `scripts/pilot-readiness-check.ts`. |
+| 3 | Email provider | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main | Retries with an idempotency key; masked logs; production refuses the console provider. No real inbox yet (B6). |
+| 4 | Password reset | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main | Delivery to a real inbox not yet checked. |
+| 5 | PostgreSQL row-level security | NOT IMPLEMENTED | ADR-043, issue #43 | Gated before general availability. Instead, a blocking matrix probes every route as another business and fingerprints every table. |
+| 6 | Tenant isolation matrix, blocking in CI | IMPLEMENTED | main | Every new `:id` route in #58–#72 is in it. |
+| 7 | Financial integrity suite | IMPLEMENTED | main | |
+| 8 | Idempotency | IMPLEMENTED | main | Every offline operation and every void, approval and cancellation. |
+| 9 | Offline hardening | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main, #68 | |
+| 10 | Voice | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main, #61 | False confidence 22–36% on clean recordings, so review stays mandatory. |
+| 11 | Android device matrix | PARTIAL | main | 320 and 360 px checks done in the browser. **Not done:** real phones (B8). |
+| 12 | Low bandwidth | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main | |
+| 13 | Upload and storage safety | IMPLEMENTED | main | Real PNG or JPEG only, with size and count limits. Files are not virus-scanned. |
+| 14 | Export, backup and restore | PARTIAL | main | Export done. Backups configured but not confirmed (B5). Restore drill never run (B7). |
+| 15 | Support access audit | IMPLEMENTED | main | |
+| 16 | Admin portal hardening | IMPLEMENTED | main | |
+| 17 | Pilot telemetry and measures | IMPLEMENTED | main | Gap: voice downloads from Settings are not counted. |
+| 18 | Feature switches per business | IMPLEMENTED | main | |
+| 19 | Sample data | IMPLEMENTED | main | |
+| 20 | Onboarding in business language | PARTIAL | main | See section A: no payment-methods step, no tutorial. |
+| 21 | Plain error messages | IMPLEMENTED | main | Every new error in #58–#72 is in plain words. |
+| 22 | Staging validation and runbook | PARTIAL | main, this PR | Runbook written, with support escalation added. Staging not validated (B3–B9). |
+| 23 | No payment gateways | NOT REQUIRED FOR PILOT | | Locked off. |
+| 24 | No AI agents | NOT REQUIRED FOR PILOT | | Confirmed absent. |
+| 25 | Pilot terms and privacy | IMPLEMENTED BUT NEEDS PILOT VALIDATION | this PR | Terms section 13 and privacy paragraphs; counsel review still needed before general availability. |
+| 26 | Security review | IMPLEMENTED | main | S-3 (Medium) needs staging (B4). |
+| 27 | Dependency review | IMPLEMENTED | main | |
+| 28 | Performance baseline | PARTIAL | main, #71, this PR | Local measurements: 10,000 sales and 5,000 customers; sign-in, search, stock lookup, reports and five shops (this PR); 50,000 products (#71). Not on staging (B9). |
+| 29 | Support tooling and escalation | IMPLEMENTED BUT NEEDS PILOT VALIDATION | main, this PR | Admin portal tools; the escalation path is in the runbook (step 15). The person and the WhatsApp number must be named (B10). |
+| 30 | Tag `v0.9.0-pilot` | NOT IMPLEMENTED | | Not tagged: the blockers in the report's section 15 are open. |

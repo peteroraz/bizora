@@ -11,13 +11,15 @@ import {
   parseQuantity,
   quantityToString,
   uuidv7,
+  splitSerials,
 } from "@bizora/contracts";
 import { Badge, Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
 import { ProductBuying } from "../../../../components/product-buying";
+import { ReorderRules } from "../../../../components/reorder-rules";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../../../i18n/format";
 import { can } from "../../../../lib/access";
@@ -28,6 +30,10 @@ import { isNetworkFailure } from "../../../../lib/offline/sync";
 import type { ProductView } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
 import { ProductPhotos } from "../../../../components/product-photos";
+// Making variants from attributes (ADR-060) loads only for people who manage products.
+const VariantMaker = lazy(() => import("../../../../components/variant-maker"));
+import { ProductBatches } from "../../../../components/product-batches";
+import { ProductSerials } from "../../../../components/product-serials";
 import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
@@ -92,6 +98,8 @@ function ProductScreen() {
   const { id } = useParams<{ id: string }>();
   const t = useTranslations("stock");
   const common = useTranslations("common");
+  const batchText = useTranslations("batches");
+  const serialText = useTranslations("serials");
   const locale = useLocale();
   const { timezone: timeZone } = usePlace();
   const access = useAccess();
@@ -102,7 +110,8 @@ function ProductScreen() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [changes, setChanges] = useState<ProductChange[]>([]);
   const [archiveReason, setArchiveReason] = useState("");
-  const [shops, setShops] = useState<{ id: string; name: string }[]>([]);
+  const [shops, setShops] = useState<{ id: string; name: string; kind: string }[]>([]);
+  const [paidFromShop, setPaidFromShop] = useState("");
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -137,7 +146,7 @@ function ProductScreen() {
 
   useEffect(() => {
     void load();
-    if (can(access, Permission.STOCK_TRANSFER)) {
+    if (can(access, Permission.STOCK_TRANSFER, Permission.STOCK_RECEIVE, Permission.PURCHASES_MANAGE)) {
       void api("/api/v1/stock/shops")
         .then(async (response) => (response.ok ? setShops((await response.json()).data.items) : undefined))
         .catch(() => undefined);
@@ -145,7 +154,7 @@ function ProductScreen() {
   }, [load, access]);
 
   /** Sends a stock change. With no network, stock in and counts wait on the phone and sync later. */
-  async function submit(kind: string, path: string, body: Record<string, unknown>, success: string, offlineType?: "stock.receive" | "stock.count") {
+  async function submit(kind: string, path: string, body: Record<string, unknown>, success: string, offlineType?: "stock.receive" | "stock.count" | "stock.adjust") {
     setBusy(kind);
     setMessage(null);
     try {
@@ -198,7 +207,7 @@ function ProductScreen() {
     if (value === null || value === "") return t("changeNone");
     if (name === "price" || name === "cost") return money(value);
     if (name === "lowStockLevel") return stockText(value, product.baseUnit, product.packs);
-    if (name === "trackStock") return value === "true" ? t("changeYes") : t("changeNo");
+    if (name === "trackStock" || name === "tracksBatches" || name === "tracksSerials") return value === "true" ? t("changeYes") : t("changeNo");
     return value;
   };
   const movementRow = (movement: Movement) => (
@@ -263,6 +272,11 @@ function ProductScreen() {
       ) : null}
 
       <ProductPhotos productId={product.id} productName={product.name} canManage={can(access, Permission.PRODUCTS_MANAGE) && !product.archived} />
+      {product.item && can(access, Permission.PRODUCTS_MANAGE) && !product.archived ? (
+        <Suspense fallback={null}>
+          <VariantMaker itemId={product.item.id} itemName={product.item.name} currency={product.currency} onMade={() => void load()} />
+        </Suspense>
+      ) : null}
 
       <Card>
         <p className="text-sm font-medium">{t("shops")}</p>
@@ -285,6 +299,11 @@ function ProductScreen() {
         {product.stock.low ? <Badge tone="warning" className="mt-3">{t("low")}</Badge> : null}
       </Card>
 
+      {product.trackStock && product.tracksBatches ? (
+        <ProductBatches productId={product.id} baseUnit={product.baseUnit} packs={product.packs} onHand={product.stock.quantity} onChanged={() => void load()} />
+      ) : null}
+      {product.trackStock && product.tracksSerials ? <ProductSerials productId={product.id} onHand={product.stock.quantity} /> : null}
+
       {product.trackStock && can(access, Permission.STOCK_RECEIVE) ? (
         <Card>
           <p className="text-sm font-medium">{t("receiveTitle")}</p>
@@ -298,6 +317,8 @@ function ProductScreen() {
               if (!parseQuantity(quantity)) return setMessage({ tone: "danger", text: t("invalidQuantity") });
               if (cost && parseAmount(cost, product.currency) === null) return setMessage({ tone: "danger", text: t("invalidAmount") });
               if (receivePaid === "credit" && field(form, "supplier").length < 2) return setMessage({ tone: "danger", text: t("supplierRequired") });
+              const atWarehouse = shops.find((shop) => shop.id === access.branchId)?.kind === "warehouse";
+              if (atWarehouse && receivePaid === "cash" && !paidFromShop) return setMessage({ tone: "danger", text: t("chooseShop") });
               const ok = await submit(
                 "receive",
                 "/api/v1/stock/receive",
@@ -307,10 +328,21 @@ function ProductScreen() {
                   quantity,
                   unit: field(form, "unit"),
                   paidFrom: field(form, "paidFrom") || "credit",
+                  ...(atWarehouse && receivePaid === "cash" ? { paidFromBranchId: paidFromShop } : {}),
                   ...(cost ? { totalCostMinor: (parseAmount(cost, product.currency) as bigint).toString() } : {}),
                   ...(field(form, "supplier") ? { supplier: field(form, "supplier") } : {}),
                   ...(receivePaid === "credit" && field(form, "payBy") ? { payBy: field(form, "payBy") } : {}),
                   ...(field(form, "note") ? { note: field(form, "note") } : {}),
+                  ...(product.tracksBatches && (field(form, "batchNumber") || field(form, "expiryDate"))
+                    ? {
+                        batch: {
+                          ...(field(form, "batchNumber") ? { batchNumber: field(form, "batchNumber") } : {}),
+                          ...(field(form, "expiryDate") ? { expiryDate: field(form, "expiryDate") } : {}),
+                          ...(field(form, "manufacturedDate") ? { manufacturedDate: field(form, "manufacturedDate") } : {}),
+                        },
+                      }
+                    : {}),
+                  ...(product.tracksSerials && splitSerials(field(form, "serials")).length > 0 ? { serials: splitSerials(field(form, "serials")) } : {}),
                 },
                 t("received"),
                 "stock.receive",
@@ -367,6 +399,20 @@ function ProductScreen() {
                 ) : null}
               </Select>
             </FormField>
+            {shops.find((shop) => shop.id === access.branchId)?.kind === "warehouse" && receivePaid === "cash" ? (
+              <FormField id="receive-cash-shop" label={t("paidFromShop")}>
+                <Select id="receive-cash-shop" value={paidFromShop} onChange={(event) => setPaidFromShop(event.target.value)} required>
+                  <option value="">{t("chooseShop")}</option>
+                  {shops
+                    .filter((shop) => shop.kind !== "warehouse")
+                    .map((shop) => (
+                      <option key={shop.id} value={shop.id}>
+                        {shop.name}
+                      </option>
+                    ))}
+                </Select>
+              </FormField>
+            ) : null}
             <FormField id="receive-supplier" label={t("supplier")} hint={receivePaid === "credit" ? undefined : t("optional")}>
               <NameInput id="receive-supplier" name="supplier" maxLength={160} list="supplier-names" required={receivePaid === "credit"} />
             </FormField>
@@ -378,6 +424,31 @@ function ProductScreen() {
             {receivePaid === "credit" ? (
               <FormField id="receive-pay-by" label={t("payBy")} hint={t("payByHint")}>
                 <Input id="receive-pay-by" name="payBy" type="date" />
+              </FormField>
+            ) : null}
+            {product.tracksBatches ? (
+              <>
+                <FormField id="receive-batch" label={batchText("batchNumber")} hint={batchText("batchNumberHint")}>
+                  <Input id="receive-batch" name="batchNumber" maxLength={64} autoComplete="off" />
+                </FormField>
+                <FormField id="receive-expiry" label={batchText("expiryDate")} hint={batchText("expiryDateHint")}>
+                  <Input id="receive-expiry" name="expiryDate" type="date" />
+                </FormField>
+                <FormField id="receive-made" label={batchText("manufacturedDate")} hint={t("optional")}>
+                  <Input id="receive-made" name="manufacturedDate" type="date" />
+                </FormField>
+              </>
+            ) : null}
+            {product.tracksSerials ? (
+              <FormField id="receive-serials" label={serialText("receiveLabel")} hint={serialText("receiveHint")}>
+                <textarea
+                  id="receive-serials"
+                  name="serials"
+                  rows={3}
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  className="block min-h-11 w-full rounded-control border border-border bg-input px-3 py-2 text-base text-fg md:text-sm"
+                />
               </FormField>
             ) : null}
             <FormField id="receive-note" label={t("note")} hint={t("receiveNoteHint")}>
@@ -479,6 +550,7 @@ function ProductScreen() {
                 "/api/v1/stock/adjust",
                 { productId: product.id, direction, reason, quantity, unit: field(form, "unit"), note: field(form, "note") },
                 t("adjusted"),
+                "stock.adjust",
               );
               if (ok) (event.target as HTMLFormElement).reset();
             }}
@@ -662,6 +734,8 @@ function ProductScreen() {
                   lowStockLevel: low || null,
                   barcode: product.barcode,
                   trackStock: product.trackStock,
+                  ...(product.trackStock ? { tracksBatches: form.get("tracksBatches") === "on" } : {}),
+                  ...(product.trackStock ? { tracksSerials: form.get("tracksSerials") === "on" } : {}),
                   packs,
                   ...(seeCost ? { defaultCostMinor: cost ? (parseAmount(cost, product.currency) as bigint).toString() : null } : {}),
                   ...(field(form, "changeReason") ? { changeReason: field(form, "changeReason") } : {}),
@@ -710,6 +784,24 @@ function ProductScreen() {
                 <AmountInput currency={product.currency} id="edit-cost" name="cost" defaultValue={amountInput(product.defaultCostMinor, product.currency)} />
               </FormField>
             ) : null}
+            {product.trackStock ? (
+              <>
+                <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                  <input type="checkbox" className="mt-1" name="tracksBatches" defaultChecked={product.tracksBatches ?? false} />
+                  <span>
+                    <span className="block font-medium">{batchText("keep")}</span>
+                    <span className="block text-muted">{batchText("keepHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                  <input type="checkbox" className="mt-1" name="tracksSerials" defaultChecked={product.tracksSerials ?? false} />
+                  <span>
+                    <span className="block font-medium">{serialText("keep")}</span>
+                    <span className="block text-muted">{serialText("keepHint")}</span>
+                  </span>
+                </label>
+              </>
+            ) : null}
             <FormField id="edit-reason" label={t("changeReason")} hint={t("changeReasonHint")}>
               <SentenceInput id="edit-reason" name="changeReason" maxLength={240} />
             </FormField>
@@ -723,6 +815,8 @@ function ProductScreen() {
       ) : null}
 
       <ProductBuying productId={product.id} currency={product.currency} />
+
+      {product.trackStock && !product.archived ? <ReorderRules productId={product.id} shops={shops} onChanged={() => void load()} /> : null}
 
       {can(access, Permission.PRODUCTS_MANAGE) && !product.archived ? (
         <div className="space-y-3">

@@ -16,3 +16,11 @@ Pages refuse scripts and content from anywhere but Bizora. When a browser blocks
 ## Rolling back
 
 Run `gcloud run services update-traffic bizora-api --to-revisions=REVISION=100 --region=europe-west1`, and do the same for `bizora-web`. Database migrations only add things, so the old code still runs on the new tables.
+
+## Incident log
+
+Write every P1 here, and any P2 that touched more than one business (runbook step 15). Newest first.
+
+| Date | Priority | Businesses | What happened | What was done | What stops it again |
+| --- | --- | --- | --- | --- | --- |
+| | | | | | |

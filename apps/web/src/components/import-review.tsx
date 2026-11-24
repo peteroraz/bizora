@@ -200,7 +200,7 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
               }}
             />
           </label>
-          <a href={template} download={templateName} className="text-sm text-primary">
+          <a href={template} download={templateName} className="inline-flex min-h-11 items-center text-sm text-primary">
             {t("template")}
           </a>
           <Button type="button" variant="ghost" onClick={() => setRows([...rows, blank()])}>

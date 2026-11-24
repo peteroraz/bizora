@@ -170,11 +170,11 @@ describe("ADR-039: Terms of use, support view, limits per business, owner sees B
 
   it("asks owners to accept the Terms of use, and records who accepted which version", async () => {
     const me = await request(http).get("/api/v1/auth/me").set(auth(owner.access)).expect(200);
-    expect(me.body.data).toMatchObject({ termsRequired: true, termsVersion: "2026-11-20" });
+    expect(me.body.data).toMatchObject({ termsRequired: true, termsVersion: "2026-11-24" });
     await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2020-01-01", accept: true }).expect(400);
-    await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2026-11-20" }).expect(400);
-    await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2026-11-20", accept: true }).expect(200);
-    await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2026-11-20", accept: true }).expect(200);
+    await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2026-11-24" }).expect(400);
+    await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2026-11-24", accept: true }).expect(200);
+    await request(http).post("/api/v1/auth/accept-terms").set(auth(owner.access)).send({ version: "2026-11-24", accept: true }).expect(200);
     expect((await request(http).get("/api/v1/auth/me").set(auth(owner.access)).expect(200)).body.data.termsRequired).toBe(false);
     const rows = await client.query<{ method: string }>("SELECT method FROM terms_acceptances WHERE user_id = $1", [ownerId]);
     expect(rows.rows).toEqual([{ method: "in_app" }]);

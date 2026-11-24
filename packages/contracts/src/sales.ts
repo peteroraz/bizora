@@ -2,8 +2,9 @@ import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
 import { compactItemKey, savedItemKey } from "./sale-light.js";
 import { FLEXIBLE_UNIT, parseQuantity } from "./stock-units.js";
+import { serialListSchema } from "./stock.js";
 
-export { compactItemKey, savedItemKey, sellsProducts, sellsTyped, unitPriceFromTotal } from "./sale-light.js";
+export { compactItemKey, savedItemKey, sellsProducts, sellsTyped, TYPED_ITEM_NAME_MAX, unitPriceFromTotal } from "./sale-light.js";
 
 export { SALE_PAGE_SIZE, IMPORT_MAX_ROWS } from "./constants.js";
 
@@ -26,6 +27,8 @@ export const saleProductLineSchema = z.object({
     .any()
     .optional()
     .refine((value) => value === undefined, { message: "A listed product's total comes from its price." }),
+  /** Serial numbers or IMEIs of the units sold, for a product that keeps them (ADR-062). */
+  serials: serialListSchema.optional(),
 });
 
 /** Something not in the products: a service done, or an item the shop does not list (ADR-035). */
@@ -166,6 +169,17 @@ export const productImportSchema = z.object({
         packUnit: importCell,
         packSize: importCell,
         packPrice: importCell,
+        sku: importCell,
+        gtin: importCell,
+        brand: importCell,
+        item: importCell,
+        variant: importCell,
+        packForSale: importCell,
+        packForPurchase: importCell,
+        supplier: importCell,
+        supplierCode: importCell,
+        priceList: importCell,
+        priceListPrice: importCell,
       }),
     )
     .min(1),

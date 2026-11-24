@@ -6,12 +6,15 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
+import { ScanButton } from "../../../../components/scan-button";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { can } from "../../../../lib/access";
 import { useAccess, usePlace } from "../../../../lib/access-context";
 import { AmountInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 import { formatCurrency } from "../../../../i18n/format";
 import { api } from "../../../../lib/api";
+import { addOfflineProduct } from "../../../../lib/offline/catalog";
+import { enqueue } from "../../../../lib/offline/outbox";
 import { photoToUpload } from "../../../../lib/capture-client";
 
 type Option = { id: string; name: string; path?: string; active?: boolean };
@@ -35,6 +38,10 @@ function quantity(text: string): string | undefined {
 
 function NewProductScreen() {
   const t = useTranslations("stock");
+  const batchText = useTranslations("batches");
+  const [tracksBatches, setTracksBatches] = useState(false);
+  const serialText = useTranslations("serials");
+  const [tracksSerials, setTracksSerials] = useState(false);
   const unitName = useUnitName();
   const access = useAccess();
   const seeCost = can(access, Permission.PRICES_COST_READ);
@@ -78,6 +85,7 @@ function NewProductScreen() {
   const [openingQuantity, setOpeningQuantity] = useState("");
   const [openingCost, setOpeningCost] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [savedOffline, setSavedOffline] = useState<{ name: string; leftOut: boolean } | null>(null);
   const [pending, setPending] = useState(false);
   // What the opening stock cost, worked out from the quantity and the cost per unit until the total is typed.
   const openingThousandths = parseQuantity(openingQuantity);
@@ -101,6 +109,8 @@ function NewProductScreen() {
         lowStockLevel: quantity(lowStock) ?? null,
         barcode: barcode.trim() || null,
         trackStock,
+        ...(trackStock && tracksBatches ? { tracksBatches: true } : {}),
+        ...(trackStock && tracksSerials ? { tracksSerials: true } : {}),
         packs: packs
           .filter((pack) => pack.size.trim())
           .map((pack) => ({ unitCode: pack.unitCode, baseQuantity: quantity(pack.size), ...(kobo(pack.price) ? { priceMinor: kobo(pack.price) } : {}) })),
@@ -115,6 +125,8 @@ function NewProductScreen() {
       return;
     }
     setPending(true);
+    // No network: the product waits on this phone and can be sold here at once (ADR-064).
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return saveOffline(body);
     // A brand typed but not on the list is added first.
     if (!brandId && brandName.trim()) {
       const made = await api("/api/v1/catalog/brands", { method: "POST", headers: { [IDEMPOTENCY_HEADER]: uuidv7() }, body: JSON.stringify({ name: brandName.trim() }) }).catch(() => null);
@@ -127,8 +139,9 @@ function NewProductScreen() {
       headers: { [IDEMPOTENCY_HEADER]: uuidv7() },
       body: JSON.stringify(body),
     }).catch(() => null);
-    const payload = response ? await response.json().catch(() => null) : null;
-    if (response?.ok) {
+    if (!response) return saveOffline(body);
+    const payload = await response.json().catch(() => null);
+    if (response.ok) {
       const id = payload.data.product.id as string;
       // The photo is optional and sent after the item is saved; the item is kept even if the photo fails.
       if (photo) {
@@ -138,7 +151,39 @@ function NewProductScreen() {
       window.location.href = `/app/stock/${id}`;
       return;
     }
-    setError(response?.status === 409 ? t("duplicate") : (payload?.error?.message ?? t("failed")));
+    setError(response.status === 409 ? t("duplicate") : (payload?.error?.message ?? t("failed")));
+    setPending(false);
+  }
+
+  async function saveOffline(body: Record<string, unknown>) {
+    if (!access.owner) {
+      setError(t("failed"));
+      setPending(false);
+      return;
+    }
+    await enqueue(access.owner, "product.create", body);
+    const branchId = access.branchId;
+    if (branchId) {
+      const opening = typeof body.openingQuantity === "string" ? parseQuantity(body.openingQuantity) : null;
+      await addOfflineProduct(
+        access.owner.tenantId,
+        branchId,
+        {
+          id: String(body.id),
+          name: name.trim(),
+          category: category.trim() || null,
+          baseUnit,
+          priceMinor: typeof body.priceMinor === "string" ? body.priceMinor : null,
+          packs: [],
+          lowStockLevel: null,
+          barcode: barcode.trim() || null,
+          trackStock: body.trackStock !== false,
+          archived: false,
+        },
+        opening ? opening.toString() : null,
+      ).catch(() => undefined);
+    }
+    setSavedOffline({ name: name.trim(), leftOut: Boolean(photo) || (!brandId && Boolean(brandName.trim())) });
     setPending(false);
   }
 
@@ -151,7 +196,22 @@ function NewProductScreen() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeader title={t("newTitle")} intro={t("newLead")} />
-      <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
+      {savedOffline ? (
+        <Card data-testid="product-saved-offline">
+          <p className="text-sm font-medium">{t("savedOfflineTitle", { name: savedOffline.name })}</p>
+          <p className="text-sm text-muted">{t("savedOfflineLead")}</p>
+          {savedOffline.leftOut ? <p className="mt-1 text-sm text-warning">{t("savedOfflineLeftOut")}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => window.location.reload()}>
+              {t("addAnother")}
+            </Button>
+            <Link href="/app/stock" className="inline-flex min-h-11 items-center rounded-control border border-border px-4 text-sm">
+              {t("backToStock")}
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+      <SafeForm className={savedOffline ? "hidden" : "space-y-4"} pending={pending} onSubmit={() => void save()}>
         <FormField id="product-name" label={t("name")}>
           <SentenceInput id="product-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
         </FormField>
@@ -270,8 +330,29 @@ function NewProductScreen() {
                 <QuantityInput id="product-low" value={lowStock} onChange={(event) => setLowStock(event.target.value)} />
               </FormField>
             ) : null}
+            {trackStock ? (
+              <>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={tracksBatches} onChange={(event) => setTracksBatches(event.target.checked)} />
+                  <span>
+                    <span className="block font-medium">{batchText("keep")}</span>
+                    <span className="block text-muted">{batchText("keepHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={tracksSerials} onChange={(event) => setTracksSerials(event.target.checked)} />
+                  <span>
+                    <span className="block font-medium">{serialText("keep")}</span>
+                    <span className="block text-muted">{serialText("keepHint")}</span>
+                  </span>
+                </label>
+              </>
+            ) : null}
             <FormField id="product-barcode" label={t("barcode")} hint={t("optional")}>
-              <Input id="product-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={64} inputMode="numeric" />
+              <div className="flex gap-2">
+                <Input id="product-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={64} inputMode="numeric" />
+                <ScanButton onCode={setBarcode} />
+              </div>
             </FormField>
             <FormField id="product-sku" label={t("sku")} hint={t("skuHint")}>
               <Input id="product-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={64} autoCapitalize="characters" />
@@ -329,7 +410,7 @@ function NewProductScreen() {
           <SubmitButton pending={pending} pendingLabel={t("saving")}>
             {t("save")}
           </SubmitButton>
-          <Link href="/app/stock" className="text-sm text-primary">
+          <Link href="/app/stock" className="inline-flex min-h-11 items-center text-sm text-primary">
             {t("back")}
           </Link>
         </div>

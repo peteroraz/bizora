@@ -195,6 +195,7 @@ export class TransferService {
           note: payload.note ?? transfer.note,
           transferId: id,
           valueMinor: value,
+          batchesOfMovementId: line.outMovementId ?? null,
         });
         let shortId: string | null = null;
         if (received < line.quantity) {

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { Permission, success } from "@bizora/contracts";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
+import { AttributeService } from "./attribute.service.js";
 import { CatalogService } from "./catalog.service.js";
 
 /**
@@ -14,7 +15,51 @@ import { CatalogService } from "./catalog.service.js";
 @Controller("api/v1/catalog")
 @UseGuards(TenantGuard, PermissionGuard)
 export class CatalogController {
-  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
+  constructor(
+    @Inject(CatalogService) private readonly catalog: CatalogService,
+    @Inject(AttributeService) private readonly attributes: AttributeService,
+  ) {}
+
+  // Attributes (ADR-060) ------------------------------------------------------------------------------------------
+
+  @Get("attributes")
+  @RequirePermissions(Permission.STOCK_READ)
+  async attributeList(@CurrentTenant() tenant: TenantContext) {
+    return success(await this.attributes.list(tenant), tenant.correlationId);
+  }
+
+  @Post("attributes")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  @Idempotent()
+  async createAttribute(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return success({ attribute: await this.attributes.create(tenant, body) }, tenant.correlationId);
+  }
+
+  @Patch("attributes/:id")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async updateAttribute(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success({ attribute: await this.attributes.update(tenant, id, body) }, tenant.correlationId);
+  }
+
+  @Get("products/:id/attributes")
+  @RequirePermissions(Permission.STOCK_READ)
+  async productAttributes(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    return success(await this.attributes.productValues(tenant, id), tenant.correlationId);
+  }
+
+  @Put("products/:id/attributes")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async setProductAttributes(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.attributes.setProductValues(tenant, id, body), tenant.correlationId);
+  }
+
+  @Post("items/:id/generate-variants")
+  @HttpCode(200)
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  @Idempotent()
+  async generateVariants(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.attributes.generateVariants(tenant, id, body), tenant.correlationId);
+  }
 
   @Get("categories")
   @RequirePermissions(Permission.STOCK_READ)

@@ -15,7 +15,8 @@ export const idempotencyKeySchema = z
 export const uuidV7Schema = z.string().refine(isUuidV7, "Must be a UUIDv7 created on the device.");
 
 /** Operation types the server accepts from a device outbox. Sprints 4 and 5 add stock and sales operations. */
-export const SYNC_OPERATION_TYPES = ["customer.create", "stock.receive", "stock.count", "sale.create", "payment.record"] as const;
+/** What a phone can record with no network. Product, stock change and count lines added in ADR-064. */
+export const SYNC_OPERATION_TYPES = ["customer.create", "stock.receive", "stock.count", "sale.create", "payment.record", "product.create", "stock.adjust", "stock.count_line"] as const;
 export type SyncOperationType = (typeof SYNC_OPERATION_TYPES)[number];
 
 export const syncOperationSchema = z.object({
@@ -36,26 +37,4 @@ export type SyncOperationResult =
   | { id: string; status: "applied" | "duplicate"; result: unknown }
   | { id: string; status: "rejected"; error: { code: string; message: string }; /** The server kept a copy for the owner (ADR-050). The phone may then drop its own. */ stored?: boolean };
 
-/** Official numbers per business and document type, issued by the server in order. */
-export const DOCUMENT_PREFIXES = {
-  receipt: "R",
-  invoice: "INV",
-  payment: "PAY",
-  stock_in: "SI",
-  stock_count: "SC",
-  stock_transfer: "TR",
-  expense: "EXP",
-  sale_return: "RET",
-  supplier_return: "SR",
-  job: "JOB",
-} as const;
-export type DocumentType = keyof typeof DOCUMENT_PREFIXES;
-
-export function formatOfficialNumber(type: DocumentType, value: bigint | number): string {
-  return `${DOCUMENT_PREFIXES[type]}-${value.toString().padStart(6, "0")}`;
-}
-
-/** A number a shop device gives a document while offline, e.g. DEV3-000045. The device number is unique per organization. */
-export function provisionalNumber(deviceCode: number, sequence: number): string {
-  return `DEV${deviceCode}-${sequence.toString().padStart(6, "0")}`;
-}
+export { DOCUMENT_PREFIXES, formatOfficialNumber, provisionalNumber, type DocumentType } from "./document-numbers.js";

@@ -1,13 +1,17 @@
-import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { Permission, success } from "@bizora/contracts";
+import { ApiError } from "../../common/errors.js";
 import { CurrentTenant, type TenantContext } from "../../common/tenant-context.js";
 import { Idempotent } from "../idempotency/idempotency.interceptor.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequireAnyPermission, RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
+import { BatchService } from "./batch.service.js";
 import { ProductPhotoService } from "./product-photo.service.js";
 import { ProductService } from "./product.service.js";
+import { SerialService } from "./serial.service.js";
+import { ReorderService } from "./reorder.service.js";
 import { StockRequestService } from "./stock-request.service.js";
 import { StockService } from "./stock.service.js";
 
@@ -19,7 +23,65 @@ export class InventoryController {
     @Inject(StockService) private readonly stock: StockService,
     @Inject(ProductPhotoService) private readonly photos: ProductPhotoService,
     @Inject(StockRequestService) private readonly requests: StockRequestService,
+    @Inject(BatchService) private readonly batches: BatchService,
+    @Inject(SerialService) private readonly serials: SerialService,
+    @Inject(ReorderService) private readonly reorder: ReorderService,
   ) {}
+
+  /** A product's batches in a shop, earliest expiry first (ADR-061). */
+  @Get("products/:id/batches")
+  @RequirePermissions(Permission.STOCK_READ)
+  async productBatches(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Query("branchId") branchId?: string) {
+    return success(await this.batches.forProduct(tenant, id, branchId), tenant.correlationId);
+  }
+
+  /** Stock past its expiry date, or close to it (ADR-061). */
+  @Get("stock/expiring")
+  @RequirePermissions(Permission.STOCK_READ)
+  async expiring(@CurrentTenant() tenant: TenantContext, @Query("branchId") branchId?: string, @Query("days") days?: string) {
+    return success(await this.batches.expiring(tenant, branchId, days), tenant.correlationId);
+  }
+
+  /** A product's units in a shop that can be sold, by serial number (ADR-062). */
+  @Get("products/:id/serials")
+  @RequirePermissions(Permission.STOCK_READ)
+  async productSerials(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Query("branchId") branchId?: string) {
+    return success(await this.serials.forProduct(tenant, id, branchId), tenant.correlationId);
+  }
+
+  /** Finds a unit by its serial number or IMEI, with what happened to it (ADR-062). */
+  @Get("stock/serials")
+  @RequirePermissions(Permission.STOCK_READ)
+  async findSerial(@CurrentTenant() tenant: TenantContext, @Query("q") q?: string) {
+    return success(await this.serials.lookup(tenant, q), tenant.correlationId);
+  }
+
+  /** A product's reorder rules, for every shop and each shop's own (ADR-063). */
+  @Get("products/:id/reorder")
+  @RequirePermissions(Permission.STOCK_READ)
+  async reorderRules(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    return success(await this.reorder.rules(tenant, id), tenant.correlationId);
+  }
+
+  @Put("products/:id/reorder")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async saveReorderRule(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.reorder.save(tenant, id, body), tenant.correlationId);
+  }
+
+  @Delete("products/:id/reorder")
+  @RequirePermissions(Permission.PRODUCTS_MANAGE)
+  async removeReorderRule(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Query("branchId") branchId?: string) {
+    if (branchId !== undefined && !/^[0-9a-f-]{36}$/i.test(branchId)) throw new ApiError("VALIDATION_FAILED", "Choose a shop.", 400, [{ field: "branchId", message: "Not a shop." }]);
+    return success(await this.reorder.remove(tenant, id, branchId), tenant.correlationId);
+  }
+
+  /** What to buy for a shop: products at or below their reorder point, with how much and from whom (ADR-063). */
+  @Get("stock/to-buy")
+  @RequirePermissions(Permission.STOCK_READ)
+  async toBuy(@CurrentTenant() tenant: TenantContext, @Query("branchId") branchId?: string) {
+    return success(await this.reorder.toBuy(tenant, branchId), tenant.correlationId);
+  }
 
   /** Stock changes waiting for a manager or owner (ADR-034). */
   @Get("stock/requests")
@@ -112,6 +174,16 @@ export class InventoryController {
       await this.products.pull(tenant, { ...(productCursor ? { products: productCursor } : {}), ...(balanceCursor ? { balances: balanceCursor } : {}) }),
       tenant.correlationId,
     );
+  }
+
+  /** Every product as a CSV file with the columns the product import reads (ADR-065). */
+  @Get("products/export.csv")
+  @RequirePermissions(Permission.STOCK_READ)
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  async exportProducts(@CurrentTenant() tenant: TenantContext, @Res({ passthrough: true }) response: Response) {
+    const file = await this.products.exportCsv(tenant);
+    response.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+    return file.csv;
   }
 
   @Get("products/:id")
@@ -213,7 +285,7 @@ export class InventoryController {
   }
 
   @Get("stock/shops")
-  @RequirePermissions(Permission.STOCK_TRANSFER)
+  @RequireAnyPermission(Permission.STOCK_TRANSFER, Permission.STOCK_RECEIVE, Permission.PURCHASES_MANAGE)
   async shops(@CurrentTenant() tenant: TenantContext) {
     return success({ items: await this.stock.shops(tenant) }, tenant.correlationId);
   }

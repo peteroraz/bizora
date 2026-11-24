@@ -94,12 +94,13 @@ function CashScreen() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-medium">{shop.name}</p>
+                {shop.note ? <p className="text-sm text-warning">{t("cash.warehouseNote")}</p> : null}
                 <p className="text-sm text-muted">{isToday ? t("cash.expected") : t("cash.expectedEnd")}</p>
                 <p className="text-2xl font-semibold tabular-nums" data-testid="cash-expected">
                   {money(shop.expectedMinor)}
                 </p>
               </div>
-              {counts && isToday ? (
+              {counts && isToday && !shop.note ? (
                 <ActionLink href={`/app/money/cash/count?shop=${shop.branchId}`} variant="primary" size="sm">
                   {t("cash.countAction")}
                 </ActionLink>

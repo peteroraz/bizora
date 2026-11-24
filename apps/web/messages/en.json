@@ -197,6 +197,8 @@
       "Authorised Bizora staff may see a business's records, read-only, to give support, fix faults, keep the service secure or meet the law, as the Terms of use explain. Customers' phone numbers and emails are partly hidden from them, and every look is recorded and shown to the owner.",
       "You can ask us to correct or delete your account data. The owner can download all of the business's records at any time, from Settings. Customer records you entered belong to your business and are removed when that business is deleted.",
       "While Bizora is being tried with a small number of businesses (the pilot), we count how it is used, to find problems and improve it: for example how many sales were made offline, whether a change sent from a phone was refused, or whether a voice download failed. These counts never include what was said or typed, amounts, names or phone numbers.",
+      "To let you work with no network, the app keeps some records on the phone or computer you use: your products, prices and stock, the names of customers you may sell to (names only, never their phone numbers or emails), and the work you do until it is sent. It stays on that device and is removed when you sign out of Shop mode, once nothing is waiting to be sent. Keep your phones locked.",
+      "When you say a sale, the speech is turned into words on the phone itself. The recording never leaves the phone and is not kept. Only the sale you check and confirm is sent. The speech model is downloaded once from Bizora and kept on the phone until you remove it in Settings.",
       "This page will be replaced after counsel reviews it. Until then, do not treat it as a finished privacy notice."
     ],
     "termsVersion": "Version {version}. These terms apply from 20 November 2026.",
@@ -304,6 +306,20 @@
         "paragraphs": [
           "These terms are governed by the laws of the Federal Republic of Nigeria. If we disagree, we will first try to settle it by talking. If that fails, the courts of Nigeria decide, unless the law of your country lets you go to your own courts.",
           "Contact us through Help in the app."
+        ]
+      },
+      {
+        "id": "pilot",
+        "title": "13. The pilot",
+        "paragraphs": [
+          "Bizora is being tried with a small number of businesses before it is offered to everyone (the pilot). During the pilot, Bizora is a test version: it may have faults, change often, or be unavailable at times, and features may be added, changed or removed. It is not a finished product, and Bizora does not hold any security or data protection certification.",
+          "Bizora support may see your business's records, read-only, to help you, fix faults and keep the service safe, as section 5 explains. Every look is recorded and shown to you in Settings, Bizora support.",
+          "Your records are kept by Google Cloud for us. We keep backups of the service, but a backup is not a promise that nothing can ever be lost. Keep your own copy: the owner can download all of the business's records from Settings, as often as they like.",
+          "Some features are marked experimental, such as saying a sale. They may be wrong more often than other features. Check everything they fill in before you confirm it. We may switch a feature on or off for your business, for example to find a fault; you can see every change and its reason in Settings.",
+          "So that you can work with no network, Bizora keeps a copy of your products, prices, stock, the names of customers you may sell to, and the work you do offline, on the phone or computer you use, until that work is sent. Anyone who can open that phone may see it. Lock your phones, sign out of phones you no longer use, and do not clear the browser's data while work is waiting to be sent: work that was never sent cannot be recovered by us.",
+          "When you say a sale, the speech is turned into words on your phone. The recording is not sent to us and is not kept. Speech can be misheard, especially names, numbers and amounts, in noise, or with accents and languages it has not been tested on. It is tested in English only. Nothing said is saved until you check it and confirm it.",
+          "Bizora helps you keep your records. It is not accounting, tax or legal advice, and it does not replace an accountant or a tax adviser. Check the figures before you rely on them for tax returns, loans or other decisions.",
+          "The pilot may end. If it does, we will tell you at least 30 days ahead, and you can download your records before your account is closed."
         ]
       }
     ]
@@ -794,7 +810,11 @@
       "tooOften": "You have downloaded several times in the last few minutes. Try again in 10 minutes.",
       "offline": "You are offline. Connect to the internet to download your records."
     },
-    "warehouse": "This is a warehouse: it keeps stock but does not sell at the counter"
+    "warehouse": "This is a warehouse: it keeps stock but does not sell at the counter",
+    "returnsTitle": "Returns",
+    "returnsDays": "Goods come back within (days)",
+    "returnsDaysHint": "Leave empty to take goods back at any time. After this many days, only the owner can accept a return.",
+    "returnsOnReceipt": "Print \"Returns within {days} days of the sale\" on receipts"
   },
   "address": {
     "country": "Country",
@@ -908,7 +928,11 @@
     "editTitle": "Edit customer",
     "saveChanges": "Save changes",
     "cancelEdit": "Cancel",
-    "editNeedsNetwork": "Changing a customer needs the internet. Connect and try again."
+    "editNeedsNetwork": "Changing a customer needs the internet. Connect and try again.",
+    "creditTermsLabel": "Standard credit terms (days)",
+    "creditTermsHint": "Optional. For example 30: a credit sale to this customer is due 30 days later, with no comment needed.",
+    "creditTermsInvalid": "Enter the terms as a number of days, from 1 to 365.",
+    "creditTermsShown": "On {days}-day terms."
   },
   "followups": {
     "title": "Follow-ups",
@@ -1159,6 +1183,8 @@
     "totalCost": "Total cost",
     "totalCostHint": "Optional. Leave empty if you don't know.",
     "paidFrom": "Paid from",
+    "paidFromShop": "Which shop's cash paid this",
+    "chooseShop": "Choose which shop's cash paid this, or choose bank.",
     "paid": {
       "cash": "Shop cash",
       "bank": "Bank or transfer",
@@ -1269,7 +1295,9 @@
       "cost": "Cost",
       "lowStockLevel": "Low-stock level",
       "category": "Category",
-      "trackStock": "Counted in stock"
+      "trackStock": "Counted in stock",
+      "tracksBatches": "Batches and expiry dates",
+      "tracksSerials": "Serial numbers"
     },
     "changedFrom": "{field}: {before} → {after}",
     "changeNone": "none",
@@ -1325,7 +1353,15 @@
     "onTheWayIn": "{quantity} on the way here",
     "onTheWayOut": "{quantity} sent, not yet received",
     "pricesLink": "Price lists",
-    "deliveryChargesLink": "Delivery with charges"
+    "deliveryChargesLink": "Delivery with charges",
+    "attributesLink": "Attributes",
+    "savedOfflineTitle": "{name} is saved on this phone.",
+    "savedOfflineLead": "You can sell it here now. It is added to your products when the phone is back online.",
+    "savedOfflineLeftOut": "The photo and a new brand need the internet. Add them on the product's page later.",
+    "addAnother": "Add another product",
+    "backToStock": "Back to stock",
+    "chooseShopTitle": "Choose a shop to see its stock",
+    "chooseShopBody": "Stock is kept shop by shop. Pick a shop at the top of the screen, where it says All shops."
   },
   "sales": {
     "title": "Sales",
@@ -1717,7 +1753,9 @@
       "savedVoice": "Recorded by voice.",
       "heard": "Heard: “{words}”",
       "newItem": "New: {name} (typed item)",
-      "checkEverything": "Check every quantity, price and name against what you said before confirming. Voice can mishear numbers."
+      "checkEverything": "Check every quantity, price and name against what you said before confirming. Voice can mishear numbers.",
+      "saleOf": "Sale {number} of {total}",
+      "skipSale": "Leave this sale out"
     },
     "waiting": {
       "title": "{count, plural, one {# sale} other {# sales}} on this phone, not yet confirmed",
@@ -1735,7 +1773,8 @@
       "priceKind": "Each or for all",
       "each": "Each",
       "all": "For all of them",
-      "priceAll": "Price for all"
+      "priceAll": "Price for all",
+      "tooLong": "Too long for an item's name (more than {max} letters). Use \"Read this as a sale\", or shorten the name."
     },
     "topItems": "What sold",
     "topEmpty": "Nothing sold in this period yet.",
@@ -1748,7 +1787,11 @@
       "failed": "It was not sent. Check the address and your connection, then try again."
     },
     "customerOffline": "No network: showing customers saved on this phone.",
-    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online."
+    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online.",
+    "savedNext": "Sale {number} saved. Check the next one.",
+    "readAsSale": "Read this as a sale",
+    "reportLink": "Sales report",
+    "creditOnTerms": "Optional: this customer is on {days}-day terms."
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -1793,7 +1836,18 @@
       "barcode": "Barcode",
       "packUnit": "Pack unit",
       "packSize": "Pack size",
-      "packPrice": "Pack price"
+      "packPrice": "Pack price",
+      "sku": "SKU",
+      "gtin": "GTIN",
+      "brand": "Brand",
+      "item": "Item group",
+      "variant": "Variant",
+      "packForSale": "Pack sold",
+      "packForPurchase": "Pack bought",
+      "supplier": "Supplier",
+      "supplierCode": "Supplier code",
+      "priceList": "Price list",
+      "priceListPrice": "Price list price"
     },
     "salesTitle": "Import sales",
     "salesLead": "Bring in sales from a sales book or spreadsheet. Rows with the same receipt number become one sale.",
@@ -1838,7 +1892,11 @@
     },
     "exampleSupplier": "Dangote Distributors",
     "totalRow": "Total",
-    "sentForApproval": "{count, plural, one {# row was sent to a manager or the owner to approve.} other {# rows were sent to a manager or the owner to approve.}} Stock changes when they approve."
+    "sentForApproval": "{count, plural, one {# row was sent to a manager or the owner to approve.} other {# rows were sent to a manager or the owner to approve.}} Stock changes when they approve.",
+    "downloadLead": "Download your products as a spreadsheet, change it, and bring it back in here. Category can be a path, like Drinks > Soft drinks. Rows with an item group and a variant become variants of one item.",
+    "downloadProducts": "Download products (CSV)",
+    "downloading": "Preparing the file…",
+    "downloadFailed": "Could not download the file. Check your connection and try again."
   },
   "receipt": {
     "number": "Receipt {number}",
@@ -1894,7 +1952,8 @@
       "stock_request_approved": "{name} approved: {summary}.",
       "stock_request_rejected": "{name} rejected: {summary}.",
       "work_locked_offline": "{name} recorded work offline while their shop was locked. It was kept; check it in the activity log.",
-      "work_after_hours_offline": "{name} recorded work offline outside opening hours. It was kept; check it in the activity log."
+      "work_after_hours_offline": "{name} recorded work offline outside opening hours. It was kept; check it in the activity log.",
+      "serial_conflict": "A sale made offline used a serial number already sold: {summary} The sale was kept without it."
     }
   },
   "capture": {
@@ -2107,6 +2166,7 @@
       "over": "Over by {amount}",
       "matches": "Matches",
       "moves": "Money in or out",
+      "warehouseNote": "This warehouse still has cash from before. Move it under Money › Move money.",
       "countAction": "Count the cash",
       "countFor": "Count the cash at {shop}",
       "counted": "Cash counted",
@@ -2825,7 +2885,9 @@
       "expired": "Expired",
       "other": "Other"
     },
-    "countWhere": "Where are you counting?"
+    "countWhere": "Where are you counting?",
+    "countSavedOffline": "Saved on this phone. It is sent when you are back online, and compared with the stock when you counted.",
+    "waitingToSend": "Waiting to send"
   },
   "pricing": {
     "title": "Price lists",
@@ -2875,6 +2937,8 @@
       "goodsPaid": "The goods were",
       "owed": "Owed to the supplier",
       "cash": "Paid from the cash drawer",
+      "paidFromShop": "Which shop's cash paid this",
+      "chooseShop": "Choose which shop's cash paid this, or choose bank.",
       "bank": "Paid from the bank",
       "goods": "Goods",
       "quantity": "Quantity",
@@ -2941,5 +3005,229 @@
       "cleared": "This customer now buys at everyday prices.",
       "failed": "That did not save. Check your connection and try again."
     }
+  },
+  "salesReport": {
+    "title": "Sales report",
+    "lead": "Sales for a week, month or year, from your books, so they match Money › Profit.",
+    "leadOwn": "Your own sales for a week, month or year.",
+    "back": "Sales",
+    "failed": "The report did not load. Check your connection and try again.",
+    "periodLabel": "Period",
+    "periods": {
+      "week": "Week",
+      "month": "Month",
+      "year": "Year"
+    },
+    "shop": "Shop",
+    "allShops": "All shops",
+    "earlier": "Earlier",
+    "later": "Later",
+    "netSales": "Net sales",
+    "up": "Up {percent}% on the period before ({before})",
+    "down": "Down {percent}% on the period before ({before})",
+    "noComparison": "No sales in the period before to compare with.",
+    "count": "Number of sales",
+    "average": "Average sale {amount}",
+    "stillOwed": "Still owed",
+    "stillOwedHint": "What customers still owe from these sales today.",
+    "sales": "Sales",
+    "discounts": "Discounts",
+    "returns": "Returns",
+    "byDay": "By day",
+    "byMonth": "By month",
+    "showTable": "Show as a table",
+    "showChart": "Show as a chart",
+    "hoverHint": "Tap or point at a bar to see its amount.",
+    "chartLabel": "Net sales from {from} to {to}",
+    "day": "Day",
+    "month": "Month",
+    "paidWith": "Paid with",
+    "methods": {
+      "cash": "Cash",
+      "transfer": "Transfer",
+      "pos": "POS"
+    },
+    "topItems": "Best sellers",
+    "nothingSold": "Nothing sold in this period.",
+    "sold": "{quantity} {unit}, in {count, plural, one {# sale} other {# sales}}",
+    "noCost": "(cost not known)",
+    "byShop": "By shop",
+    "byStaff": "By person",
+    "byStaffHint": "What each person sold, before any returns.",
+    "person": "{name} ({count, plural, one {# sale} other {# sales}})",
+    "download": "Download as a spreadsheet (CSV)"
+  },
+  "attributes": {
+    "title": "Attributes",
+    "lead": "What sets your products apart, such as Colour, Size or Storage. A list with choices can make variants on a product's page.",
+    "back": "Stock",
+    "failed": "That did not save. Check your connection and try again.",
+    "name": "Attribute",
+    "nameHint": "For example Colour, Size, Storage or Make.",
+    "kind": "What kind",
+    "kinds": {
+      "select": "One choice from a list",
+      "multi_select": "Several choices from a list",
+      "text": "Words",
+      "number": "A number",
+      "boolean": "Yes or no"
+    },
+    "choices": "Choices",
+    "choicesHint": "Separate them with commas: Red, Black, Navy blue.",
+    "unit": "Measured in",
+    "unitHint": "Optional, such as GB or kg.",
+    "add": "Add attribute",
+    "added": "{name} added.",
+    "none": "No attributes yet.",
+    "turnOff": "Stop using",
+    "turnOn": "Use again",
+    "turnedOff": "{name} is no longer offered.",
+    "turnedOn": "{name} is offered again.",
+    "moreChoices": "More choices for {name}",
+    "moreChoicesPlaceholder": "More choices, separated by commas",
+    "addChoices": "Add",
+    "choicesAdded": "Choices added to {name}.",
+    "maker": {
+      "title": "Make variants",
+      "lead": "Tick the choices. Bizora makes one {name} for each combination, each with its own stock and price. Ones that already exist are left alone.",
+      "price": "Price for each new variant",
+      "priceHint": "Optional. You can change each one after.",
+      "badPrice": "Enter the price, like 8,500.",
+      "check": "See what will be made",
+      "make": "{count, plural, =0 {Make variants} one {Make # variant} other {Make # variants}}",
+      "willMake": "{count, plural, one {# variant will be made:} other {# variants will be made:}}",
+      "nothingNew": "These all exist already.",
+      "alreadyThere": "{count, plural, one {# already exists and is left as it is.} other {# already exist and are left as they are.}}",
+      "made": "{count, plural, one {# variant made.} other {# variants made.}}",
+      "failed": "That did not work. Check your connection and try again."
+    }
+  },
+  "batches": {
+    "keep": "Keep batches and expiry dates",
+    "keepHint": "For medicines, food, cosmetics and anything with a use-by date. Each delivery is kept with its batch number and expiry date, and sales take the earliest expiry first.",
+    "batchNumber": "Batch or lot number",
+    "batchNumberHint": "As printed on the pack. Optional.",
+    "expiryDate": "Expiry date",
+    "expiryDateHint": "Optional. Bizora warns you before it passes.",
+    "manufacturedDate": "Date made",
+    "title": "Batches here",
+    "lead": "Earliest expiry first. Sales take from the batch that expires first.",
+    "none": "No batches here yet. Record stock that came in with its batch and expiry date.",
+    "noNumber": "No batch number",
+    "noExpiry": "No expiry date",
+    "expiredAgo": "Expired {date}, {days, plural, one {# day} other {# days}} ago",
+    "expiresToday": "Expires today, {date}",
+    "daysLeft": "Expires {date}, {days, plural, one {# day} other {# days}} left",
+    "expired": "Expired",
+    "soon": "Expiring soon",
+    "takeOff": "Take off as expired",
+    "takenOff": "Expired stock taken off.",
+    "expiredNote": "Past its expiry date (batch {batch})",
+    "sentForApproval": "Sent to a manager to approve.",
+    "saving": "Saving…",
+    "failed": "Could not save. Check your connection and try again.",
+    "expiringTitle": "Expiring stock",
+    "expiringLead": "Stock in this shop that is past its expiry date, or close to it. Take expired stock off from the product's page.",
+    "backToStock": "Back to stock",
+    "within": "Show what expires within",
+    "withinDays": "{days} days",
+    "nothingExpiring": "Nothing here expires within {days} days.",
+    "notice": "{expired, plural, =0 {} one {# batch is past its expiry date. } other {# batches are past their expiry date. }}{soon, plural, =0 {} one {# batch expires soon. } other {# batches expire soon. }}See expiring stock"
+  },
+  "serials": {
+    "keep": "Keep a serial number or IMEI for each unit",
+    "keepHint": "For phones, laptops, generators and anything sold with its own number. Each unit is recorded when it comes in and when it is sold, and the same number cannot be sold twice.",
+    "receiveLabel": "Serial numbers or IMEIs",
+    "receiveHint": "One for each unit, one per line. Scan or type them. Optional.",
+    "title": "{count, plural, =0 {No units by serial number here} one {# unit here by serial number} other {# units here by serial number}}",
+    "none": "Record serial numbers when stock comes in, or on the sale.",
+    "without": "{count, plural, one {# unit here has} other {# units here have}} no serial number recorded.",
+    "returnedTag": "brought back",
+    "findLink": "Find a serial number",
+    "onLine": "Serial no.: {serials}",
+    "add": "{count, plural, one {Add the serial number} other {Add serial numbers (# not recorded)}}",
+    "enterOne": "Enter a serial number.",
+    "tooMany": "{count, plural, one {Only # unit needs a serial number.} other {Only # units need a serial number.}}",
+    "save": "Save serial numbers",
+    "saving": "Saving…",
+    "failed": "Could not save. Check your connection and try again.",
+    "findTitle": "Find a serial number",
+    "findLead": "Type or scan a serial number or IMEI, or its first few characters, to see where the unit is and who bought it.",
+    "backToStock": "Back to stock",
+    "findLabel": "Serial number or IMEI",
+    "find": "Find",
+    "finding": "Finding…",
+    "tooShort": "Enter at least 3 characters.",
+    "notFound": "No unit with that serial number.",
+    "soldOn": "Sold on {number}",
+    "status": {
+      "in_stock": "In stock",
+      "sold": "Sold",
+      "returned": "Brought back",
+      "damaged": "Damaged",
+      "transferred": "Moved",
+      "reserved": "Kept for a customer"
+    },
+    "events": {
+      "received": "Came in",
+      "received_again": "Came in again",
+      "sold": "Sold",
+      "returned": "Brought back",
+      "returned_damaged": "Brought back damaged",
+      "sale_cancelled": "Sale cancelled, back in stock"
+    }
+  },
+  "reorder": {
+    "title": "When to buy more",
+    "lead": "Bizora lists this product under To buy when it gets down to the reorder point, with how much brings it back up.",
+    "reorderPoint": "Reorder point ({unit})",
+    "reorderPointHint": "Buy more when it gets down to this. The same as the low stock level.",
+    "minimum": "Minimum ({unit})",
+    "minimumHint": "Optional. Below this it is urgent.",
+    "target": "Fill up to ({unit})",
+    "targetHint": "Optional. How much to have after buying.",
+    "maximum": "Most to keep ({unit})",
+    "optional": "Optional",
+    "supplier": "Usually bought from",
+    "anySupplier": "Whoever supplied it last",
+    "noSuppliers": "Names appear here once someone has delivered this product.",
+    "leadTime": "Days to deliver",
+    "save": "Save",
+    "saveEveryShop": "Save for every shop",
+    "saveShop": "Save for {shop}",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "failed": "Could not load or save. Check your connection and try again.",
+    "checkNumbers": "Check the quantities: numbers only, with up to 3 decimals.",
+    "summary": "Reorder at {point}, fill up to {target} {unit}",
+    "shopRules": "A shop's own rule",
+    "noShopRules": "Every shop follows the rule above.",
+    "addShopRule": "Give a shop its own rule",
+    "chooseShop": "Choose a shop",
+    "removeShopRule": "Use the rule for every shop",
+    "toBuyLink": "To buy",
+    "toBuyTitle": "To buy",
+    "toBuyLead": "Products in {shop} at or below their reorder point, grouped by the usual supplier.",
+    "backToStock": "Back to stock",
+    "nothingToBuy": "Nothing is at its reorder point. Set a low stock level on a product to see it here when it runs low.",
+    "noSupplier": "No usual supplier yet",
+    "about": "About {amount} at the last prices",
+    "left": "{quantity} left · reorder at {point}",
+    "onTheWay": "{quantity} on the way",
+    "takesDays": "{days, plural, =0 {same day} one {usually # day} other {usually # days}}",
+    "belowMinimum": "Below minimum",
+    "buy": "Buy {quantity}",
+    "covered": "On the way already",
+    "setTarget": "Running low"
+  },
+  "scan": {
+    "button": "Scan",
+    "title": "Scan a barcode",
+    "hint": "Point the back camera at the barcode. It reads it by itself.",
+    "cancel": "Cancel",
+    "typeInstead": "Type the code instead",
+    "notSupported": "This phone's browser cannot read barcodes. Type the code instead.",
+    "cameraRefused": "The camera is not allowed for Bizora. Allow it in the browser's settings, or type the code.",
+    "cameraFailed": "The camera could not start. Type the code instead."
   }
 }

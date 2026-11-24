@@ -41,6 +41,12 @@ describe("sale documents", () => {
     expect(() => documentModel(base, "receipt")).toThrow();
   });
 
+  it("prints the serial numbers of the units sold under the item (ADR-062)", () => {
+    const phones: DocumentInput = { ...base, lines: [{ description: "Samsung A15", serials: ["352099001761481", "352099001761482"], enteredQuantity: 2000n, enteredUnit: "piece", unitPriceMinor: 67500n, lineTotalMinor: 135000n }] };
+    expect(documentModel(phones, "invoice").lines[0]?.description).toBe("Samsung A15\nSerial no.: 352099001761481, 352099001761482");
+    expect(documentModel(base, "invoice").lines[0]?.description).toBe("Peak Milk");
+  });
+
   it("turns into a credit invoice with the balance and due date, alongside the receipt for what was paid", () => {
     const credit: DocumentInput = {
       ...base,
@@ -66,10 +72,36 @@ describe("sale documents", () => {
   it("marks paid and cancelled documents, and history-only sales have none", () => {
     const paid: DocumentInput = { ...base, sale: { ...base.sale, status: "completed", saleNumber: "R-000002", invoiceNumber: null, collectedAt: new Date(), paidMinor: 135000n, balanceMinor: 0n }, payments: [{ method: "transfer", amountMinor: 135000n }] };
     expect(availableDocuments(paid.sale)).toEqual(["receipt"]);
-    expect(text(documentModel(paid, "receipt"))).toContain("Paid in full. Thank you");
+    expect(text(documentModel(paid, "receipt"))).not.toContain("Paid in full");
+    expect(documentModel(paid, "receipt").totals).toContainEqual(["Paid (Bank transfer)", "₦1,350.00"]);
     expect(text(documentModel({ ...paid, sale: { ...paid.sale, status: "voided", voidReason: "Wrong item" } }, "receipt"))).toContain("CANCELLED: Wrong item");
     expect(availableDocuments({ ...paid.sale, historyOnly: true })).toEqual([]);
     expect([unitText("tin", "1"), unitText("carton", "2"), unitText("kg", "2.5")]).toEqual(["tin", "cartons", "kg"]);
+  });
+
+  it("prints no Paid in full line on a paid receipt or a paid invoice", () => {
+    const paid: DocumentInput = {
+      ...base,
+      sale: {
+        ...base.sale,
+        status: "completed",
+        saleNumber: "R-000003",
+        invoiceNumber: "INV-000003",
+        collectedAt: new Date("2026-11-16T11:00:00Z"),
+        paidMinor: 135000n,
+        balanceMinor: 0n,
+      },
+      payments: [{ method: "cash", amountMinor: 135000n }],
+    };
+    const receipt = documentModel(paid, "receipt");
+    const invoice = documentModel(paid, "invoice");
+    expect(text(receipt)).not.toContain("Paid in full");
+    expect(text(invoice)).not.toContain("Paid in full");
+    expect(receipt.notices).toEqual([]);
+    expect(invoice.notices).toEqual([]);
+    expect(receipt.totals).toContainEqual(["Paid (Cash)", "₦1,350.00"]);
+    expect(invoice.totals).toContainEqual(["Paid (Cash)", "₦1,350.00"]);
+    expect(invoice.details).toContainEqual(["Receipt no.", "R-000003"]);
   });
 
   it("renders a PDF with the naira font embedded", async () => {
@@ -93,5 +125,17 @@ describe("sale documents", () => {
     const pdf = await renderPdf(documentModel(base, "invoice"), { color: "#0B6E4F", logo: null, message: "Pay to GTBank 0123456789.", terms });
     const text = pdf.toString("latin1");
     expect(text.match(/\/Type \/Page\b/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("prints the returns rule on a receipt only when the owner chose to (ADR-059)", () => {
+    const paid: DocumentInput = {
+      ...base,
+      sale: { ...base.sale, status: "completed", saleNumber: "R-000009", collectedAt: new Date("2026-11-16T10:00:00Z"), paidMinor: 135000n, balanceMinor: 0n },
+      payments: [{ method: "cash", amountMinor: 135000n }],
+    };
+    const shown = documentModel({ ...paid, business: { ...paid.business, returnsWithinDays: 7, returnsOnReceipt: true } }, "receipt");
+    expect(shown.details).toContainEqual(["Returns", "Within 7 days of the sale"]);
+    expect(documentModel({ ...paid, business: { ...paid.business, returnsWithinDays: 7, returnsOnReceipt: false } }, "receipt").details.some((row) => row[0] === "Returns")).toBe(false);
+    expect(documentModel({ ...paid, business: { ...paid.business, returnsWithinDays: 7, returnsOnReceipt: true } }, "invoice").details.some((row) => row[0] === "Returns")).toBe(false);
   });
 });

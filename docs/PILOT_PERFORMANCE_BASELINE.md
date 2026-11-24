@@ -84,10 +84,120 @@ Filling began by adding 5 products with opening stock at once, in a business tha
 - **Regression test:** `apps/web/e2e/concurrent-first-records.e2e.ts` runs against real Postgres in CI. PGlite runs one query at a time, so unit tests cannot show it.
 - **Similar patterns:** two other places lock a parent row the same way: a cash count on a shop (`money.service.ts`), and adding a shop phone (`shop-device.service.ts`). Both are rare and done by one person. They are listed as low risk in the readiness report.
 
+## Large catalogs: 1,000, 10,000 and 50,000 products
+
+Inventory phase 6, item 5 (ADR-067). Measured on **24 Nov 2026** with `scripts/perf-catalog.ts`, on the same kind of local machine as above: 2 vCPUs, the API (production build, one process), Postgres 16 with `pg_trgm`, and the script on one machine.
+
+### What was measured
+
+One new business was filled through the product import, 2,000 rows at a time, to 1,000 products, then 10,000, then 50,000. The names are like a supermarket's ("Dangote Rice 50kg 0001234"):
+- 20 kinds of goods and 10 brands, so a common word such as "rice" matches 1 product in 20;
+- each product has a category, a price and 100 in stock.
+
+At each size, these were called 20 times each, one at a time:
+- searches: a common word, a rare phrase, part of a word, and one product's number;
+- the product list's first page;
+- one product's page;
+- a sale of two products;
+- a count line;
+- the sales summary and top items.
+
+Then the phone's full product download, which is what a phone does the first time it gets the product list for offline selling.
+
+### Results
+
+#### 1,000 products
+
+Filling to this size through the product import took 18 s.
+
+| Call | Count | Median ms | 95th percentile ms | Slowest ms | Errors |
+| --- | --- | --- | --- | --- | --- |
+| Search: a common word ("rice") | 20 | 36 | 78 | 78 | 0 |
+| Search: a rare word ("cornflakes 2kg") | 20 | 30 | 37 | 37 | 0 |
+| Search: part of a word ("semov") | 20 | 38 | 49 | 49 | 0 |
+| Search: one product's number | 20 | 33 | 46 | 46 | 0 |
+| Product list, first page | 20 | 17 | 30 | 30 | 0 |
+| Stock lookup (one product) | 20 | 12 | 32 | 32 | 0 |
+| Record a sale (2 products) | 20 | 35 | 78 | 78 | 0 |
+| Count a product | 20 | 15 | 26 | 26 | 0 |
+| Sales summary | 20 | 9 | 12 | 12 | 0 |
+| Top items | 20 | 9 | 11 | 11 | 0 |
+
+The phone's full product download: 0.0 s, 0.6 MB before compression.
+
+#### 10,000 products
+
+Filling to this size through the product import took 139 s.
+
+| Call | Count | Median ms | 95th percentile ms | Slowest ms | Errors |
+| --- | --- | --- | --- | --- | --- |
+| Search: a common word ("rice") | 20 | 64 | 98 | 98 | 0 |
+| Search: a rare word ("cornflakes 2kg") | 20 | 62 | 99 | 99 | 0 |
+| Search: part of a word ("semov") | 20 | 65 | 104 | 104 | 0 |
+| Search: one product's number | 20 | 62 | 92 | 92 | 0 |
+| Product list, first page | 20 | 33 | 55 | 55 | 0 |
+| Stock lookup (one product) | 20 | 12 | 16 | 16 | 0 |
+| Record a sale (2 products) | 20 | 32 | 43 | 43 | 0 |
+| Count a product | 20 | 13 | 22 | 22 | 0 |
+| Sales summary | 20 | 9 | 14 | 14 | 0 |
+| Top items | 20 | 9 | 16 | 16 | 0 |
+
+The phone's full product download: 0.4 s, 5.8 MB before compression.
+
+#### 50,000 products
+
+Filling to this size through the product import took 572 s.
+
+| Call | Count | Median ms | 95th percentile ms | Slowest ms | Errors |
+| --- | --- | --- | --- | --- | --- |
+| Search: a common word ("rice") | 20 | 263 | 413 | 413 | 0 |
+| Search: a rare word ("cornflakes 2kg") | 20 | 81 | 119 | 119 | 0 |
+| Search: part of a word ("semov") | 20 | 257 | 321 | 321 | 0 |
+| Search: one product's number | 20 | 64 | 93 | 93 | 0 |
+| Product list, first page | 20 | 123 | 189 | 189 | 0 |
+| Stock lookup (one product) | 20 | 13 | 18 | 18 | 0 |
+| Record a sale (2 products) | 20 | 30 | 39 | 39 | 0 |
+| Count a product | 20 | 12 | 17 | 17 | 0 |
+| Sales summary | 20 | 9 | 13 | 13 | 0 |
+| Top items | 20 | 8 | 14 | 14 | 0 |
+
+The phone's full product download: 3.4 s, 29.0 MB before compression.
+
+### Before and after
+
+The first run used the search as it was on `main`. It used one `OR` across all fields, so with or without trigram indexes Postgres read every product:
+
+| Search at 50,000 products | Median before | Median after |
+| --- | --- | --- |
+| A rare phrase ("cornflakes 2kg") | 393 ms | 81 ms |
+| One product's number | 351 ms | 64 ms |
+| Part of a word ("semov") | 424 ms | 257 ms |
+| A common word ("rice") | 387 ms | 263 ms |
+
+**A bug the check found, and fixed.** Straight after importing 1,000 products, every search took about **350 ms**. A minute later the same searches took 45 ms. Postgres had not yet gathered statistics on the new rows. A product import of 200 rows or more now refreshes them when it is saved, and the 1,000-product searches above ran at 30 to 38 ms straight after the import.
+
+### What it shows
+
+- **Everyday calls do not slow down with the catalog's size**: one product's page, a sale, a count line, the sales summary and top items take 8 to 35 ms at 1,000 and at 50,000 products.
+- **Search stays well under half a second at 50,000 products.** A specific search (a phrase, a number, a code) takes under 0.1 s. A word in 2,500 product names takes about a quarter of a second, because the screen also counts and totals every match.
+- **The phone's first download is the largest cost.** At 50,000 products it is 29 MB before compression and took 3.4 s on this machine. On a 3G connection it would take minutes. Only changes are downloaded after that (cursors). A phone at a business this large should get its first download on Wi-Fi. This is listed as a known limitation.
+- **Importing 50,000 products took about 10 minutes**, 2,000 rows a file. The import saves products one at a time, with each one checked and audited.
+
+### Running it
+
+```bash
+node --experimental-strip-types scripts/perf-catalog.ts http://localhost:3041 --sizes 1000,10000,50000 --runs 20
+# Again on a business already filled:
+node --experimental-strip-types scripts/perf-catalog.ts http://localhost:3041 --email catalog-…@bizora.test --sizes 50000
+```
+
+The local API is started as in "Running it" above, with `NODE_ENV=development EMAIL_PROVIDER=console`, because a production configuration needs a real email provider. The script refuses a URL that looks like production.
+
 ## Not measured
 
 - **Staging and production:** Cloud Run cold starts, Cloud SQL `db-f1-micro`, network latency from Nigeria.
-- **The web app's own speed on phones.** The quick sale screen's script budget is checked on every CI run: 170 KB, currently 169.8 to 169.9 KB. Speed on real low-end Android phones over 3G is in `docs/PILOT_MOBILE_TEST_MATRIX.md` and has not been tried on real phones yet.
+- **The web app's own speed on phones.** The quick sale screen's script budget is checked on every CI run: 170 KB, currently about 156 KB. It was 169.8 to 169.9 KB until the quick sale page stopped loading zod: the page needs only the offline sale number, which now lives in `packages/contracts/src/document-numbers.ts` with no zod import, and a test keeps it that way. Speed on real low-end Android phones over 3G is in `docs/PILOT_MOBILE_TEST_MATRIX.md` and has not been tried on real phones yet.
+- **Large catalogs on staging.** The catalog check above ran locally only.
 - **Offline sync with many queued sales at once.** The device sends 50 at a time; this is covered by browser tests, not load tests.
 
 ## Running it
@@ -103,3 +213,45 @@ node --experimental-strip-types scripts/perf-baseline.ts https://bizora-staging.
 ```
 
 The script refuses a URL that looks like production.
+
+## Pilot calls: sign-in, search, stock lookup, reports, several shops
+
+Pilot paperwork, Task 10.5. Measured on **24 Nov 2026** with `scripts/perf-pilot-calls.ts`, on the same kind of local machine: 2 vCPUs, the API (production build, one process) and Postgres 16.
+
+**What was measured.** One new business was filled through the API, as the app does it:
+- **5 shops**, each with its own sign-in session, as when a shop is chosen at the top of the screen;
+- **2,000 products** through the product import, with stock in every shop;
+- **2,000 sales** spread over the 5 shops.
+
+Filling took 80 seconds. Each call was then made 20 times, one at a time, with no other load.
+
+| Call | Count | Median ms | 95th percentile ms | Slowest ms | Errors |
+| --- | --- | --- | --- | --- | --- |
+| Sign in (email and password) | 20 | 141 | 152 | 152 | 0 |
+| Product search | 20 | 22 | 30 | 30 | 0 |
+| Product list, a later page | 20 | 16 | 21 | 21 | 0 |
+| Stock lookup (one product, all shops) | 20 | 11 | 20 | 20 | 0 |
+| Low stock | 20 | 7 | 11 | 11 | 0 |
+| Sales summary (today) | 20 | 10 | 16 | 16 | 0 |
+| Top items | 20 | 12 | 79 | 79 | 0 |
+| Profit for the month | 20 | 24 | 1,958 | 1,958 | 0 |
+| Dashboard | 20 | 9 | 17 | 17 | 0 |
+| Today's sales, one shop of 5 | 20 | 13 | 25 | 25 | 0 |
+| Low stock, one shop of 5 | 20 | 7 | 12 | 12 | 0 |
+
+**What it shows:**
+- **Sign-in takes about 0.14 s.** That is mostly the password hash, which is meant to be slow.
+- **Reads take 7 to 24 ms at the median with five shops**, the same as with one shop. A shop's own lists do not slow down because there are other shops.
+- **Profit for the month:** one call of the 20 took about 2 s; the median was 24 ms. This is worth watching on staging (runbook step 8).
+- **The 50,000-product list** is measured with `scripts/perf-catalog.ts`. Its numbers arrive with PR #71, under "Large catalogs".
+
+**Running it:**
+
+```bash
+node --experimental-strip-types scripts/perf-pilot-calls.ts http://localhost:3042 --shops 5 --products 2000 --sales 2000 --runs 20
+# Against staging (makes a business full of made-up records; never production):
+node --experimental-strip-types scripts/perf-pilot-calls.ts https://bizora-staging.baseportals.app
+```
+
+The local API runs with `NODE_ENV=development EMAIL_PROVIDER=console`, because a production configuration needs a real email provider. The script refuses a URL that looks like production.
+

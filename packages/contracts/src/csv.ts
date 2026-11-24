@@ -66,10 +66,22 @@ export const PRODUCT_IMPORT_COLUMNS = {
   cost: ["cost", "cost price", "buying price", "purchase price"],
   quantity: ["quantity", "qty", "stock", "in stock", "quantity in stock", "opening stock", "on hand"],
   lowStock: ["low stock", "low stock level", "reorder level", "minimum", "min stock"],
-  barcode: ["barcode", "sku", "code"],
+  barcode: ["barcode", "code", "ean", "upc"],
   packUnit: ["pack unit", "pack", "pack type"],
   packSize: ["pack size", "units per pack", "per pack"],
   packPrice: ["pack price", "price per pack"],
+  // Inventory phase 6 (ADR-065). A product file Bizora exports can be read back in.
+  sku: ["sku", "stock code", "item code", "product code"],
+  gtin: ["gtin", "ean-13", "gtin-13"],
+  brand: ["brand", "make", "manufacturer"],
+  item: ["item group", "parent item", "group item", "style"],
+  variant: ["variant", "variant name", "option", "size / colour"],
+  packForSale: ["pack sold", "sell pack", "pack for sale"],
+  packForPurchase: ["pack bought", "buy pack", "pack for purchase"],
+  supplier: ["supplier", "vendor", "supplied by"],
+  supplierCode: ["supplier code", "supplier sku", "vendor code"],
+  priceList: ["price list", "price list name"],
+  priceListPrice: ["price list price", "list price"],
 } as const;
 export type ProductImportField = keyof typeof PRODUCT_IMPORT_COLUMNS;
 

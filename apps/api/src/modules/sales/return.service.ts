@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { parseQuantity, saleReturnSchema } from "@bizora/contracts";
+import { parseQuantity, Permission, saleReturnSchema } from "@bizora/contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
@@ -13,6 +13,7 @@ import { DocumentNumberService } from "../documents/document-number.service.js";
 import { findBranch, requireBusiness } from "../inventory/inventory-scope.js";
 import { ChartOfAccountsService } from "../ledger/chart-of-accounts.service.js";
 import { StockService } from "../inventory/stock.service.js";
+import { SerialService } from "../inventory/serial.service.js";
 import { LedgerPostingService, type PostingLine } from "../ledger/ledger-posting.service.js";
 
 type SaleLine = typeof saleLines.$inferSelect;
@@ -41,6 +42,7 @@ export class ReturnService {
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ChartOfAccountsService) private readonly chart: ChartOfAccountsService,
+    @Inject(SerialService) private readonly serials: SerialService,
   ) {}
 
   async returnGoods(tenant: TenantContext, saleId: string, raw: unknown) {
@@ -77,6 +79,19 @@ export class ReturnService {
         );
       }
       if (sale.historyOnly) throw new ApiError("NOT_RETURNABLE", "This sale was brought in as history; record the return as a new sale.", 409);
+      // The business's returns rule (ADR-059): later than that, only the owner (or an administrator) accepts goods back.
+      if (business.returnsWithinDays) {
+        const soldDay = localDate(sale.soldAt, business.timezone);
+        const today = localDate(new Date(), business.timezone);
+        const daysAgo = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${soldDay}T00:00:00Z`)) / 86_400_000);
+        if (daysAgo > business.returnsWithinDays && !tenant.permissions.includes(Permission.TENANT_MANAGE)) {
+          throw new ApiError(
+            "RETURN_TOO_LATE",
+            `This sale was ${daysAgo} days ago, and goods are taken back within ${business.returnsWithinDays} days. Ask the owner to accept this return.`,
+            403,
+          );
+        }
+      }
 
       const lines = await tx.select().from(saleLines).where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.saleId, sale.id)));
       const byId = new Map(lines.map((line) => [line.id, line]));
@@ -90,6 +105,8 @@ export class ReturnService {
         amount: bigint;
         cost: bigint;
         backToStock: boolean;
+        wholeLine: boolean;
+        serials?: string[];
       }[] = [];
       const seen = new Set<string>();
       for (const requested of payload.lines) {
@@ -112,7 +129,7 @@ export class ReturnService {
         const amount = last ? net - before.amount : (net * entered) / line.enteredQuantity;
         const lineCost = line.costMinor ?? 0n;
         const cost = last ? lineCost - before.cost : (lineCost * entered) / line.enteredQuantity;
-        planned.push({ line, quantity, entered, amount, cost, backToStock: requested.backToStock });
+        planned.push({ line, quantity, entered, amount, cost, backToStock: requested.backToStock, wholeLine: last, ...(requested.serials ? { serials: requested.serials } : {}) });
       }
 
       const total = planned.reduce((sum, item) => sum + item.amount, 0n);
@@ -201,6 +218,15 @@ export class ReturnService {
           costMinor: item.cost,
           backToStock: movementId !== null,
           stockMovementId: movementId,
+        });
+        // The units that came back, for a product with serial numbers (ADR-062).
+        await this.serials.returned(tx, tenant, {
+          saleId: sale.id,
+          saleLineId: item.line.id,
+          ...(item.serials ? { serials: item.serials } : {}),
+          wholeLine: item.wholeLine,
+          backToStock: movementId !== null,
+          returnNumber: number,
         });
       }
 

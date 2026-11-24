@@ -34,7 +34,10 @@ const quantityText = (thousandths: bigint) =>
 
 /** Products sold on this phone recently, newest first, for the quick tiles. Kept per shop, on the phone only. */
 const RECENT_LIMIT = 24;
+// The Scan button is loaded after the screen, to keep the sale screen within its size budget (ADR-066).
+const SaleScan = lazy(() => import("../../../../components/sale-scan").then((module) => ({ default: module.SaleScan })));
 const voiceModule = () => import("../../../../components/voice-sale");
+type NextSales = import("../../../../components/voice-sale").NextSales;
 const VoiceSale = lazy(voiceModule);
 // Loaded when shown, to keep the quick sale within its script budget.
 const pickerModule = () => import("../../../../components/customer-picker");
@@ -94,6 +97,7 @@ function QuickSaleScreen() {
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [savedOffline, setSavedOffline] = useState<string | null>(null);
+  const [savedNext, setSavedNext] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [given, setGiven] = useState("");
   const [extras, setExtras] = useState(false);
@@ -113,6 +117,9 @@ function QuickSaleScreen() {
   const voiceOn = access.offlineVoice !== false;
   // A sale confirmed on the voice screen is saved once its fields are in place (ADR-040).
   const [autoSave, setAutoSave] = useState(false);
+  // Several sales in one go (ADR-057): the ones the voice review shows next, and the ones waiting for this save.
+  const [voiceQueue, setVoiceQueue] = useState<NextSales | null>(null);
+  const [nextSales, setNextSales] = useState<NextSales | null>(null);
   // Search results load after the screen opens: they are not part of the first script.
   const [Picks, setPicks] = useState<typeof QuickSalePicksComponent | null>(null);
   useEffect(() => {
@@ -247,7 +254,7 @@ function QuickSaleScreen() {
     if (balance > 0n && !customer) return t("creditNeedsCustomer");
     if (balance > 0n && customer && customer.credit?.allowed === false) return t("creditCustomerNotApproved", { name: customer.name });
     if (balance > 0n && !dueDate) return t("creditNeedsDate");
-    if (balance > 0n && !comment.trim()) return t("creditNeedsComment");
+    if (balance > 0n && !comment.trim() && !customer?.credit?.termsDays) return t("creditNeedsComment");
     if (desk && mode === "credit" && !customer) return t("creditNeedsCustomer");
     return null;
   }
@@ -266,9 +273,30 @@ function QuickSaleScreen() {
     setSavedList(saved.items.map(asProduct));
   }
 
+  /** Empties the sale after saving; with more sales from the same go, the next one opens for checking. */
+  function clearSale() {
+    spoken.current = false;
+    setLines([]);
+    setDiscount("");
+    setSplit({ cash: "", transfer: "", pos: "" });
+    setCustomer(null);
+    setNote("");
+    setComment("");
+    setDueDate("");
+    setGiven("");
+    setMode("cash");
+    if (recentStore) setRecent(readRecent(recentStore));
+    if (nextSales) {
+      setVoiceQueue(nextSales);
+      setNextSales(null);
+      setVoice(true);
+    }
+  }
+
   async function save() {
     setError(null);
     setSavedOffline(null);
+    setSavedNext(null);
     const blocked = problem();
     if (blocked) {
       setError(blocked);
@@ -315,7 +343,12 @@ function QuickSaleScreen() {
       if (response.ok) {
         if (recentStore) rememberRecent(recentStore, lines.map((line) => line.product.id));
         await remember();
-        window.location.href = `/app/sales/${payload.data.sale.id}`;
+        if (!nextSales) {
+          window.location.href = `/app/sales/${payload.data.sale.id}`;
+          return;
+        }
+        setSavedNext(payload.data.sale.saleNumber ?? payload.data.sale.invoiceNumber ?? "");
+        clearSale();
         return;
       }
       setError(payload?.error?.message ?? t("failed"));
@@ -340,18 +373,8 @@ function QuickSaleScreen() {
             },
           },
         );
-        spoken.current = false;
         setSavedOffline(provisional);
-        setLines([]);
-        setDiscount("");
-        setSplit({ cash: "", transfer: "", pos: "" });
-        setCustomer(null);
-        setNote("");
-        setComment("");
-        setDueDate("");
-        setGiven("");
-        setMode("cash");
-        if (recentStore) setRecent(readRecent(recentStore));
+        clearSale();
       } else {
         setError(t("failed"));
       }
@@ -375,6 +398,11 @@ function QuickSaleScreen() {
           {t("savedOffline", { number: savedOffline })}
         </p>
       ) : null}
+      {savedNext !== null ? (
+        <p className="rounded-card border border-success bg-success-bg px-4 py-3 text-sm text-success" role="status" data-testid="saved-next">
+          {t("savedNext", { number: savedNext })}
+        </p>
+      ) : null}
       {!catalog ? <p className="text-sm text-muted">{t("noCatalog")}</p> : null}
       {voice && voiceOn && catalog ? (
         <Suspense fallback={null}>
@@ -389,8 +417,14 @@ function QuickSaleScreen() {
             canGiveCredit={canCredit}
             typedItems={typedOk}
             desk={desk}
-            onClose={() => setVoice(false)}
-            onDone={(result, saveNow) => {
+            queued={voiceQueue?.texts}
+            progressOf={voiceQueue ? { done: voiceQueue.done, total: voiceQueue.total } : undefined}
+            onClose={() => {
+              setVoice(false);
+              setVoiceQueue(null);
+              setNextSales(null);
+            }}
+            onDone={(result, saveNow, next) => {
               // What was said and checked fills the normal sale; saving uses the same path as tapping Save.
               setLines(result.lines.map((line) => ({ key: uuidv7(), ...line })));
               setCustomer(result.customer);
@@ -401,6 +435,8 @@ function QuickSaleScreen() {
               if (result.balanceMinor > 0n || result.comment) setExtras(true);
               spoken.current = true;
               setVoice(false);
+              setVoiceQueue(null);
+              setNextSales(next);
               if (saveNow) setAutoSave(true);
             }}
           />
@@ -415,6 +451,18 @@ function QuickSaleScreen() {
       <FormField id="sale-search" label={t("findProduct")}>
         <div className="flex gap-2">
           <Input id="sale-search" type="search" value={query} placeholder={t("findProductPlaceholder")} autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
+          {Picks ? (
+            <Suspense fallback={null}>
+              <SaleScan
+                products={catalog?.products}
+                onProduct={(product) => {
+                  addProduct(product);
+                  setQuery("");
+                }}
+                onText={setQuery}
+              />
+            </Suspense>
+          ) : null}
         </div>
       </FormField>
       {Picks ? (
@@ -427,6 +475,15 @@ function QuickSaleScreen() {
           listOk={listOk}
           typedOk={typedOk}
           onAdd={addProduct}
+          onReadAsSale={
+            voiceOn
+              ? (text) => {
+                  setQuery("");
+                  setVoiceQueue({ texts: [text], done: 0, total: 1 });
+                  setVoice(true);
+                }
+              : undefined
+          }
           money={money}
           stockText={stockText}
         />
@@ -471,7 +528,7 @@ function QuickSaleScreen() {
         ) : null}
         {balance > 0n ? (
           <Suspense fallback={null}>
-            <CreditFields dueDate={dueDate} comment={comment} onDueDate={setDueDate} onComment={setComment} />
+            <CreditFields dueDate={dueDate} comment={comment} onDueDate={setDueDate} onComment={setComment} termsDays={customer?.credit?.termsDays ?? null} />
           </Suspense>
         ) : desk ? (
           <FormField id="sale-comment" label={t("deskComment")} hint={t("optional")}>

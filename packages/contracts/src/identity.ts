@@ -101,8 +101,8 @@ export const registerRequestSchema = z.object({
   acceptTerms: z.literal(true).optional(),
 });
 
-/** The version of the Terms of use in force (ADR-039). Changing it asks every owner to accept again. */
-export const TERMS_VERSION = "2026-11-20";
+/** The version of the Terms of use in force (ADR-039; the pilot section, ADR-068). Changing it asks every owner to accept again. */
+export const TERMS_VERSION = "2026-11-24";
 
 export const acceptTermsSchema = z.object({
   version: z.literal(TERMS_VERSION, { errorMap: () => ({ message: "These terms have changed. Reload the page." }) }),
@@ -245,6 +245,10 @@ export const updateBusinessSchema = z.object({
   rememberItems: z.boolean().optional(),
   /** A list of names is enough. Prices and stock can come later (ADR-049). */
   quickCatalog: z.boolean().optional(),
+  /** Goods come back within this many days of the sale; null means no limit (ADR-059). */
+  returnsWithinDays: z.number().int().min(1).max(365).nullable().optional(),
+  /** Print the returns rule on receipts. */
+  returnsOnReceipt: z.boolean().optional(),
 });
 
 export const updateBranchSchema = z.object({

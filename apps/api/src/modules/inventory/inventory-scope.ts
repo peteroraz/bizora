@@ -1,8 +1,8 @@
 import { ApiError } from "../../common/errors.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import type { DbExecutor } from "../../db/database.js";
-import { branches, businesses, productUnits, products } from "../../db/schema.js";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { branches, businesses, productUnits, products, stockBalances, stockMovements } from "../../db/schema.js";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 export type BusinessRow = typeof businesses.$inferSelect;
 export type BranchRow = typeof branches.$inferSelect;
@@ -87,4 +87,47 @@ export function unitFactor(product: ProductRow, units: ProductUnitRow[], unit: s
     throw new ApiError("UNIT_NOT_FOR_SALE", `${product.name} is not sold in ${unit}s. Choose another unit.`, 422, [{ field: "unit", message: "Choose another unit." }]);
   }
   return pack.baseQuantity;
+}
+
+/**
+ * What the books said a shop had of a product at a moment (ADR-064): today's balance, less what moved after it. A
+ * count made on a phone with no network is compared with the stock at the time of counting, not when it arrived,
+ * so sales made in between are not counted as missing.
+ */
+export async function balanceAt(executor: DbExecutor, tenantId: string, branchId: string, productId: string, at?: Date) {
+  at = countTime(at);
+  const [balance] = await executor
+    .select({ quantity: stockBalances.quantity })
+    .from(stockBalances)
+    .where(and(eq(stockBalances.tenantId, tenantId), eq(stockBalances.branchId, branchId), eq(stockBalances.productId, productId)))
+    .limit(1);
+  const now = balance?.quantity ?? 0n;
+  if (!at || at.getTime() >= Date.now()) return now;
+  const [moved] = await executor
+    .select({ quantity: sql<string>`coalesce(sum(${stockMovements.quantity}), 0)::text` })
+    .from(stockMovements)
+    .where(
+      and(
+        eq(stockMovements.tenantId, tenantId),
+        eq(stockMovements.branchId, branchId),
+        eq(stockMovements.productId, productId),
+        gt(stockMovements.occurredAt, at),
+      ),
+    );
+  return now - BigInt(moved?.quantity ?? "0");
+}
+
+/** How far back a phone's count time is believed: a week, like an offline sale (ADR-050, ADR-064). */
+export const OFFLINE_COUNT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The time a count is compared at. A time in the future means now; one older than a week, or before the count
+ * session began, is moved up to that point, so a phone's clock cannot reach back to a time when more stock was there.
+ */
+export function countTime(at?: Date, notBefore?: Date) {
+  if (!at || Number.isNaN(at.getTime())) return undefined;
+  const now = Date.now();
+  if (at.getTime() >= now) return undefined;
+  const earliest = Math.max(now - OFFLINE_COUNT_MAX_AGE_MS, notBefore?.getTime() ?? 0);
+  return at.getTime() < earliest ? new Date(earliest) : at;
 }

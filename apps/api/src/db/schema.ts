@@ -181,6 +181,9 @@ export const businesses = pgTable(
     rememberItems: boolean("remember_items").notNull().default(true),
     /** A list of names is enough to start selling. Stock and prices can come later (ADR-049). */
     quickCatalog: boolean("quick_catalog").notNull().default(true),
+    /** Goods come back within this many days of the sale; later needs the owner (migration 0047, ADR-059). */
+    returnsWithinDays: integer("returns_within_days"),
+    returnsOnReceipt: boolean("returns_on_receipt").notNull().default(false),
     visibleModules: text("visible_modules")
       .array()
       .notNull()
@@ -562,6 +565,8 @@ export const customers = pgTable(
     ...timestamps,
     /** Buys at this price list's prices (migration 0042, ADR-048). */
     priceListId: uuid("price_list_id"),
+    /** Standard credit terms: a credit sale is due this many days later, with no comment needed (migration 0047). */
+    creditTermsDays: integer("credit_terms_days"),
   },
   (table) => [
     index("customers_tenant_business_idx").on(table.tenantId, table.businessId),
@@ -830,6 +835,10 @@ export const products = pgTable(
     lowStockLevel: bigint("low_stock_level", { mode: "bigint" }),
     barcode: varchar("barcode", { length: 64 }),
     trackStock: boolean("track_stock").notNull().default(true),
+    /** Stock is kept in batches with expiry dates (migration 0049, ADR-061). */
+    tracksBatches: boolean("tracks_batches").notNull().default(false),
+    /** Each unit has a serial number or IMEI (migration 0050, ADR-062). */
+    tracksSerials: boolean("tracks_serials").notNull().default(false),
     /**
      * The item this product is a variant of (migration 0040, ADR-046). Left out on insert, the database trigger
      * makes the product its own item (same ID), so every product always has one.
@@ -1985,6 +1994,24 @@ export const supplierProducts = pgTable(
   (table) => [uniqueIndex("supplier_products_key").on(table.tenantId, table.supplierId, table.productId)],
 );
 
+/** Reorder rules: minimum, target, maximum, usual supplier and lead time, for every shop or one (migration 0051, ADR-063). */
+export const reorderRules = pgTable("reorder_rules", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  branchId: uuid("branch_id"),
+  reorderPoint: bigint("reorder_point", { mode: "bigint" }),
+  minQuantity: bigint("min_quantity", { mode: "bigint" }),
+  targetQuantity: bigint("target_quantity", { mode: "bigint" }),
+  maxQuantity: bigint("max_quantity", { mode: "bigint" }),
+  leadTimeDays: integer("lead_time_days"),
+  preferredSupplierId: uuid("preferred_supplier_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by"),
+});
+
 /** A delivery of several products with charges spread over them (migration 0042, ADR-048). */
 export const stockReceipts = pgTable("stock_receipts", {
   id: uuid("id").primaryKey(),
@@ -1999,6 +2026,72 @@ export const stockReceipts = pgTable("stock_receipts", {
   note: varchar("note", { length: 240 }),
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Product attributes and their values on variants (migration 0048, ADR-060). */
+export const attributeDefinitions = pgTable("attribute_definitions", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  name: varchar("name", { length: 60 }).notNull(),
+  nameKey: varchar("name_key", { length: 60 }).notNull(),
+  kind: varchar("kind", { length: 12 }).notNull(),
+  unit: varchar("unit", { length: 16 }),
+  position: integer("position").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  ...timestamps,
+});
+
+export const attributeOptions = pgTable("attribute_options", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  attributeId: uuid("attribute_id").notNull(),
+  value: varchar("value", { length: 60 }).notNull(),
+  valueKey: varchar("value_key", { length: 60 }).notNull(),
+  position: integer("position").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const variantAttributeValues = pgTable("variant_attribute_values", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  attributeId: uuid("attribute_id").notNull(),
+  optionId: uuid("option_id"),
+  textValue: varchar("text_value", { length: 120 }),
+  numberValue: numeric("number_value", { precision: 18, scale: 4 }),
+  boolValue: boolean("bool_value"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by"),
+});
+
+/** Batches (lots) with expiry dates, and which batches each movement used (migration 0049, ADR-061). */
+export const stockBatches = pgTable("stock_batches", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  batchNumber: varchar("batch_number", { length: 64 }),
+  expiryDate: date("expiry_date", { mode: "string" }),
+  manufacturedDate: date("manufactured_date", { mode: "string" }),
+  supplierId: uuid("supplier_id"),
+  quantity: bigint("quantity", { mode: "bigint" }).notNull().default(0n),
+  receivedQuantity: bigint("received_quantity", { mode: "bigint" }).notNull().default(0n),
+  firstReceivedAt: timestamp("first_received_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const stockMovementBatches = pgTable("stock_movement_batches", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  movementId: uuid("movement_id").notNull(),
+  batchId: uuid("batch_id").notNull(),
+  quantity: bigint("quantity", { mode: "bigint" }).notNull(),
 });
 
 /** A store keeper's stock change waiting for a manager or owner to approve and complete it (ADR-034). */

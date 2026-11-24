@@ -58,6 +58,8 @@ function idFor(path: string, param: string): string {
     ["units", ids.unit!],
     ["shop-devices", randomUUID()],
     ["staff", ids.membership!],
+    ["catalog/attributes", ids.attribute!],
+    ["catalog/products", ids.product!],
     ["catalog/brands", ids.brand!],
     ["catalog/categories", ids.category!],
     ["catalog/items", ids.item!],
@@ -189,6 +191,10 @@ describe("tenant isolation matrix (ADR-043)", () => {
     // Catalog, transfers, counts, price lists and deliveries (the routes added after the first matrix).
     ids.category = (await request(h.http).post("/api/v1/catalog/categories").set(auth(bt)).send({ name: "Bravotenant grains" }).expect(201)).body.data.category.id;
     ids.brand = (await request(h.http).post("/api/v1/catalog/brands").set(auth(bt)).send({ name: "Bravotenant Mills" }).expect(201)).body.data.brand.id;
+    // ADR-060: an attribute with a choice, set on B's product.
+    const attribute = (await request(h.http).post("/api/v1/catalog/attributes").set(auth(bt)).send({ name: "Bravotenant colour", options: ["Bravotenant red"] }).expect(201)).body.data.attribute;
+    ids.attribute = attribute.id;
+    await request(h.http).put(`/api/v1/catalog/products/${ids.product}/attributes`).set(auth(bt)).send({ values: [{ attributeId: attribute.id, optionIds: [attribute.options[0].id] }] }).expect(200);
     ids.item = (await request(h.http).post("/api/v1/catalog/items").set(auth(bt)).send({ name: "Bravotenant oil", categoryId: ids.category, brandId: ids.brand, variants: [{ baseUnit: "bottle", priceMinor: "100000" }] }).expect(201)).body.data.item.id;
     ids.warehouse = (await request(h.http).post("/api/v1/branches").set(auth(bt)).send({ name: "Bravotenant store", kind: "warehouse" }).expect(201)).body.data.branch.id;
     ids.transfer = (await request(h.http).post("/api/v1/inventory/transfers").set(auth(bt)).send({ toBranchId: ids.warehouse, lines: [{ productId: ids.product, quantity: "1", unit: "bag" }] }).expect(201)).body.data.transfer.id;
@@ -196,7 +202,7 @@ describe("tenant isolation matrix (ADR-043)", () => {
     ids.priceList = (await request(h.http).post("/api/v1/pricing/lists").set(auth(bt)).send({ name: "Bravotenant prices" }).expect(201)).body.data.id;
     await request(h.http).put(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).send({ prices: [{ productId: ids.product, unitCode: "bag", priceMinor: "7000000" }] }).expect(200);
     ids.price = (await request(h.http).get(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).expect(200)).body.data.prices[0].id;
-    ids.receipt = (await request(h.http).post("/api/v1/stock/receipts").set(auth(bt)).send({ branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100000" }], charges: [{ kind: "transport", amountMinor: "1000", paidFrom: "cash" }] }).expect(201)).body.data.id;
+    ids.receipt = (await request(h.http).post("/api/v1/stock/receipts").set(auth(bt)).send({ branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", paidFromBranchId: b.branchId, lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100000" }], charges: [{ kind: "transport", amountMinor: "1000", paidFrom: "cash" }] }).expect(201)).body.data.id;
     await request(h.http).put(`/api/v1/suppliers/${ids.supplier}/products`).set(auth(bt)).send({ productId: ids.product, supplierSku: "BRAVO-RICE" }).expect(200);
     const missed = await request(h.http)
       .post("/api/v1/sync/push")
@@ -264,6 +270,9 @@ describe("tenant isolation matrix (ADR-043)", () => {
       ["post", "/api/v1/pricing/lists", { name: "Probe prices" }],
       ["put", "/api/v1/customers/" + ids.customer + "/price-list", { priceListId: ids.priceList }],
       ["put", "/api/v1/suppliers/" + ids.supplier + "/products", { productId: ids.product, supplierSku: "PROBE" }],
+      // A report for B's shop (ADR-058).
+      ["get", `/api/v1/sales/report?branchId=${b.branchId}`, {}],
+      ["get", `/api/v1/sales/report.csv?branchId=${b.branchId}`, {}],
     ];
     const failures: string[] = [];
     for (const [method, path, body] of tries) {

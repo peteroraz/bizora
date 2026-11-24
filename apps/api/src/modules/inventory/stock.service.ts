@@ -15,7 +15,7 @@ import {
   stockCountRejectSchema,
 } from "@bizora/contracts";
 import { averageUnitCost, issueStock, QUANTITY_SCALE } from "@bizora/money";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -38,8 +38,12 @@ import {
   requireBusiness,
   requireProduct,
   resolveBranch,
+  balanceAt,
+  countTime,
   unitFactor,
 } from "./inventory-scope.js";
+import { addToBatch, batchesOfMovement, takeFromBatches, type BatchIn } from "./batches.js";
+import { SerialService } from "./serial.service.js";
 
 /** "1 bag", "2 bags", "1.5 kg": for messages to people. */
 const unitWord = (unit: string, quantity: bigint) => (quantity === 1000n || ["kg", "g", "ml", "l", "dozen"].includes(unit) ? unit : `${unit}s`);
@@ -70,6 +74,8 @@ export type MovementInput = {
   note?: string | null;
   supplier?: string | null;
   paidFrom?: "cash" | "bank" | "credit" | null;
+  /** The shop whose cash paid, when the stock itself landed somewhere else (a warehouse). */
+  cashBranchId?: string | null;
   /** Total cost for goods coming in. Without it, the current average (or the product's default cost) is used. */
   totalCostMinor?: bigint | null;
   /** Exact value to use (the value that left the other shop in a transfer). */
@@ -89,6 +95,11 @@ export type MovementInput = {
    * made on a phone with no network, sales typed in from a book or photo, and count corrections.
    */
   mayGoBelowZero?: boolean;
+  /** For a product that keeps batches (ADR-061): the batch stock comes in under, or the one batch it leaves from. */
+  batch?: BatchIn | null;
+  batchId?: string | null;
+  /** Stock arriving from another shop: keeps the batches it left with. */
+  batchesOfMovementId?: string | null;
   documentType?: DocumentType | null;
   occurredAt?: Date;
 };
@@ -115,6 +126,7 @@ export class StockService {
     @Inject(DocumentNumberService) private readonly numbers: DocumentNumberService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NotificationService) private readonly notifications: NotificationService,
+    @Inject(SerialService) private readonly serials: SerialService,
   ) {}
 
   async applyMovement(tx: DbExecutor, context: Context, input: MovementInput) {
@@ -221,7 +233,43 @@ export class StockService {
       })
       .where(and(eq(stockBalances.tenantId, tenant.tenantId), eq(stockBalances.branchId, branch.id), eq(stockBalances.productId, product.id)));
 
-    return { id, valueMinor: value, chargesMinor, documentNumber, quantity: next.quantity, negative };
+    const batches = product.tracksBatches ? await this.moveBatches(tx, context, id, input, occurredAt, position.quantity) : [];
+
+    return { id, valueMinor: value, chargesMinor, documentNumber, quantity: next.quantity, negative, batches };
+  }
+
+  /** Moves batch quantities with the movement (ADR-061). The value of stock is unchanged: batches hold quantities. */
+  private async moveBatches(tx: DbExecutor, context: Context, movementId: string, input: MovementInput, occurredAt: Date, onHand: bigint) {
+    const scope = {
+      tenantId: context.tenant.tenantId,
+      businessId: context.business.id,
+      branchId: context.branch.id,
+      productId: context.product.id,
+      productName: context.product.name,
+    };
+    if (input.quantity > 0n) {
+      if (input.batchesOfMovementId) {
+        const carried = await batchesOfMovement(tx, scope.tenantId, input.batchesOfMovementId);
+        const used = [];
+        let left = input.quantity;
+        for (const batch of carried) {
+          const take = batch.quantity < left ? batch.quantity : left;
+          if (take <= 0n) break;
+          used.push(...(await addToBatch(tx, scope, movementId, take, batch, occurredAt)));
+          left -= take;
+        }
+        if (left > 0n) used.push(...(await addToBatch(tx, scope, movementId, left, {}, occurredAt)));
+        return used;
+      }
+      return addToBatch(tx, scope, movementId, input.quantity, { ...(input.batch ?? {}), supplierId: input.supplierId ?? null }, occurredAt);
+    }
+    return takeFromBatches(tx, scope, movementId, -input.quantity, {
+      batchId: input.batchId ?? null,
+      today: localDate(new Date(), context.business.timezone),
+      onHand,
+      preferFresh: input.type === "sold" || input.type === "job_use",
+      refuseExpired: input.type === "sold" && !input.mayGoBelowZero,
+    });
   }
 
   // Stock in ---------------------------------------------------------------------------------------------------
@@ -265,6 +313,7 @@ export class StockService {
       name: payload.supplier,
       unnamedWhenMissing: payload.paidFrom === "credit",
     });
+    const cashBranchId = await this.cashDrawer(tx, tenant, context.business.id, context.branch, payload.paidFrom, options.charges ?? [], payload.paidFromBranchId);
     const result = await this.applyMovement(tx, context, {
       ...(payload.id ? { id: payload.id } : {}),
       type: "received",
@@ -275,12 +324,24 @@ export class StockService {
       supplierId: supplier?.id ?? null,
       note: payload.note ?? null,
       paidFrom: payload.paidFrom,
+      ...(cashBranchId ? { cashBranchId } : {}),
       totalCostMinor: payload.totalCostMinor ? BigInt(payload.totalCostMinor) : null,
       documentType: "stock_in",
+      ...(payload.batch ? { batch: payload.batch } : {}),
       ...(options.charges ? { charges: options.charges } : {}),
       ...(options.receiptId ? { receiptId: options.receiptId } : {}),
       ...(options.occurredAt ? { occurredAt: options.occurredAt } : {}),
     });
+    // One serial number or IMEI per unit, for a product that keeps them (ADR-062).
+    await this.serials.receive(
+      tx,
+      tenant,
+      { businessId: context.business.id, branchId: context.branch.id, branchName: context.branch.name, product: context.product },
+      result.id,
+      quantity,
+      payload.serials,
+      options.occurredAt ?? new Date(),
+    );
     // What it cost to buy, for the product and for this supplier (ADR-048). Only a cost someone entered counts.
     if (payload.totalCostMinor) {
       await recordPurchaseCost(tx, tenant, {
@@ -415,6 +476,7 @@ export class StockService {
       enteredUnit: payload.unit,
       reason: payload.reason,
       note: payload.note ?? null,
+      ...(payload.batchId && payload.direction === "remove" ? { batchId: payload.batchId } : {}),
     });
     await this.record(tx, tenant, "stock.adjusted", result.id, context, { reason: payload.reason, note: payload.note, quantity: payload.quantity, unit: payload.unit, direction: payload.direction });
     return this.presentResult(tenant, result);
@@ -458,6 +520,7 @@ export class StockService {
       note: payload.note ?? null,
       transferId,
       valueMinor: -out.valueMinor,
+      batchesOfMovementId: out.id,
     });
     // The quick way (sent and received at once) is kept as a transfer too, so every transfer has one history (ADR-047).
     const now = new Date();
@@ -529,6 +592,7 @@ export class StockService {
         note,
         transferId,
         valueMinor: -out.valueMinor,
+        batchesOfMovementId: out.id,
       });
       await this.record(tx, tenant, "stock.transferred", out.id, from, { note, toBranchId, quantity: row.quantity.toString(), unit: from.product.baseUnit, shopClosed: true });
     }
@@ -677,7 +741,7 @@ export class StockService {
   // Counts --------------------------------------------------------------------------------------------------------
 
   /** A count by someone who can adjust stock is applied at once; anyone else's count waits for approval. */
-  async count(tenant: TenantContext, raw: unknown) {
+  async count(tenant: TenantContext, raw: unknown, options: { countedAt?: Date } = {}) {
     const payload = stockCountSchema.parse(raw);
     if (payload.id) {
       const [existing] = await this.db
@@ -687,26 +751,19 @@ export class StockService {
         .limit(1);
       if (existing) return this.presentCount(existing);
     }
-    return this.db.transaction(async (tx) => this.countIn(tx, tenant, payload));
+    return this.db.transaction(async (tx) => this.countIn(tx, tenant, payload, options.countedAt));
   }
 
-  /** A count, inside the caller's transaction (ADR-033). Those who may adjust stock have it approved at once. */
-  async countIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockCountSchema.parse>) {
+  /**
+   * A count, inside the caller's transaction (ADR-033). Those who may adjust stock have it approved at once. A count
+   * made offline is compared with the stock at the time it was made (ADR-064).
+   */
+  async countIn(tx: DbExecutor, tenant: TenantContext, payload: ReturnType<typeof stockCountSchema.parse>, countedAt?: Date) {
     const context = await this.context(tx, tenant, payload.productId, payload.branchId);
     const units = (await productUnitsFor(tx, tenant.tenantId, [context.product.id])).get(context.product.id) ?? [];
     const counted = this.toBase(parseCountQuantity(payload.countedQuantity) as bigint, unitFactor(context.product, units, payload.unit));
-    const [balance] = await tx
-      .select({ quantity: stockBalances.quantity })
-      .from(stockBalances)
-      .where(
-        and(
-          eq(stockBalances.tenantId, tenant.tenantId),
-          eq(stockBalances.branchId, context.branch.id),
-          eq(stockBalances.productId, context.product.id),
-        ),
-      )
-      .limit(1);
-    const system = balance?.quantity ?? 0n;
+    countedAt = countTime(countedAt);
+    const system = await balanceAt(tx, tenant.tenantId, context.branch.id, context.product.id, countedAt);
     const id = payload.id ?? newId();
     await tx.insert(stockCounts).values({
       id,
@@ -721,7 +778,7 @@ export class StockService {
       countedBy: tenant.userId,
       countedMembershipId: tenant.membershipId,
       deviceId: tenant.deviceId ?? null,
-      countedAt: new Date(),
+      countedAt: countedAt ?? new Date(),
     });
     await this.record(tx, tenant, "stock.counted", id, context, { note: payload.note ?? null, countedQuantity: payload.countedQuantity, unit: payload.unit });
     if (tenant.permissions.includes(Permission.STOCK_ADJUST)) await this.decide(tx, tenant, id, "approved");
@@ -864,8 +921,10 @@ export class StockService {
     const business = await requireBusiness(this.db, tenant);
     const branch = await resolveBranch(this.db, tenant, business.id, branchId);
     const onHand = sql<string>`coalesce(${stockBalances.quantity}, 0)`;
+    // A shop's own reorder point replaces the low stock level there (ADR-063).
+    const point = sql<string>`coalesce((SELECT r.reorder_point FROM reorder_rules r WHERE r.tenant_id = ${products.tenantId} AND r.product_id = ${products.id} AND r.branch_id = ${branch.id}), ${products.lowStockLevel})`;
     const rows = await this.db
-      .select({ id: products.id, name: products.name, baseUnit: products.baseUnit, lowStockLevel: products.lowStockLevel, quantity: onHand })
+      .select({ id: products.id, name: products.name, baseUnit: products.baseUnit, lowStockLevel: point, quantity: onHand })
       .from(products)
       .leftJoin(
         stockBalances,
@@ -877,8 +936,8 @@ export class StockService {
           eq(products.businessId, business.id),
           isNull(products.archivedAt),
           eq(products.trackStock, true),
-          isNotNull(products.lowStockLevel),
-          lte(onHand, products.lowStockLevel),
+          sql`${point} IS NOT NULL`,
+          sql`${onHand} <= ${point}`,
         ),
       )
       .orderBy(onHand, products.name)
@@ -888,18 +947,47 @@ export class StockService {
       name: row.name,
       baseUnit: row.baseUnit,
       quantity: BigInt(row.quantity).toString(),
-      lowStockLevel: row.lowStockLevel?.toString() ?? null,
+      lowStockLevel: row.lowStockLevel === null ? null : BigInt(row.lowStockLevel).toString(),
     }));
   }
+
 
   /** Shops stock can be moved to: every shop of the business, names only. */
   async shops(tenant: TenantContext) {
     const business = await requireBusiness(this.db, tenant);
     return this.db
-      .select({ id: branches.id, name: branches.name })
+      .select({ id: branches.id, name: branches.name, kind: branches.kind })
       .from(branches)
       .where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.businessId, business.id), isNull(branches.closedAt)))
       .orderBy(branches.name);
+  }
+
+  /**
+   * Cash paid for stock comes out of a shop's drawer, never a warehouse (ADR-056). A shop receiving its own goods
+   * uses its own drawer when no shop is named. A warehouse must name the shop.
+   */
+  private async cashDrawer(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    businessId: string,
+    place: BranchRow,
+    paidFrom: string | null | undefined,
+    charges: { paidFrom: "cash" | "bank" }[],
+    paidFromBranchId?: string,
+  ) {
+    const needsCash = paidFrom === "cash" || charges.some((charge) => charge.paidFrom === "cash");
+    if (!needsCash) return null;
+    if (paidFromBranchId) {
+      const shop = await findBranch(tx, tenant, businessId, paidFromBranchId);
+      if (shop.kind === "warehouse" || shop.closedAt) {
+        throw new ApiError("VALIDATION_ERROR", "Choose which shop's cash paid this, or choose bank.", 400, [{ field: "paidFromBranchId", message: "Choose a shop." }]);
+      }
+      return shop.id;
+    }
+    if (place.kind === "warehouse") {
+      throw new ApiError("VALIDATION_ERROR", "Choose which shop's cash paid this, or choose bank.", 400, [{ field: "paidFromBranchId", message: "Choose a shop." }]);
+    }
+    return place.id;
   }
 
   /** Products below zero after a sync, for the owner to check (never corrected automatically). */
@@ -967,6 +1055,7 @@ export class StockService {
   }
 
   private postingLines(input: MovementInput, value: bigint, branchId: string): PostingLine[] | null {
+    const cashBranchId = input.cashBranchId ?? branchId;
     if (value === 0n || input.type === "transfer_in" || input.type === "transfer_out") return null;
     const amount = value < 0n ? -value : value;
     const stock = { account: { role: "stock" as const } };
@@ -1000,7 +1089,7 @@ export class StockService {
     // Goods sent back to a supplier (ADR-030): off what is owed to them, or money back to the drawer or the bank.
     if (input.type === "supplier_return") {
       const debit: PostingLine["account"] =
-        input.paidFrom === "cash" ? { role: "cash", branchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
+        input.paidFrom === "cash" ? { role: "cash", branchId: cashBranchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
       return [
         { account: debit, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) },
         { ...stock, creditMinor: amount },
@@ -1014,15 +1103,15 @@ export class StockService {
     }
     if (input.type === "received" || input.type === "returned") {
       const credit: PostingLine["account"] =
-        input.paidFrom === "cash" ? { role: "cash", branchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
+        input.paidFrom === "cash" ? { role: "cash", branchId: cashBranchId } : input.paidFrom === "bank" ? { role: "bank" } : { role: "payable" };
       // Charges on a delivery (ADR-048) are part of the stock's value, paid from the drawer or the bank; the supplier
-      // is owed (or paid) only for the goods.
+      // is owed (or paid) only for the goods. Cash never comes out of a warehouse.
       const charges = input.type === "received" && value > 0n ? (input.charges ?? []).filter((charge) => charge.amountMinor > 0n) : [];
       const chargesTotal = charges.reduce((sum, charge) => sum + charge.amountMinor, 0n);
       const lines: PostingLine[] = [{ ...stock, debitMinor: amount, ...(input.supplier ? { memo: input.supplier.slice(0, 240) } : {}) }];
       if (amount - chargesTotal > 0n) lines.push({ account: credit, creditMinor: amount - chargesTotal });
       for (const charge of charges) {
-        lines.push({ account: charge.paidFrom === "cash" ? { role: "cash", branchId } : { role: "bank" }, creditMinor: charge.amountMinor, memo: "Delivery charges" });
+        lines.push({ account: charge.paidFrom === "cash" ? { role: "cash", branchId: cashBranchId } : { role: "bank" }, creditMinor: charge.amountMinor, memo: "Delivery charges" });
       }
       return lines;
     }

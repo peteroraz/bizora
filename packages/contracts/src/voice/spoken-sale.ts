@@ -117,6 +117,8 @@ export function parseSpokenSale(transcript: string, options: { currency: string;
   };
   const each = splitPhrases(lexicon.each);
   const per = splitPhrases(lexicon.per);
+  // Longest first, so "for all of them" wins over "for all".
+  const forAll = splitPhrases(lexicon.forAll).sort((a, b) => b.length - a.length);
   const customerVerbs = splitPhrases(lexicon.customerVerbs);
   const stopWords = new Set([
     ...lexicon.at,
@@ -421,8 +423,13 @@ export function parseSpokenSale(transcript: string, options: { currency: string;
       cursor.used.add(k);
       let after = k + 1;
       const eachPhrase = phraseAt(tokens, after, each);
+      const allPhrase = eachPhrase ? null : phraseAt(tokens, after, forAll);
       let perUnit = false;
-      if (eachPhrase) {
+      let forAllOfThem = false;
+      if (allPhrase) {
+        forAllOfThem = true;
+        after += allPhrase.length;
+      } else if (eachPhrase) {
         perUnit = true;
         after += eachPhrase.length;
       } else {
@@ -434,7 +441,8 @@ export function parseSpokenSale(transcript: string, options: { currency: string;
         }
       }
       for (let m = k + 1; m < after; m += 1) cursor.used.add(m);
-      if (perUnit || isAt) line.unitPriceMinor = amount;
+      if (forAllOfThem) line.lineTotalMinor = amount;
+      else if (perUnit || isAt) line.unitPriceMinor = amount;
       else if (isFor) line.lineTotalMinor = amount;
       else if (quantity === THOUSANDTHS) line.unitPriceMinor = amount;
       else line.unclearAmountMinor = amount;

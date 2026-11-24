@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isUuidV7 } from "./ids.js";
 import { parseQuantity } from "./stock-units.js";
-import { unitCodeSchema } from "./stock.js";
+import { batchInputSchema, serialListSchema, unitCodeSchema } from "./stock.js";
 
 /**
  * Price lists, suppliers per product and landed cost (ADR-048). Money is a string of minor units (kobo); quantities
@@ -69,6 +69,8 @@ export const stockReceiptCreateSchema = z.object({
   supplier: z.string().trim().max(160).optional(),
   /** How the goods were paid; the charges say their own. */
   paidFrom: z.enum(["cash", "bank", "credit"]).default("credit"),
+  /** When cash is paid at a warehouse, the shop whose drawer paid. A shop receiving its own stock can leave this out. */
+  paidFromBranchId: z.string().uuid().optional(),
   payBy: day.optional(),
   note: z.string().trim().max(240).optional(),
   lines: z
@@ -79,6 +81,10 @@ export const stockReceiptCreateSchema = z.object({
         unit: unitCodeSchema,
         /** What the goods on this line cost, before charges. */
         totalCostMinor: positiveAmount,
+        /** For a product that keeps batches (ADR-061). */
+        batch: batchInputSchema.optional(),
+        /** One serial number or IMEI per unit, for a product that keeps them (ADR-062). */
+        serials: serialListSchema.optional(),
       }),
     )
     .min(1)

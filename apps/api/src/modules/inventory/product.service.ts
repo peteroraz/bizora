@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   compactItemKey,
+  currencyDigits,
   productArchiveSchema,
   Permission,
   PRODUCT_PAGE_SIZE,
@@ -11,7 +12,7 @@ import {
   isValidGtin,
   variantName,
 } from "@bizora/contracts";
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -22,6 +23,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { type ProductRow, type ProductUnitRow, productUnitsFor, requireBusiness, requireProduct, resolveBranch } from "./inventory-scope.js";
 import { categoryPath, copyCategoryToVariants, requireBrand, requireItem, resolveCategory } from "./catalog-scope.js";
 import { mainPhotos } from "./product-photo.service.js";
+import { productsCsv } from "./product-file.js";
 import { StockService } from "./stock.service.js";
 import { TransferService } from "./transfer.service.js";
 
@@ -50,21 +52,27 @@ export class ProductService {
     const filters: SQL[] = [eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)];
     const needle = query.q?.trim();
     if (needle) {
-      // Name, category and every code (ADR-046): barcode and GTIN exactly, SKU, MPN and reference in any case, brand by name.
+      // Name, category and every code (ADR-046): barcode and GTIN exactly, SKU, MPN and reference in any case, brand by
+      // name, and a supplier's own code (ADR-048). Each is its own part of a UNION, so each can use its index: trigram
+      // indexes for the names (ADR-067), B-tree for the codes. One OR across them all would read every product. The
+      // archived filter is repeated in the parts whose indexes cover products in use only.
       const code = needle.toLowerCase();
-      const match = or(
-        ilike(products.name, like(needle)),
-        eq(products.barcode, needle),
-        eq(products.gtin, needle),
-        ilike(products.category, like(needle)),
-        sql`lower(${products.sku}) = ${code}`,
-        sql`lower(${products.mpn}) = ${code}`,
-        sql`lower(${products.reference}) = ${code}`,
-        sql`${products.catalogItemId} IN (SELECT i.id FROM catalog_items i JOIN brands b ON b.tenant_id = i.tenant_id AND b.id = i.brand_id WHERE i.tenant_id = ${tenant.tenantId} AND b.name ILIKE ${like(needle)})`,
-      );
-      // A supplier's own code for the product finds it too (ADR-048).
-      const bySupplierCode = sql`EXISTS (SELECT 1 FROM supplier_products sp WHERE sp.tenant_id = ${products.tenantId} AND sp.product_id = ${products.id} AND lower(sp.supplier_sku) = ${code})`;
-      if (match) filters.push(or(match, bySupplierCode) as SQL);
+      const pattern = like(needle);
+      const t = tenant.tenantId;
+      const b = business.id;
+      filters.push(sql`${products.id} IN (
+        SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND archived_at IS NULL AND name ILIKE ${pattern}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND archived_at IS NULL AND category ILIKE ${pattern}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND barcode = ${needle}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND gtin = ${needle}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND archived_at IS NULL AND lower(sku) = ${code}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND lower(mpn) = ${code}
+        UNION SELECT id FROM products WHERE tenant_id = ${t} AND business_id = ${b} AND lower(reference) = ${code}
+        UNION SELECT p.id FROM products p JOIN catalog_items i ON i.tenant_id = p.tenant_id AND i.id = p.catalog_item_id
+          JOIN brands br ON br.tenant_id = i.tenant_id AND br.id = i.brand_id
+          WHERE p.tenant_id = ${t} AND p.business_id = ${b} AND br.name ILIKE ${pattern}
+        UNION SELECT sp.product_id FROM supplier_products sp WHERE sp.tenant_id = ${t} AND sp.business_id = ${b} AND lower(sp.supplier_sku) = ${code}
+      )`);
     }
     if (query.category?.trim()) filters.push(eq(products.category, query.category.trim()));
     const page = Math.max(1, query.page ?? 1);
@@ -201,6 +209,27 @@ export class ProductService {
     };
   }
 
+  /** The product file (ADR-065), for this shop's stock. Recorded, as any export of business data. */
+  async exportCsv(tenant: TenantContext) {
+    const business = await requireBusiness(this.db, tenant);
+    const branch = await resolveBranch(this.db, tenant, business.id);
+    const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
+    const file = await productsCsv(this.db, tenant, business, branch.id, currencyDigits(business.baseCurrencyCode.trim()), seeCost);
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "products.exported",
+      entityType: "business",
+      entityId: business.id,
+      correlationId: tenant.correlationId,
+      businessId: business.id,
+      branchId: branch.id,
+      actorType: tenant.actorType ?? "HUMAN",
+      metadata: { rows: file.rows, withCost: seeCost },
+    });
+    return { fileName: `bizora-products-${new Date().toISOString().slice(0, 10)}.csv`, csv: file.csv };
+  }
+
   async create(tenant: TenantContext, raw: unknown) {
     const payload = productCreateSchema.parse(raw);
     if (payload.id) {
@@ -282,7 +311,12 @@ export class ProductService {
       .select({ count: sql<number>`count(*)::int` })
       .from(products)
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.catalogItemId, item.id), isNull(products.archivedAt)));
-    const values = this.values({ ...payload, trackStock: item.itemType === "physical" ? (payload.trackStock ?? existing.trackStock) : false });
+    const values = this.values({
+      ...payload,
+      trackStock: item.itemType === "physical" ? (payload.trackStock ?? existing.trackStock) : false,
+      tracksBatches: payload.tracksBatches ?? existing.tracksBatches,
+      tracksSerials: payload.tracksSerials ?? existing.tracksSerials,
+    });
     // Without permission to see cost, the existing default cost is kept as it is.
     const seesCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
     if (!seesCost) delete (values as Partial<typeof values>).defaultCostMinor;
@@ -295,6 +329,8 @@ export class ProductService {
     if (text(values.lowStockLevel) !== text(existing.lowStockLevel)) changes.lowStockLevel = [text(existing.lowStockLevel), text(values.lowStockLevel)];
     if ((values.category ?? null) !== (existing.category ?? null)) changes.category = [existing.category ?? null, values.category ?? null];
     if (values.trackStock !== existing.trackStock) changes.trackStock = [String(existing.trackStock), String(values.trackStock)];
+    if (values.tracksBatches !== existing.tracksBatches) changes.tracksBatches = [String(existing.tracksBatches), String(values.tracksBatches)];
+    if (values.tracksSerials !== existing.tracksSerials) changes.tracksSerials = [String(existing.tracksSerials), String(values.tracksSerials)];
     const reason = payload.changeReason?.trim() || null;
     if ((changes.price || changes.cost) && !reason) {
       throw new ApiError("REASON_REQUIRED", "Say why the price or cost is changing.", 400, [{ field: "changeReason", message: "Say why." }]);
@@ -502,6 +538,8 @@ export class ProductService {
       mpn: product.mpn,
       reference: product.reference,
       trackStock: product.trackStock,
+      tracksBatches: product.tracksBatches,
+      tracksSerials: product.tracksSerials,
       archived: product.archivedAt !== null,
       updatedAt: product.updatedAt,
       ...(seeCost ? { defaultCostMinor: product.defaultCostMinor?.toString() ?? null } : {}),
@@ -531,6 +569,10 @@ export class ProductService {
       lowStockLevel: payload.lowStockLevel ? (payload.lowStockLevel === "0" ? 0n : (parseQuantity(payload.lowStockLevel) as bigint)) : null,
       barcode: payload.barcode?.trim() || null,
       trackStock: payload.trackStock ?? true,
+      // Batches only mean something for stock that is counted (ADR-061).
+      tracksBatches: (payload.trackStock ?? true) && (payload.tracksBatches ?? false),
+      // Serial numbers only mean something for stock that is counted (ADR-062).
+      tracksSerials: (payload.trackStock ?? true) && (payload.tracksSerials ?? false),
       sku: payload.sku?.trim() || null,
       gtin: payload.gtin?.trim() || null,
       mpn: payload.mpn?.trim() || null,

@@ -1,6 +1,7 @@
 "use client";
 
-import { capitaliseFirst, compactItemKey, isExactListedName, matchSaleItems, savedItemKey } from "@bizora/contracts";
+import { capitaliseFirst, compactItemKey, isExactListedName, matchSaleItems, savedItemKey, TYPED_ITEM_NAME_MAX } from "@bizora/contracts";
+import { looksLikeSpokenSale } from "@bizora/contracts/voice";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { useUnitName } from "../../../../components/stock-quantity";
@@ -22,6 +23,7 @@ export function QuickSalePicks({
   listOk,
   typedOk,
   onAdd,
+  onReadAsSale,
   money,
   stockText,
 }: {
@@ -33,6 +35,8 @@ export function QuickSalePicks({
   listOk: boolean;
   typedOk: boolean;
   onAdd: (product: CachedProduct) => void;
+  /** A whole sale typed in the search box is read as a sale, not made into one item (ADR-057). */
+  onReadAsSale?: (text: string) => void;
   money: (minor: bigint) => string;
   stockText: (quantity: string, baseUnit: string, packs: CachedProduct["packs"]) => string;
 }) {
@@ -105,8 +109,20 @@ export function QuickSalePicks({
         (askedKey && (savedItemKey(item.name) === askedKey || item.aliases?.some((alias) => savedItemKey(alias) === askedKey))) ||
         (askedCompact.length > 0 && (compactItemKey(item.name) === askedCompact || item.aliases?.some((alias) => compactItemKey(alias) === askedCompact))),
     );
+  const sentence = Boolean(onReadAsSale) && looksLikeSpokenSale(query);
+  const tooLong = query.trim().length > TYPED_ITEM_NAME_MAX;
   return (
     <>
+      {sentence && onReadAsSale ? (
+        <button
+          type="button"
+          className="min-h-12 w-full rounded-card bg-primary px-4 text-left text-sm font-semibold text-primary-fg"
+          data-testid="read-as-sale"
+          onClick={() => onReadAsSale(query.trim())}
+        >
+          {t("readAsSale")}
+        </button>
+      ) : null}
       {shown.length > 0 ? (
         <ul className="divide-y divide-border rounded-card border border-border bg-card" aria-label={t("matches")}>
           {shown.map((product) => (
@@ -142,7 +158,8 @@ export function QuickSalePicks({
           ))}
         </div>
       ) : null}
-      {typedOk && askedKey && !taken ? (
+      {typedOk && askedKey && !taken && tooLong ? <p className="text-sm text-muted">{t("typed.tooLong", { max: TYPED_ITEM_NAME_MAX })}</p> : null}
+      {typedOk && askedKey && !taken && !tooLong ? (
         <button type="button" className="min-h-12 w-full rounded-card border border-dashed border-primary px-4 text-left text-sm font-medium text-primary" data-testid="sell-typed" onClick={() => onAdd(asProduct({ name: capitaliseFirst(query.trim()), unit: "piece", lastPriceMinor: null }))}>
           {t("typed.sell", { name: capitaliseFirst(query.trim()) })}
         </button>

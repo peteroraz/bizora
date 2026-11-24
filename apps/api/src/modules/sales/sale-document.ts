@@ -30,14 +30,15 @@ export type DocumentSale = {
 
 export type DocumentInput = {
   sale: DocumentSale;
-  business: { name: string; phone: string | null; timezone: string };
+  business: { name: string; phone: string | null; timezone: string; returnsWithinDays?: number | null; returnsOnReceipt?: boolean };
   branch: { name: string; address: string | null; phone: string | null };
   customerName: string | null;
   /** The customer's address, when one is saved (7f). */
   customerAddress?: string | null;
   servedBy: string | null;
   cashier: string | null;
-  lines: { description: string; enteredQuantity: bigint; enteredUnit: string; unitPriceMinor: bigint; lineTotalMinor: bigint }[];
+  /** `serials`: serial numbers or IMEIs of the units sold (ADR-062), printed under the item. */
+  lines: { description: string; serials?: string[]; enteredQuantity: bigint; enteredUnit: string; unitPriceMinor: bigint; lineTotalMinor: bigint }[];
   payments: { method: string; amountMinor: bigint; label?: string }[];
 };
 
@@ -108,6 +109,8 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
   if (input.customerName && input.customerAddress) details.push(["Address", input.customerAddress]);
   if (input.servedBy) details.push(["Served by", input.servedBy]);
   if (type === "receipt" && input.cashier && input.cashier !== input.servedBy) details.push(["Cashier", input.cashier]);
+  // The business's returns rule, when the owner chose to print it (ADR-059).
+  if (type === "receipt" && input.business.returnsOnReceipt && input.business.returnsWithinDays) details.push(["Returns", `Within ${input.business.returnsWithinDays} days of the sale`]);
 
   const totals: [string, string, boolean?][] = [];
   if (sale.discountMinor > 0n) {
@@ -129,8 +132,6 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
       text: `${money(sale.balanceMinor)} is owed on credit${sale.dueDate ? ` and should be paid by ${formatDate(sale.dueDate)}` : ""}.`,
       tone: "warning",
     });
-  else if (type === "invoice") notices.push({ text: `Paid in full. Receipt ${sale.saleNumber ?? ""}.`, tone: "info" });
-  else notices.push({ text: "Paid in full. Thank you for your custom.", tone: "info" });
 
   return {
     type,
@@ -143,7 +144,8 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
     details,
     lines: input.lines.map((line) => {
       const quantity = quantityToString(line.enteredQuantity);
-      return { description: line.description, quantity: `${quantity} ${unitText(line.enteredUnit, quantity)}`, price: money(line.unitPriceMinor), total: money(line.lineTotalMinor) };
+      const serials = line.serials?.length ? `\nSerial no.: ${line.serials.join(", ")}` : "";
+      return { description: `${line.description}${serials}`, quantity: `${quantity} ${unitText(line.enteredUnit, quantity)}`, price: money(line.unitPriceMinor), total: money(line.lineTotalMinor) };
     }),
     totals,
     notices,

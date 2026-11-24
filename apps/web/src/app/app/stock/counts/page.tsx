@@ -12,6 +12,8 @@ import { QuantityInput, SentenceInput } from "../../../../components/typing";
 import { can } from "../../../../lib/access";
 import { useAccess } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
+import { enqueue } from "../../../../lib/offline/outbox";
+import { isNetworkFailure } from "../../../../lib/offline/sync";
 
 type Line = { id: string; productId: string; productName: string; baseUnit: string; systemQuantity: string; countedQuantity: string; difference: string; reason: string | null; note: string | null };
 type Session = {
@@ -92,6 +94,43 @@ function CountsScreen() {
     return session;
   }
 
+  // A line counted with no network waits on this phone and is sent later, compared with the stock at the time it
+  // was counted (ADR-064). The ones waiting are shown under the count until they are sent.
+  const [waiting, setWaiting] = useState<{ sessionId: string; name: string; text: string }[]>([]);
+  async function countLine(sessionId: string, body: Record<string, unknown>, name: string, text: string) {
+    setPending(true);
+    setMessage(null);
+    try {
+      return await sendLine(sessionId, body, name, text);
+    } finally {
+      setPending(false);
+    }
+  }
+  async function sendLine(sessionId: string, body: Record<string, unknown>, name: string, text: string) {
+    try {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) throw new TypeError("offline");
+      const response = await api(`/api/v1/inventory/counts/${sessionId}/lines`, { method: "POST", headers: { [IDEMPOTENCY_HEADER]: uuidv7() }, body: JSON.stringify(body) });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage({ tone: "error", text: payload?.error?.message ?? t("failed") });
+        return false;
+      }
+      setMessage({ tone: "ok", text: t("countSaved") });
+      setOpen(payload.data.count as Session);
+      await load();
+      return true;
+    } catch (error) {
+      if (!access.owner || !isNetworkFailure(error)) {
+        setMessage({ tone: "error", text: t("failed") });
+        return false;
+      }
+      await enqueue(access.owner, "stock.count_line", { sessionId, ...body });
+      setWaiting((current) => [...current, { sessionId, name, text }]);
+      setMessage({ tone: "ok", text: t("countSavedOffline") });
+      return true;
+    }
+  }
+
   const differenceText = (line: Line) => {
     const value = BigInt(line.difference);
     if (value === 0n) return t("matches");
@@ -129,6 +168,16 @@ function CountsScreen() {
                 </span>
               </li>
             ))}
+            {waiting
+              .filter((item) => item.sessionId === open.id)
+              .map((item, index) => (
+                <li key={`waiting-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-muted" data-testid="count-line-waiting">
+                  <span>
+                    {item.name}: {item.text}
+                  </span>
+                  <Badge tone="warning">{t("waitingToSend")}</Badge>
+                </li>
+              ))}
           </ul>
           {open.status === "counting" && canCount ? (
             <SafeForm
@@ -136,12 +185,13 @@ function CountsScreen() {
               pending={pending}
               onSubmit={() => {
                 if (!picked || parseCountQuantity(counted) === null) return setMessage({ tone: "error", text: t("checkQuantities") });
-                void send(
-                  `/api/v1/inventory/counts/${open.id}/lines`,
+                void countLine(
+                  open.id,
                   { productId: picked.id, countedQuantity: counted.trim(), unit, ...(reason ? { reason } : {}), ...(lineNote.trim() ? { note: lineNote.trim() } : {}) },
-                  t("countSaved"),
-                ).then((session) => {
-                  if (session) {
+                  picked.name,
+                  `${counted.trim()} ${unitName(unit, 2)}`,
+                ).then((saved) => {
+                  if (saved) {
                     setPicked(null);
                     setCounted("");
                     setReason("");

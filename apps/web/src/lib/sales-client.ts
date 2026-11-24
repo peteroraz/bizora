@@ -16,6 +16,9 @@ export type SaleLineView = {
   costMinor?: string;
   /** A live sale only: the one product this typed name looked like. The line was still recorded as typed. */
   possibleProduct?: { id: string; name: string; priceMinor: string | null };
+  /** Serial numbers or IMEIs of the units sold, and whether the product keeps them (ADR-062). */
+  serials?: string[];
+  keepsSerials?: boolean;
 };
 
 export type SaleView = {

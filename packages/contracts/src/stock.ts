@@ -33,6 +33,10 @@ export const productWriteSchema = z.object({
   lowStockLevel: z.union([decimalQuantity, z.literal("0")]).optional().nullable(),
   barcode: z.string().trim().max(64).optional().nullable(),
   trackStock: z.boolean().optional(),
+  /** Keep this product's stock in batches with expiry dates (ADR-061). */
+  tracksBatches: z.boolean().optional(),
+  /** Keep a serial number or IMEI for each unit (ADR-062). */
+  tracksSerials: z.boolean().optional(),
   packs: z.array(packUnitInputSchema).max(5).optional(),
   /** Codes (ADR-046). A SKU is unique among the business's products in use; barcodes may repeat. */
   sku: z.string().trim().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/, "Use letters, numbers, spaces and . _ - / only.").optional().nullable(),
@@ -58,6 +62,28 @@ export const productCreateSchema = productWriteSchema.extend({
   openingCostMinor: minorAmount.optional(),
 });
 
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30.");
+
+/** The batch stock came in under, for a product that keeps batches (ADR-061). Each part is optional. */
+export const batchInputSchema = z.object({
+  batchNumber: z.string().trim().max(64).optional(),
+  expiryDate: day.optional(),
+  manufacturedDate: day.optional(),
+});
+/** A serial number or IMEI as stored: no spaces, in capitals (ADR-062). */
+export const normalizeSerial = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+/** Serial numbers typed or scanned one per line, or separated by commas. */
+export const splitSerials = (text: string) => text.split(/[\n,;]+/).map(normalizeSerial).filter(Boolean);
+export const SERIALS_PER_LINE_MAX = 100;
+export const serialSchema = z
+  .string()
+  .transform(normalizeSerial)
+  .pipe(z.string().min(1, "Enter the serial number.").max(64).regex(/^[A-Z0-9][A-Z0-9./-]*$/, "Use letters, numbers and . / - only."));
+export const serialListSchema = z
+  .array(serialSchema)
+  .max(SERIALS_PER_LINE_MAX)
+  .refine((list) => new Set(list).size === list.length, "The same serial number is there twice.");
+
 export const stockReceiveSchema = z.object({
   id: clientId.optional(),
   productId: z.string().uuid(),
@@ -67,11 +93,16 @@ export const stockReceiveSchema = z.object({
   /** Total cost of what was received. Left out when unknown; the current average or default cost is used. */
   totalCostMinor: minorAmount.optional(),
   paidFrom: z.enum(PAID_FROM).default("credit"),
+  /** When cash is paid at a warehouse, the shop whose drawer paid. A shop receiving its own stock can leave this out. */
+  paidFromBranchId: z.string().uuid().optional(),
   supplier: z.string().trim().max(160).optional(),
   /** A supplier already on the list (ADR-029); otherwise the name in `supplier` is found or added. */
   supplierId: z.string().uuid().optional(),
   /** When stock bought on credit must be paid for. */
   payBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30.").optional(),
+  batch: batchInputSchema.optional(),
+  /** One serial number or IMEI per unit, for a product that keeps them (ADR-062). */
+  serials: serialListSchema.optional(),
   note,
 });
 
@@ -85,6 +116,8 @@ export const stockAdjustSchema = z
     unit: unitCodeSchema,
     /** Taking stock off or adding it by hand always says what happened (7f). */
     note: requiredNote,
+    /** Taking stock off one batch (expired, damaged), for a product that keeps batches (ADR-061). */
+    batchId: z.string().uuid().optional(),
   })
   .refine(
     (value) =>
@@ -130,4 +163,9 @@ export const productPhotoUploadSchema = z
     contentType: z.enum(["image/jpeg", "image/png"]),
     dataBase64: z.string().min(16).max(Math.ceil(PRODUCT_PHOTO_MAX_BYTES / 3) * 4 + 4, "That photo is too large."),
   })
+  .strict();
+
+/** Serial numbers for a sale's lines, recorded after the sale (ADR-062). */
+export const saleSerialsSchema = z
+  .object({ lines: z.array(z.object({ saleLineId: z.string().uuid(), serials: serialListSchema.refine((list) => list.length > 0, "Enter at least one.") })).min(1).max(100) })
   .strict();

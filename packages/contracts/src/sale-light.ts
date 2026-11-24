@@ -11,6 +11,9 @@ export const sellsTyped = (setting: string | null | undefined) => setting === "t
  * The same name however it is typed: "Ogbono", "ogbono" and "Ogbono." are one item.
  * Sizes stay different: "Peak Milk 400g" is not "Peak Milk 900g".
  */
+/** The longest name a new item may have at the counter; longer text is a whole sale, not a name (ADR-057). */
+export const TYPED_ITEM_NAME_MAX = 60;
+
 export function savedItemKey(name: string) {
   return name.trim().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim().toLowerCase().slice(0, 160);
 }

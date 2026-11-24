@@ -168,7 +168,7 @@ describe("job-function access", () => {
 
     const byName = await request(http).get("/api/v1/customers").query({ q: "chika" }).set(auth(cashierToken)).expect(200);
     expect(byName.body.data.mode).toBe("lookup");
-    expect(byName.body.data.items).toEqual([{ id: chikaId, name: "Chika Okafor", isWalkIn: false, phoneLast4: "4567", credit: { allowed: false, limitMinor: null }, limited: true }]);
+    expect(byName.body.data.items).toEqual([{ id: chikaId, name: "Chika Okafor", isWalkIn: false, phoneLast4: "4567", credit: { allowed: false, limitMinor: null, termsDays: null }, limited: true }]);
 
     for (const q of ["0803 123 4567", "+2348031234567", "1234567"]) {
       const byPhone = await request(http).get("/api/v1/customers").query({ q }).set(auth(cashierToken)).expect(200);
@@ -179,7 +179,7 @@ describe("job-function access", () => {
     expect(many.body.data.items).toHaveLength(10);
 
     const detail = await request(http).get(`/api/v1/customers/${chikaId}`).set(auth(cashierToken)).expect(200);
-    expect(detail.body.data.customer).toEqual({ id: chikaId, name: "Chika Okafor", isWalkIn: false, phoneLast4: "4567", credit: { allowed: false, limitMinor: null }, owingMinor: "0", limited: true });
+    expect(detail.body.data.customer).toEqual({ id: chikaId, name: "Chika Okafor", isWalkIn: false, phoneLast4: "4567", credit: { allowed: false, limitMinor: null, termsDays: null }, owingMinor: "0", limited: true });
 
     await request(http).get(`/api/v1/customers/${chikaId}/notes`).set(auth(cashierToken)).expect(403);
     await request(http).get(`/api/v1/customers/${chikaId}/followups`).set(auth(cashierToken)).expect(403);

@@ -50,6 +50,9 @@ function totalsOf(items: { quantity: string; priceMinor: string | null; trackSto
 function StockScreen() {
   const t = useTranslations("stock");
   const common = useTranslations("common");
+  const batchText = useTranslations("batches");
+  const serialText = useTranslations("serials");
+  const reorderText = useTranslations("reorder");
   const locale = useLocale();
   const access = useAccess();
   const stockText = useStockText();
@@ -68,6 +71,7 @@ function StockScreen() {
   const [currency, setCurrency] = useState(place.currency);
   const [totals, setTotals] = useState<StockTotals | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [needsShop, setNeedsShop] = useState(false);
   const [pending, setPending] = useState(false);
   const [offlineSince, setOfflineSince] = useState<string | null | undefined>(undefined);
   const [counts, setCounts] = useState<PendingCount[]>([]);
@@ -99,7 +103,15 @@ function StockScreen() {
         if (needle.trim()) params.set("q", needle.trim());
         if (category) params.set("category", category);
         const response = await api(`/api/v1/products?${params.toString()}`);
+        // "All shops" is chosen: stock is kept per shop, so ask for one rather than show an empty list.
+        if (!response.ok && (await response.clone().json().catch(() => null))?.error?.code === "BRANCH_REQUIRED") {
+          setNeedsShop(true);
+          setItems([]);
+          setTotal(0);
+          return;
+        }
         if (!response.ok) throw new Error(String(response.status));
+        setNeedsShop(false);
         const data = (await response.json()).data;
         setItems(data.items);
         setTotal(data.total);
@@ -135,6 +147,14 @@ function StockScreen() {
     void loadChecks();
   }, [load, loadChecks]);
 
+  // Stock past its expiry date or close to it (ADR-061). Nothing shows for a business that keeps no batches.
+  const [expiring, setExpiring] = useState<{ expired: number; soon: number } | null>(null);
+  useEffect(() => {
+    void api("/api/v1/stock/expiring")
+      .then(async (response) => (response.ok ? setExpiring((await response.json()).data) : undefined))
+      .catch(() => undefined);
+  }, []);
+
   // What the approver says about each count (7f): optional to approve, needed to reject.
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [decisionError, setDecisionError] = useState<Record<string, string>>({});
@@ -162,10 +182,13 @@ function StockScreen() {
       <PageHeader
         title={t("title")}
         intro={t("description")}
+        actionsLayout="scroll"
         actions={
           canAdd || canReceive || canLists ? (
             <>
+              <ActionLink href="/app/stock/to-buy">{reorderText("toBuyLink")}</ActionLink>
               {canLists ? <ActionLink href="/app/stock/lists">{t("lists")}</ActionLink> : null}
+              {items.some((item) => item.tracksSerials) ? <ActionLink href="/app/stock/serials">{serialText("findLink")}</ActionLink> : null}
               {can(access, Permission.STOCK_TRANSFER) ? <ActionLink href="/app/stock/transfers">{t("transfersLink")}</ActionLink> : null}
               {can(access, Permission.STOCK_COUNT, Permission.STOCK_ADJUST) ? <ActionLink href="/app/stock/counts">{t("countsLink")}</ActionLink> : null}
               {canReceive ? (
@@ -176,6 +199,7 @@ function StockScreen() {
               {canAdd ? (
                 <>
                   <ActionLink href="/app/stock/categories">{t("categoriesLink")}</ActionLink>
+                  <ActionLink href="/app/stock/attributes">{t("attributesLink")}</ActionLink>
                   <ActionLink href="/app/stock/import">{t("import")}</ActionLink>
                   <ActionLink href="/app/stock/names">{t("names")}</ActionLink>
                   <ActionLink href="/app/stock/organize">{t("organize")}</ActionLink>
@@ -194,6 +218,15 @@ function StockScreen() {
         <p className="rounded-card border border-warning bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
           {offlineSince ? t("offline", { when: formatWhen(offlineSince, locale, Intl.DateTimeFormat().resolvedOptions().timeZone) }) : t("offlineNever")}
         </p>
+      ) : null}
+      {expiring && expiring.expired + expiring.soon > 0 ? (
+        <a
+          href="/app/stock/expiring"
+          className={`block rounded-card border px-4 py-3 text-sm ${expiring.expired > 0 ? "border-danger bg-danger-bg text-danger" : "border-warning bg-warning-bg text-warning"}`}
+          data-testid="expiring-notice"
+        >
+          {batchText("notice", { expired: expiring.expired, soon: expiring.soon })}
+        </a>
       ) : null}
       {totals && totals.products > 0 ? (
         <Card className="p-4" data-testid="stock-totals">
@@ -301,7 +334,9 @@ function StockScreen() {
           {t("search")}
         </SubmitButton>
       </SafeForm>
-      {loaded && items.length === 0 ? (
+      {loaded && needsShop ? (
+        <EmptyState title={t("chooseShopTitle")} description={t("chooseShopBody")} />
+      ) : loaded && items.length === 0 ? (
         <EmptyState title={query.trim() ? t("noResults") : t("emptyTitle")} description={query.trim() ? t("description") : t("emptyBody")} />
       ) : (
         <ul className="divide-y divide-border rounded-card border border-border bg-card">
