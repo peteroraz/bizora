@@ -26,8 +26,9 @@ test("a sync that fails is shown, kept, and sent once when tried again", async (
   await sellOffline(page, context);
 
   // The network comes back but the server cannot be reached (dropped mid-sync, or down): nothing is lost.
+  // The block covers every tab. A block on one tab ends when that tab closes, and the next tab would send the sale before we can see it still waiting.
   let blocked = true;
-  await page.route("**/api/v1/sync/push", async (route) => (blocked ? route.abort("connectionreset") : route.continue()));
+  await context.route("**/api/v1/sync/push", async (route) => (blocked ? route.abort("connectionreset") : route.continue()));
   await context.setOffline(false);
   await expect(page.getByTestId("sync-now")).toContainText("Last try failed", { timeout: 20_000 });
   // A refresh, and even closing the tab, keeps it waiting.
@@ -40,7 +41,6 @@ test("a sync that fails is shown, kept, and sent once when tried again", async (
 
   // Tapping tries at once; it is sent once even when two tabs try together.
   blocked = false;
-  await second.route("**/api/v1/sync/push", (route) => route.continue());
   const third = await context.newPage();
   await third.goto("/app");
   // Either tab may send it first (on opening, or on the tap); the tap may find it already gone.
