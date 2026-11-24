@@ -23,6 +23,8 @@ export type CachedProduct = {
   lastSoldAt?: string | null;
   /** Set once this remembered item has been turned into a product. */
   productId?: string | null;
+  /** Made on this phone with no network and not sent yet (ADR-064). */
+  waiting?: boolean;
 };
 
 export type Catalog = {
@@ -99,6 +101,18 @@ export async function refreshCatalog(tenantId: string, branchId: string, pull: P
   catalog.syncedAt = now.toISOString();
   await writeCatalog(catalog);
   return catalog;
+}
+
+/**
+ * A product made on this phone with no network (ADR-064): added to the saved list at once so it can be found and
+ * sold here, marked as waiting. The next download from the server replaces it with the saved product.
+ */
+export async function addOfflineProduct(tenantId: string, branchId: string, product: CachedProduct, quantity: string | null) {
+  const catalog = await readCatalog(tenantId, branchId);
+  if (!catalog) return;
+  catalog.products[product.id] = { ...product, waiting: true };
+  if (quantity) catalog.quantities[product.id] = quantity;
+  await writeCatalog(catalog);
 }
 
 /** Search the saved products by name, category or barcode, sorted by name. */

@@ -154,7 +154,7 @@ function ProductScreen() {
   }, [load, access]);
 
   /** Sends a stock change. With no network, stock in and counts wait on the phone and sync later. */
-  async function submit(kind: string, path: string, body: Record<string, unknown>, success: string, offlineType?: "stock.receive" | "stock.count") {
+  async function submit(kind: string, path: string, body: Record<string, unknown>, success: string, offlineType?: "stock.receive" | "stock.count" | "stock.adjust") {
     setBusy(kind);
     setMessage(null);
     try {
@@ -550,6 +550,7 @@ function ProductScreen() {
                 "/api/v1/stock/adjust",
                 { productId: product.id, direction, reason, quantity, unit: field(form, "unit"), note: field(form, "note") },
                 t("adjusted"),
+                "stock.adjust",
               );
               if (ok) (event.target as HTMLFormElement).reset();
             }}
