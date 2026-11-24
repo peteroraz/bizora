@@ -1818,7 +1818,18 @@
       "barcode": "Barcode",
       "packUnit": "Pack unit",
       "packSize": "Pack size",
-      "packPrice": "Pack price"
+      "packPrice": "Pack price",
+      "sku": "SKU",
+      "gtin": "GTIN",
+      "brand": "Brand",
+      "item": "Item group",
+      "variant": "Variant",
+      "packForSale": "Pack sold",
+      "packForPurchase": "Pack bought",
+      "supplier": "Supplier",
+      "supplierCode": "Supplier code",
+      "priceList": "Price list",
+      "priceListPrice": "Price list price"
     },
     "salesTitle": "Import sales",
     "salesLead": "Bring in sales from a sales book or spreadsheet. Rows with the same receipt number become one sale.",
@@ -1863,7 +1874,11 @@
     },
     "exampleSupplier": "Dangote Distributors",
     "totalRow": "Total",
-    "sentForApproval": "{count, plural, one {# row was sent to a manager or the owner to approve.} other {# rows were sent to a manager or the owner to approve.}} Stock changes when they approve."
+    "sentForApproval": "{count, plural, one {# row was sent to a manager or the owner to approve.} other {# rows were sent to a manager or the owner to approve.}} Stock changes when they approve.",
+    "downloadLead": "Download your products as a spreadsheet, change it, and bring it back in here. Category can be a path, like Drinks > Soft drinks. Rows with an item group and a variant become variants of one item.",
+    "downloadProducts": "Download products (CSV)",
+    "downloading": "Preparing the file…",
+    "downloadFailed": "Could not download the file. Check your connection and try again."
   },
   "receipt": {
     "number": "Receipt {number}",

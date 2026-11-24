@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   compactItemKey,
+  currencyDigits,
   productArchiveSchema,
   Permission,
   PRODUCT_PAGE_SIZE,
@@ -22,6 +23,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { type ProductRow, type ProductUnitRow, productUnitsFor, requireBusiness, requireProduct, resolveBranch } from "./inventory-scope.js";
 import { categoryPath, copyCategoryToVariants, requireBrand, requireItem, resolveCategory } from "./catalog-scope.js";
 import { mainPhotos } from "./product-photo.service.js";
+import { productsCsv } from "./product-file.js";
 import { StockService } from "./stock.service.js";
 import { TransferService } from "./transfer.service.js";
 
@@ -199,6 +201,27 @@ export class ProductService {
         .filter(([branchId]) => !tenant.membershipBranchId || branchId === tenant.membershipBranchId)
         .map(([branchId, value]) => ({ branchId, incoming: value.incoming.toString(), outgoing: value.outgoing.toString() })),
     };
+  }
+
+  /** The product file (ADR-065), for this shop's stock. Recorded, as any export of business data. */
+  async exportCsv(tenant: TenantContext) {
+    const business = await requireBusiness(this.db, tenant);
+    const branch = await resolveBranch(this.db, tenant, business.id);
+    const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
+    const file = await productsCsv(this.db, tenant, business, branch.id, currencyDigits(business.baseCurrencyCode.trim()), seeCost);
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "products.exported",
+      entityType: "business",
+      entityId: business.id,
+      correlationId: tenant.correlationId,
+      businessId: business.id,
+      branchId: branch.id,
+      actorType: tenant.actorType ?? "HUMAN",
+      metadata: { rows: file.rows, withCost: seeCost },
+    });
+    return { fileName: `bizora-products-${new Date().toISOString().slice(0, 10)}.csv`, csv: file.csv };
   }
 
   async create(tenant: TenantContext, raw: unknown) {

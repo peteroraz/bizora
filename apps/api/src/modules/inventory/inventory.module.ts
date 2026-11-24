@@ -26,6 +26,6 @@ import { StockService } from "./stock.service.js";
   imports: [TenantModule, IdempotencyModule, SyncModule, DocumentsModule, LedgerModule, NotificationsModule],
   controllers: [InventoryController, CatalogController, StockOperationsController],
   providers: [BatchService, ProductService, CatalogService, TransferService, CountSessionService, ProductPhotoService, StockService, StockRequestService, InventorySyncHandler, PermissionGuard, AttributeService, SerialService, ReorderService],
-  exports: [StockService, ProductService, SerialService],
+  exports: [StockService, ProductService, SerialService, CatalogService],
 })
 export class InventoryModule {}
