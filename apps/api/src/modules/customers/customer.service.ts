@@ -251,11 +251,13 @@ export class CustomerService {
   }
 
   /** Approving a customer for credit, and their limit, is for managers and owners (debtors.manage). */
-  private credit(tenant: TenantContext, payload: { creditAllowed?: boolean; creditLimitMinor?: string | null }, existing?: CustomerRow) {
-    if (payload.creditAllowed === undefined && payload.creditLimitMinor === undefined) return {};
+  private credit(tenant: TenantContext, payload: { creditAllowed?: boolean; creditLimitMinor?: string | null; creditTermsDays?: number | null }, existing?: CustomerRow) {
+    if (payload.creditAllowed === undefined && payload.creditLimitMinor === undefined && payload.creditTermsDays === undefined) return {};
     const allowed = payload.creditAllowed ?? existing?.creditAllowed ?? false;
     const limit = payload.creditLimitMinor !== undefined ? (payload.creditLimitMinor === null ? null : BigInt(payload.creditLimitMinor)) : (existing?.creditLimitMinor ?? null);
-    const unchanged = existing && existing.creditAllowed === allowed && existing.creditLimitMinor === limit;
+    // Standard terms (ADR-059) only mean something for a customer allowed credit.
+    const terms = allowed ? (payload.creditTermsDays !== undefined ? payload.creditTermsDays : (existing?.creditTermsDays ?? null)) : null;
+    const unchanged = existing && existing.creditAllowed === allowed && existing.creditLimitMinor === limit && existing.creditTermsDays === terms;
     if (unchanged) return {};
     if (!existing && !allowed && limit === null) return {};
     if (!tenant.permissions.includes(Permission.DEBTORS_MANAGE)) {
@@ -264,6 +266,7 @@ export class CustomerService {
     return {
       creditAllowed: allowed,
       creditLimitMinor: limit,
+      creditTermsDays: terms,
       creditApprovedBy: allowed ? tenant.userId : null,
       creditApprovedAt: allowed ? new Date() : null,
     };
@@ -314,7 +317,7 @@ export class CustomerService {
       isWalkIn: row.isWalkIn,
       phoneLast4: row.phoneE164 ? row.phoneE164.slice(-4) : null,
       // The cashier needs to know whether credit is allowed and the limit, to give credit at the counter.
-      credit: { allowed: row.creditAllowed, limitMinor: row.creditLimitMinor?.toString() ?? null },
+      credit: { allowed: row.creditAllowed, limitMinor: row.creditLimitMinor?.toString() ?? null, termsDays: row.creditTermsDays ?? null },
       limited: true as const,
     };
   }
@@ -446,7 +449,7 @@ export class CustomerService {
             entityId: existing.id,
             correlationId: tenant.correlationId,
             businessId: existing.businessId,
-            metadata: { creditAllowed: credit.creditAllowed, creditLimitMinor: credit.creditLimitMinor?.toString() ?? null },
+            metadata: { creditAllowed: credit.creditAllowed, creditLimitMinor: credit.creditLimitMinor?.toString() ?? null, creditTermsDays: credit.creditTermsDays ?? null },
           },
           tx,
         );
@@ -1010,7 +1013,7 @@ export class CustomerService {
       tags: row.tags,
       notesSummary: row.notesSummary,
       branchId: row.branchId,
-      credit: { allowed: row.creditAllowed, limitMinor: row.creditLimitMinor?.toString() ?? null, approvedAt: row.creditApprovedAt?.toISOString() ?? null },
+      credit: { allowed: row.creditAllowed, limitMinor: row.creditLimitMinor?.toString() ?? null, termsDays: row.creditTermsDays ?? null, approvedAt: row.creditApprovedAt?.toISOString() ?? null },
       createdAt: row.createdAt.toISOString(),
     };
   }

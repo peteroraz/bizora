@@ -181,6 +181,9 @@ export const businesses = pgTable(
     rememberItems: boolean("remember_items").notNull().default(true),
     /** A list of names is enough to start selling. Stock and prices can come later (ADR-049). */
     quickCatalog: boolean("quick_catalog").notNull().default(true),
+    /** Goods come back within this many days of the sale; later needs the owner (migration 0047, ADR-059). */
+    returnsWithinDays: integer("returns_within_days"),
+    returnsOnReceipt: boolean("returns_on_receipt").notNull().default(false),
     visibleModules: text("visible_modules")
       .array()
       .notNull()
@@ -562,6 +565,8 @@ export const customers = pgTable(
     ...timestamps,
     /** Buys at this price list's prices (migration 0042, ADR-048). */
     priceListId: uuid("price_list_id"),
+    /** Standard credit terms: a credit sale is due this many days later, with no comment needed (migration 0047). */
+    creditTermsDays: integer("credit_terms_days"),
   },
   (table) => [
     index("customers_tenant_business_idx").on(table.tenantId, table.businessId),

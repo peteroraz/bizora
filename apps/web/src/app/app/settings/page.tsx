@@ -51,6 +51,8 @@ type Business = {
   salesItems?: "products" | "typed" | "both";
   rememberItems?: boolean;
   quickCatalog?: boolean;
+  returnsWithinDays?: number | null;
+  returnsOnReceipt?: boolean;
 };
 type Branch = { id: string; name: string; phoneE164: string | null; address: AddressValue | null; kind?: "shop" | "warehouse" };
 type BranchDraft = { name: string; phone: string; address: AddressValue; kind: "shop" | "warehouse" };
@@ -141,6 +143,9 @@ function SettingsScreen() {
   const [salesItems, setSalesItems] = useState<"products" | "typed" | "both">("products");
   const [rememberItems, setRememberItems] = useState(true);
   const [quickCatalog, setQuickCatalog] = useState(true);
+  // The returns rule (ADR-059): blank means goods may come back at any time.
+  const [returnsDays, setReturnsDays] = useState("");
+  const [returnsOnReceipt, setReturnsOnReceipt] = useState(false);
   const [savedItemsSetting, setSavedItemsSetting] = useState<"products" | "typed" | "both">("products");
   const [modules, setModules] = useState<string[]>([...TRADER_MODULES]);
 
@@ -199,6 +204,8 @@ function SettingsScreen() {
       setSavedItemsSetting(current.salesItems ?? "products");
       setRememberItems(current.rememberItems !== false);
       setQuickCatalog(current.quickCatalog !== false);
+      setReturnsDays(current.returnsWithinDays ? String(current.returnsWithinDays) : "");
+      setReturnsOnReceipt(current.returnsOnReceipt === true);
       setModules(current.visibleModules);
     }
     const loadedBranches: Branch[] = branchResponse.ok ? ((await branchResponse.json()).data?.items ?? []) : [];
@@ -290,6 +297,8 @@ function SettingsScreen() {
           salesItems,
           rememberItems,
           quickCatalog,
+          returnsWithinDays: returnsDays.trim() ? Math.min(365, Math.max(1, Number(returnsDays))) : null,
+          returnsOnReceipt: Boolean(returnsDays.trim()) && returnsOnReceipt,
         }),
       });
       const payload = await response.json();
@@ -612,6 +621,18 @@ function SettingsScreen() {
                 </label>
                 {savedItemsSetting !== "products" ? <SavedItemsList /> : null}
                 {can(access, Permission.CATALOG_MANAGE) ? <BusinessUnits /> : null}
+              </fieldset>
+              <fieldset className="space-y-2" data-testid="returns-setting">
+                <legend className="text-sm font-medium">{t("returnsTitle")}</legend>
+                <FormField id="setup-returns-days" label={t("returnsDays")} hint={t("returnsDaysHint")}>
+                  <Input id="setup-returns-days" inputMode="numeric" value={returnsDays} onChange={(event) => setReturnsDays(event.target.value.replace(/\D/g, "").slice(0, 3))} />
+                </FormField>
+                {returnsDays.trim() ? (
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-1" checked={returnsOnReceipt} onChange={(event) => setReturnsOnReceipt(event.target.checked)} />
+                    <span>{t("returnsOnReceipt", { days: Number(returnsDays) || 0 })}</span>
+                  </label>
+                ) : null}
               </fieldset>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{t("modules")}</legend>

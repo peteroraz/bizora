@@ -245,6 +245,10 @@ export const updateBusinessSchema = z.object({
   rememberItems: z.boolean().optional(),
   /** A list of names is enough. Prices and stock can come later (ADR-049). */
   quickCatalog: z.boolean().optional(),
+  /** Goods come back within this many days of the sale; null means no limit (ADR-059). */
+  returnsWithinDays: z.number().int().min(1).max(365).nullable().optional(),
+  /** Print the returns rule on receipts. */
+  returnsOnReceipt: z.boolean().optional(),
 });
 
 export const updateBranchSchema = z.object({

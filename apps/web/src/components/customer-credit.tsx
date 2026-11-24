@@ -1,7 +1,7 @@
 "use client";
 
 import { Permission, amountText, parseAmount } from "@bizora/contracts";
-import { Card, FormField, SafeForm, SubmitButton } from "@bizora/ui";
+import { Card, FormField, Input, SafeForm, SubmitButton } from "@bizora/ui";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -11,7 +11,7 @@ import { can } from "../lib/access";
 import { useAccess } from "../lib/access-context";
 import { api } from "../lib/api";
 
-export type CustomerCreditView = { allowed: boolean; limitMinor: string | null };
+export type CustomerCreditView = { allowed: boolean; limitMinor: string | null; termsDays?: number | null };
 
 /** A saved limit back into the box, in the currency's decimals. */
 export function limitText(minor: string | null, currency: string) {
@@ -29,6 +29,8 @@ export function CustomerCredit({ customerId, credit, owingMinor, currency = "NGN
   const canApprove = can(access, Permission.DEBTORS_MANAGE);
   const [allowed, setAllowed] = useState(credit.allowed);
   const [limit, setLimit] = useState(limitText(credit.limitMinor, currency));
+  // Standard credit terms (ADR-059): a credit sale is due this many days later, with no comment needed.
+  const [terms, setTerms] = useState(credit.termsDays ? String(credit.termsDays) : "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -42,10 +44,15 @@ export function CustomerCredit({ customerId, credit, owingMinor, currency = "NGN
       setError(t("creditLimitInvalid"));
       return;
     }
+    const termsDays = terms.trim() ? Number(terms.trim()) : null;
+    if (termsDays !== null && (!Number.isInteger(termsDays) || termsDays < 1 || termsDays > 365)) {
+      setError(t("creditTermsInvalid"));
+      return;
+    }
     setPending(true);
     const response = await api(`/api/v1/customers/${customerId}/credit`, {
       method: "PATCH",
-      body: JSON.stringify({ creditAllowed: allowed, creditLimitMinor: limitMinor === null ? null : limitMinor.toString() }),
+      body: JSON.stringify({ creditAllowed: allowed, creditLimitMinor: limitMinor === null ? null : limitMinor.toString(), creditTermsDays: allowed ? termsDays : null }),
     }).catch(() => null);
     setPending(false);
     if (response?.ok) {
@@ -62,6 +69,7 @@ export function CustomerCredit({ customerId, credit, owingMinor, currency = "NGN
       <p className="mt-1 text-sm">
         {credit.allowed ? (credit.limitMinor ? t("creditAllowedWithLimit", { limit: money(credit.limitMinor) }) : t("creditAllowedNoLimit")) : t("creditNotAllowed")}
       </p>
+      {credit.allowed && credit.termsDays ? <p className="text-sm">{t("creditTermsShown", { days: credit.termsDays })}</p> : null}
       <p className="text-sm text-muted">
         {t("creditOwing", { amount: money(owingMinor) })}
         {BigInt(owingMinor) > 0n && can(access, Permission.DEBTORS_READ) ? (
@@ -82,6 +90,11 @@ export function CustomerCredit({ customerId, credit, owingMinor, currency = "NGN
           {allowed ? (
             <FormField id={`credit-limit-${customerId}`} label={t("creditLimitLabel")} hint={t("creditLimitHint")}>
               <AmountInput currency={currency} id={`credit-limit-${customerId}`} value={limit} onChange={(event) => setLimit(event.target.value)} />
+            </FormField>
+          ) : null}
+          {allowed ? (
+            <FormField id={`credit-terms-${customerId}`} label={t("creditTermsLabel")} hint={t("creditTermsHint")}>
+              <Input id={`credit-terms-${customerId}`} inputMode="numeric" value={terms} onChange={(event) => setTerms(event.target.value.replace(/\D/g, "").slice(0, 3))} />
             </FormField>
           ) : null}
           {error ? (

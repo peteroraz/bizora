@@ -794,7 +794,11 @@
       "tooOften": "You have downloaded several times in the last few minutes. Try again in 10 minutes.",
       "offline": "You are offline. Connect to the internet to download your records."
     },
-    "warehouse": "This is a warehouse: it keeps stock but does not sell at the counter"
+    "warehouse": "This is a warehouse: it keeps stock but does not sell at the counter",
+    "returnsTitle": "Returns",
+    "returnsDays": "Goods come back within (days)",
+    "returnsDaysHint": "Leave empty to take goods back at any time. After this many days, only the owner can accept a return.",
+    "returnsOnReceipt": "Print \"Returns within {days} days of the sale\" on receipts"
   },
   "address": {
     "country": "Country",
@@ -908,7 +912,11 @@
     "editTitle": "Edit customer",
     "saveChanges": "Save changes",
     "cancelEdit": "Cancel",
-    "editNeedsNetwork": "Changing a customer needs the internet. Connect and try again."
+    "editNeedsNetwork": "Changing a customer needs the internet. Connect and try again.",
+    "creditTermsLabel": "Standard credit terms (days)",
+    "creditTermsHint": "Optional. For example 30: a credit sale to this customer is due 30 days later, with no comment needed.",
+    "creditTermsInvalid": "Enter the terms as a number of days, from 1 to 365.",
+    "creditTermsShown": "On {days}-day terms."
   },
   "followups": {
     "title": "Follow-ups",
@@ -1748,7 +1756,8 @@
       "failed": "It was not sent. Check the address and your connection, then try again."
     },
     "customerOffline": "No network: showing customers saved on this phone.",
-    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online."
+    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online.",
+    "creditOnTerms": "Optional: this customer is on {days}-day terms."
   },
   "imports": {
     "chooseFile": "Choose a CSV file",

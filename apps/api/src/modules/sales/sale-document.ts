@@ -30,7 +30,7 @@ export type DocumentSale = {
 
 export type DocumentInput = {
   sale: DocumentSale;
-  business: { name: string; phone: string | null; timezone: string };
+  business: { name: string; phone: string | null; timezone: string; returnsWithinDays?: number | null; returnsOnReceipt?: boolean };
   branch: { name: string; address: string | null; phone: string | null };
   customerName: string | null;
   /** The customer's address, when one is saved (7f). */
@@ -108,6 +108,8 @@ export function documentModel(input: DocumentInput, type: SaleDocumentType): Doc
   if (input.customerName && input.customerAddress) details.push(["Address", input.customerAddress]);
   if (input.servedBy) details.push(["Served by", input.servedBy]);
   if (type === "receipt" && input.cashier && input.cashier !== input.servedBy) details.push(["Cashier", input.cashier]);
+  // The business's returns rule, when the owner chose to print it (ADR-059).
+  if (type === "receipt" && input.business.returnsOnReceipt && input.business.returnsWithinDays) details.push(["Returns", `Within ${input.business.returnsWithinDays} days of the sale`]);
 
   const totals: [string, string, boolean?][] = [];
   if (sale.discountMinor > 0n) {
