@@ -41,11 +41,11 @@ Writes on tenant-owned entities include `tenant_id` in the predicate. Composite 
 
 ## Offline
 
-The web app keeps an outbox in IndexedDB. Each queued change carries a device-made UUIDv7, which is also its idempotency key, and the shop it was made in. `/api/v1/sync/push` applies changes in order and answers applied, duplicate or rejected for each (ADR-012, ADR-014, ADR-044). Remembered items, their other names and the shop's units are cached on the phone so a sale can be typed with no network (ADR-049).
+The web app keeps an outbox in IndexedDB. Each queued change carries a device-made UUIDv7, which is also its idempotency key, and the shop it was made in. `/api/v1/sync/push` applies changes in order and answers applied, duplicate or rejected for each (ADR-012, ADR-014, ADR-044). A refused sale is kept for the owner to record or set aside (ADR-050). Remembered items, their other names and the shop's units are cached on the phone so a sale can be typed with no network (ADR-049).
 
 ## Ledger
 
-Every sale, payment, expense and stock movement posts a balanced journal entry. Entries, stock movements and returns cannot be changed or deleted: database triggers refuse it. Corrections are reversing entries (ADR-013). The only exception is removing a sample business with its script (ADR-045).
+Every sale, payment, expense and stock movement posts a balanced journal entry. Profit shown to the owner is that books figure, with a note when some sales have no cost (ADR-051). Entries, stock movements and returns cannot be changed or deleted: database triggers refuse it. Corrections are reversing entries (ADR-013). The only exception is removing a sample business with its script (ADR-045).
 
 ## Sessions
 

@@ -52,6 +52,7 @@ function idFor(path: string, param: string): string {
     ["payments", ids.payment!],
     ["products", ids.product!],
     ["reconciliation", randomUUID()],
+    ["sales/problems", ids.problem!],
     ["sales", ids.sale!],
     ["saved-items", ids.savedItem!],
     ["units", ids.unit!],
@@ -197,6 +198,13 @@ describe("tenant isolation matrix (ADR-043)", () => {
     ids.price = (await request(h.http).get(`/api/v1/pricing/lists/${ids.priceList}/prices`).set(auth(bt)).expect(200)).body.data.prices[0].id;
     ids.receipt = (await request(h.http).post("/api/v1/stock/receipts").set(auth(bt)).send({ branchId: ids.warehouse, supplierId: ids.supplier, paidFrom: "credit", lines: [{ productId: ids.product, quantity: "1", unit: "bag", totalCostMinor: "100000" }], charges: [{ kind: "transport", amountMinor: "1000", paidFrom: "cash" }] }).expect(201)).body.data.id;
     await request(h.http).put(`/api/v1/suppliers/${ids.supplier}/products`).set(auth(bt)).send({ productId: ids.product, supplierSku: "BRAVO-RICE" }).expect(200);
+    const missed = await request(h.http)
+      .post("/api/v1/sync/push")
+      .set(auth(bt))
+      .send({ operations: [{ id: uuidv7(), type: "sale.create", occurredAt: new Date().toISOString(), payload: { id: uuidv7(), lines: [{ productId: randomUUID(), quantity: "1", unit: "bag" }], payments: [{ method: "cash", amountMinor: "100" }], soldAt: new Date().toISOString() } }] })
+      .expect(200);
+    if (missed.body.data.results[0].status !== "rejected" || missed.body.data.results[0].stored !== true) throw new Error(JSON.stringify(missed.body));
+    ids.problem = (await h.client.query<{ id: string }>("SELECT id FROM sync_problems WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 1", [b.tenantId])).rows[0]!.id;
     // A has its own records too, so lists are not empty for the wrong reason.
     await product(h.http, a.token, "Alpha beans", "4000000");
     before = await fingerprint(b.tenantId);

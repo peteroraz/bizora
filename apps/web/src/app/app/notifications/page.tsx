@@ -8,7 +8,7 @@ import { formatWhen } from "../../../i18n/format";
 import { api } from "../../../lib/api";
 import { usePlace } from "../../../lib/access-context";
 
-type Notification = { id: string; kind: string; saleId: string | null; saleNumber: string | null; actorName: string | null; data?: { number?: string; summary?: string }; read: boolean; createdAt: string };
+type Notification = { id: string; kind: string; saleId: string | null; saleNumber: string | null; actorName: string | null; data?: { number?: string; summary?: string; reason?: string }; read: boolean; createdAt: string };
 
 const KINDS = [
   "sale.paid",
@@ -17,6 +17,8 @@ const KINDS = [
   "sale.comment",
   "sale.voided",
   "sale.below_price",
+  "sale.credit_offline",
+  "sale.closed_shop",
   "sale.typed_like_product",
   "transfer.waiting",
   "transfer.not_received",
@@ -29,7 +31,13 @@ const KINDS = [
 /** Where each notification opens: transfers to check go to the transfers (ADR-031), stock changes to Stock (ADR-034). */
 const hrefOf = (item: Notification) =>
   item.kind === "transfer.waiting" ? "/app/money/transfers" : item.kind.startsWith("stock.") ? "/app/stock" : item.saleId ? `/app/sales/${item.saleId}` : "/app";
-const keyOf = (kind: string) => (kind.startsWith("sale.") ? kind.slice(5) : kind.replace(".", "_"));
+const keyOf = (item: Notification) => {
+  if (item.kind === "sale.credit_offline") {
+    const reason = item.data?.reason === "over_limit" || item.data?.reason === "both" ? item.data.reason : "not_approved";
+    return `credit_offline_${reason}`;
+  }
+  return item.kind.startsWith("sale.") ? item.kind.slice(5) : item.kind.replace(".", "_");
+};
 
 export default function NotificationsPage() {
   const t = useTranslations("notifications");
@@ -61,7 +69,7 @@ export default function NotificationsPage() {
         <ul className="divide-y divide-border rounded-card border border-border bg-card">
           {items.map((item) => {
             const text = KINDS.includes(item.kind)
-              ? t(`kind.${keyOf(item.kind)}`, { number: item.saleNumber ?? item.data?.number ?? "", name: item.actorName ?? t("someone"), summary: item.data?.summary ?? "" })
+              ? t(`kind.${keyOf(item)}`, { number: item.saleNumber ?? item.data?.number ?? "", name: item.actorName ?? t("someone"), summary: item.data?.summary ?? "" })
               : item.kind;
             return (
               <li key={item.id}>

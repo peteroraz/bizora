@@ -62,6 +62,27 @@ export class SaleController {
     return success(await this.sales.queues(tenant), tenant.correlationId);
   }
 
+  /** Sales a phone could not sync. The owner or a manager records them, or says they were not sales (ADR-050). */
+  @Get("problems")
+  @RequirePermissions(Permission.SALES_VOID)
+  async problems(@CurrentTenant() tenant: TenantContext) {
+    return success(await this.sales.listProblems(tenant), tenant.correlationId);
+  }
+
+  @Post("problems/:id/record")
+  @HttpCode(200)
+  @RequirePermissions(Permission.SALES_VOID)
+  async recordProblem(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
+    return success({ sale: await this.sales.recordProblem(tenant, id) }, tenant.correlationId);
+  }
+
+  @Post("problems/:id/dismiss")
+  @HttpCode(200)
+  @RequirePermissions(Permission.SALES_VOID)
+  async dismissProblem(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return success(await this.sales.dismissProblem(tenant, id, body), tenant.correlationId);
+  }
+
   @Get(":id")
   @RequireAnyPermission(...SEE_SALES)
   async get(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {

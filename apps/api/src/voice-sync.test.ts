@@ -156,13 +156,14 @@ describe("ADR-040: a sale spoken offline syncs once and keeps the books right", 
     expect(entries.rows[0]?.n).toBe(1);
   });
 
-  it("refuses, without losing it, a spoken sale the server cannot accept", async () => {
-    // A customer who is not approved for credit, and a customer from another business.
+  it("keeps an offline credit sale to someone no longer approved, and refuses another business's customer", async () => {
+    // Credit that would be refused at the counter is kept when it already happened offline (ADR-050).
     const base = { provisionalNumber: "DEV1-000002", soldAt: new Date().toISOString(), lines: [{ productId: riceId, quantity: "1", unit: "bag" }], payments: [{ method: "cash", amountMinor: "5000000" }], dueDate: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), comment: "Balance later" };
     const noCredit = await push(cashier, [{ id: uuidv7(), type: "sale.create", occurredAt: new Date().toISOString(), payload: { ...base, id: uuidv7(), customerId: noCreditId } }]).expect(200);
-    expect(noCredit.body.data.results[0].status).toBe("rejected");
+    expect(noCredit.body.data.results[0].status).toBe("applied");
     const foreign = await push(other, [{ id: uuidv7(), type: "sale.create", occurredAt: new Date().toISOString(), payload: { ...base, id: uuidv7(), customerId: emekaId, lines: [{ productId: riceId, quantity: "1", unit: "bag" }] } }]).expect(200);
     expect(foreign.body.data.results[0].status).toBe("rejected");
+    expect(foreign.body.data.results[0].stored).toBe(true);
     const books = (await request(http).get("/api/v1/ledger/trial-balance").set(auth(owner)).expect(200)).body.data;
     expect(books.balanced).toBe(true);
   });
@@ -172,8 +173,8 @@ describe("ADR-040: a sale spoken offline syncs once and keeps the books right", 
     const result = await push(cashier, [op]).expect(200);
     expect(result.body.data.results[0].status).toBe("applied");
     const product = await request(http).get(`/api/v1/products/${riceId}`).set(auth(owner)).expect(200);
-    // 5 left, 8 sold offline: recorded as it happened, and shown below zero for someone to count.
-    expect(product.body.data.product.stock).toMatchObject({ quantity: "-3000", belowZero: true });
+    // 4 left (the kept credit sale took one), 8 sold offline: recorded as it happened, and shown below zero.
+    expect(product.body.data.product.stock).toMatchObject({ quantity: "-4000", belowZero: true });
   });
 
   it("does not accept work without a valid sign-in", async () => {

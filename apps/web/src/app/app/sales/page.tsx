@@ -32,6 +32,7 @@ function SalesScreen() {
   const { timezone: timeZone } = usePlace();
   const access = useAccess();
   const canSell = can(access, Permission.SALES_CREATE);
+  const canDeal = can(access, Permission.SALES_VOID);
   const desk = access.salesFlow === "desk";
   const all = can(access, Permission.SALES_READ_ALL);
   const seesDay = can(access, Permission.SALES_READ_OWN, Permission.SALES_READ_ALL);
@@ -118,15 +119,20 @@ function SalesScreen() {
         title={t("title")}
         intro={tab !== "day" ? t(`tabLead.${tab}`) : summary?.mine ? t("mineLead") : t("lead")}
         actions={
-          canSell ? (
+          canSell || canDeal ? (
             <>
-              <ActionLink href="/app/sales/import">{t("import")}</ActionLink>
-              <ActionLink href="/app/sales/new?voice=1" data-testid="sales-voice">
-                {t("voice.open")}
-              </ActionLink>
-              <ActionLink href="/app/sales/new" variant="primary">
-                {t("new")}
-              </ActionLink>
+              {canDeal ? <ActionLink href="/app/sales/needs-you">{t("needsYou.link")}</ActionLink> : null}
+              {canSell ? <ActionLink href="/app/sales/import">{t("import")}</ActionLink> : null}
+              {canSell ? (
+                <ActionLink href="/app/sales/new?voice=1" data-testid="sales-voice">
+                  {t("voice.open")}
+                </ActionLink>
+              ) : null}
+              {canSell ? (
+                <ActionLink href="/app/sales/new" variant="primary">
+                  {t("new")}
+                </ActionLink>
+              ) : null}
             </>
           ) : undefined
         }

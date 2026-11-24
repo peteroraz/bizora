@@ -1465,6 +1465,35 @@ export const notifications = pgTable(
   ],
 );
 
+/** A sale.create the server refused. The phone does not delete it until this row exists (ADR-050). */
+export const syncProblems = pgTable(
+  "sync_problems",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    businessId: uuid("business_id"),
+    branchId: uuid("branch_id"),
+    membershipId: uuid("membership_id").notNull(),
+    deviceId: uuid("device_id"),
+    operationId: uuid("operation_id").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    errorCode: varchar("error_code", { length: 64 }).notNull(),
+    errorMessage: varchar("error_message", { length: 400 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by"),
+    resolution: varchar("resolution", { length: 16 }),
+    reason: varchar("reason", { length: 240 }),
+  },
+  (table) => [
+    uniqueIndex("sync_problems_operation_key").on(table.tenantId, table.operationId),
+    index("sync_problems_open_idx").on(table.tenantId, table.businessId, table.createdAt),
+    foreignKey({ name: "sync_problems_business_fk", columns: [table.tenantId, table.businessId], foreignColumns: [businesses.tenantId, businesses.id] }),
+    foreignKey({ name: "sync_problems_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "sync_problems_membership_fk", columns: [table.tenantId, table.membershipId], foreignColumns: [memberships.tenantId, memberships.id] }),
+  ],
+);
+
 /** Binary column: postgres.js returns a Buffer, PGlite a Uint8Array; both become a Buffer. */
 const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
   dataType: () => "bytea",
@@ -1552,6 +1581,7 @@ export const schema = {
   salePayments,
   saleComments,
   notifications,
+  syncProblems,
   aiUsage,
   customerPayments,
   paymentAllocations,

@@ -22,7 +22,7 @@ Existing remembered rows and typed sale lines are kept. The name key is not rewr
 
 ## 3. API changes
 
-Remembered items, suggestions, name import, rename, aliases, upgrade, cost estimate, merge and archive are on `/api/v1/saved-items`. Units are on `/api/v1/units`. The sales day list can ask `GET /api/v1/sales/top-items`. A sale may send `itemSource: voice`. Profit adds `profitStatus`, `uncostedSalesMinor`, `costCoverageBps`, `knownProfitMinor` and `estimatedProfitMinor`. The existing `profitMinor` is the ledger figure and is unchanged.
+Remembered items, suggestions, name import, rename, aliases, upgrade, cost estimate, merge and archive are on `/api/v1/saved-items`. Units are on `/api/v1/units`. The sales day list can ask `GET /api/v1/sales/top-items`. A sale may send `itemSource: voice`. Profit adds `profitStatus`, `uncostedSalesMinor`, `costCoverageBps` and `estimatedProfitMinor`. The figure shown is always `profitMinor`, the ledger figure (ADR-051).
 
 Business export includes the three new tables. Creating a sample business still deletes every tenant table, so the new ones are removed with it.
 

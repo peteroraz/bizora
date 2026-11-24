@@ -18,7 +18,6 @@ type Followup = { id: string; customerId: string; customerName: string; reason: 
 
 export default function AppHomePage() {
   const t = useTranslations("home");
-  const moneyT = useTranslations("money");
   const locale = useLocale();
   const access = useAccess();
   const shown = homeCards(access);
@@ -49,7 +48,7 @@ export default function AppHomePage() {
   const seesProfit = can(access, Permission.REPORTS_PROFIT_READ) && shown.includes("money");
   const approvesExpenses = can(access, Permission.EXPENSES_APPROVE);
   const [cash, setCash] = useState<{ currency: string; totalMinor: bigint; shops: number } | null>(null);
-  const [profit, setProfit] = useState<{ currency: string; profitMinor: string; active: boolean; profitStatus?: string; estimatedProfitMinor?: string | null } | null>(null);
+  const [profit, setProfit] = useState<{ currency: string; profitMinor: string; active: boolean } | null>(null);
   const [expensesToApprove, setExpensesToApprove] = useState(0);
 
   useEffect(() => {
@@ -66,8 +65,8 @@ export default function AppHomePage() {
       void api("/api/v1/money/profit")
         .then(async (response) => {
           if (!response.ok) return;
-          const data = (await response.json()).data as { currency: string; profitMinor: string; salesMinor: string; expensesMinor: string; profitStatus?: string; estimatedProfitMinor?: string | null };
-          setProfit({ currency: data.currency, profitMinor: data.profitMinor, active: data.salesMinor !== "0" || data.expensesMinor !== "0", profitStatus: data.profitStatus, estimatedProfitMinor: data.estimatedProfitMinor });
+          const data = (await response.json()).data as { currency: string; profitMinor: string; salesMinor: string; expensesMinor: string };
+          setProfit({ currency: data.currency, profitMinor: data.profitMinor, active: data.salesMinor !== "0" || data.expensesMinor !== "0" });
         })
         .catch(() => undefined);
     }
@@ -310,14 +309,10 @@ export default function AppHomePage() {
               </Link>
             ) : id === "money" && profit && profit.active ? (
               <Link href="/app/money/profit" className="mt-1 block" data-testid="home-profit">
-                {profit.profitStatus && profit.profitStatus !== "known" && !profit.estimatedProfitMinor ? (
-                  <span className="block text-sm">{moneyT("profit.addCosts")}</span>
-                ) : (
-                  <span className={`block text-xl font-semibold tabular-nums ${BigInt(profit.estimatedProfitMinor && profit.profitStatus !== "known" ? profit.estimatedProfitMinor : profit.profitMinor) < 0n ? "text-danger" : ""}`}>
-                    {formatCurrency(BigInt(profit.estimatedProfitMinor && profit.profitStatus !== "known" ? profit.estimatedProfitMinor : profit.profitMinor), profit.currency, locale)}
-                  </span>
-                )}
-                <span className="text-sm text-primary">{profit.profitStatus && profit.profitStatus !== "known" && profit.estimatedProfitMinor ? moneyT("profit.estimated") : t("seeProfit")}</span>
+                <span className={`block text-xl font-semibold tabular-nums ${BigInt(profit.profitMinor) < 0n ? "text-danger" : ""}`}>
+                  {formatCurrency(BigInt(profit.profitMinor), profit.currency, locale)}
+                </span>
+                <span className="text-sm text-primary">{t("seeProfit")}</span>
               </Link>
             ) : (
               <p className="mt-2 text-sm">{empty}</p>

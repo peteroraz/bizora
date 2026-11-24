@@ -32,7 +32,7 @@ import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
-import { addresses, branches, businesses, businessUnits, customerPayments, customers, itemAliases, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, users } from "../../db/schema.js";
+import { addresses, branches, businesses, businessUnits, customerPayments, customers, idempotencyKeys, itemAliases, paymentAllocations, memberships, products, saleComments, saleLines, salePayments, saleReturns, sales, savedItems, stockBalances, syncProblems, users } from "../../db/schema.js";
 import { closeProductKey } from "./near-name.js";
 import { bankCheckers, transferWaits } from "../money/transfer-rules.js";
 import { ReturnService } from "./return.service.js";
@@ -73,6 +73,25 @@ type Payment = { method: "cash" | "transfer" | "pos"; amountMinor: string; refer
 const SEVEN_DAYS_MS = 7 * 86_400_000;
 
 const round = (numerator: bigint, denominator: bigint) => (numerator * 2n + denominator) / (denominator * 2n);
+
+type ProblemLine = { productId?: string; description?: string; quantity?: string; unit?: string };
+
+function problemLines(payload: Record<string, unknown>): ProblemLine[] {
+  return Array.isArray(payload.lines) ? (payload.lines as ProblemLine[]) : [];
+}
+
+function problemSummary(payload: Record<string, unknown>, names: Map<string, string>) {
+  const parts = problemLines(payload).map((line) => {
+    const name = line.description?.trim() || (line.productId ? names.get(line.productId) : undefined) || "A product";
+    return [line.quantity, line.unit, name].filter(Boolean).join(" ");
+  });
+  return parts.join(", ") || "A sale";
+}
+
+function problemTotal(payload: Record<string, unknown>) {
+  const payments = Array.isArray(payload.payments) ? (payload.payments as { amountMinor?: string }[]) : [];
+  return payments.reduce((sum, payment) => sum + (payment.amountMinor && /^\d+$/.test(payment.amountMinor) ? BigInt(payment.amountMinor) : 0n), 0n).toString();
+}
 
 /** "Rice 50kg is sold by the bag. Choose bag." One unit, or "the bag or carton" when there are two. */
 function soldBy(name: string, units: string[]) {
@@ -125,7 +144,7 @@ export class SaleService {
     const id = payload.id ?? newId();
     await this.db.transaction(async (tx) => {
       const business = await requireBusiness(tx, tenant);
-      const branch = await resolveBranch(tx, tenant, business.id);
+      const branch = await this.branchForSale(tx, tenant, business.id, source);
       // A warehouse keeps stock but does not sell at the counter (ADR-047). Sales already made elsewhere still count.
       if (branch.kind === "warehouse" && source === "pos") {
         throw new ApiError("WAREHOUSE_NO_SALES", `${branch.name} is a warehouse. Choose a shop to sell from, or move the stock to a shop first.`, 409);
@@ -147,6 +166,7 @@ export class SaleService {
         payload,
         priceList ? { id: priceList.id, day: localDate(soldAt, business.timezone) } : null,
         source === "pos",
+        source === "offline",
       );
       const lines = priced.lines;
       // Typed items need the shop to allow them (ADR-041). A sale made offline is kept: the phone allowed it then.
@@ -247,7 +267,8 @@ export class SaleService {
         if (settled.transfersWait) await this.askToCheckTransfer(tx, tenant, business.id, id);
         await this.takeStock(tx, tenant, business, branch, id, receiptNumber ?? "", soldAt, source);
       }
-      if (payload.comment) await this.addComment(tx, tenant, business.id, id, payload.comment, settled && settled.balance > 0n ? "credit" : "comment");
+      const creditNote = payload.comment ?? (source === "offline" && settled && settled.balance > 0n ? "Sold offline" : undefined);
+      if (creditNote) await this.addComment(tx, tenant, business.id, id, creditNote, settled && settled.balance > 0n ? "credit" : "comment");
       await this.audit.record(
         {
           tenantId: tenant.tenantId,
@@ -265,8 +286,13 @@ export class SaleService {
       );
       if (priced.belowPrice.length > 0) await this.flagBelowPrice(tx, tenant, business.id, branch.id, id, priced.belowPrice);
       if (priced.likeProduct.length > 0) await this.flagTypedLikeProduct(tx, tenant, business.id, branch.id, id, priced.likeProduct);
+      if (settled?.creditOffline) await this.flagCreditOffline(tx, tenant, business.id, branch.id, id, settled.creditOffline);
+      if (source === "offline" && branch.closedAt) await this.flagClosedShop(tx, tenant, business.id, branch.id, id, branch.name);
     });
-    return this.get(tenant, id);
+    // The sale is in the shop it was made in. A person moved off that shop (it has since closed) can still be given
+    // the sale they just recorded. Their usual list stays limited to the shop they work in now.
+    const movedOff = source === "offline" && Boolean(tenant.membershipBranchId) && tenant.branchId !== tenant.membershipBranchId;
+    return this.get(movedOff ? { ...tenant, membershipBranchId: null } : tenant, id);
   }
 
   /**
@@ -1169,25 +1195,38 @@ export class SaleService {
     }
     const balance = input.total - paid;
     let overLimit = false;
+    let creditOffline: { customerName: string; reason: "not_approved" | "over_limit" | "both" } | null = null;
+    const offline = input.source === "offline";
     if (balance > 0n) {
       const customer = input.customer;
       if (!customer) {
         throw new ApiError("CUSTOMER_REQUIRED", "Choose the customer who will owe the balance.", 400, [{ field: "customerId", message: "Required for credit." }]);
       }
       const manager = tenant.permissions.includes(Permission.DEBTORS_MANAGE);
-      if (!manager && !tenant.permissions.includes(Permission.SALES_CREDIT)) {
+      if (!offline && !manager && !tenant.permissions.includes(Permission.SALES_CREDIT)) {
         throw new ApiError("FORBIDDEN", "You cannot sell on credit. Take full payment, or send the sale to the cashier.", 403, [{ field: "payments", message: "Full payment needed." }]);
       }
       // Imported or captured records were already agreed with the customer; they skip approval checks (ADR-015, ADR-018).
+      // An offline sale already happened: keep a past date, a missing comment, and credit that is no longer allowed (ADR-050).
       if (input.source !== "import" && input.source !== "capture") {
-        if (!customer.creditAllowed) {
-          throw new ApiError("CREDIT_NOT_APPROVED", `${customer.name} is not approved for credit. A manager or owner can approve them on the customer's page.`, 403, [
-            { field: "customerId", message: "Not approved for credit." },
-          ]);
-        }
+        const notApproved = !customer.creditAllowed;
+        let over = false;
         if (customer.creditLimitMinor !== null) {
           const owing = await this.owing(tx, tenant.tenantId, customer.id);
-          if (owing + balance > customer.creditLimitMinor) {
+          if (owing + balance > customer.creditLimitMinor) over = true;
+        }
+        if (offline) {
+          if (notApproved || over) {
+            creditOffline = { customerName: customer.name, reason: notApproved && over ? "both" : notApproved ? "not_approved" : "over_limit" };
+          }
+          if (over) overLimit = true;
+        } else {
+          if (notApproved) {
+            throw new ApiError("CREDIT_NOT_APPROVED", `${customer.name} is not approved for credit. A manager or owner can approve them on the customer's page.`, 403, [
+              { field: "customerId", message: "Not approved for credit." },
+            ]);
+          }
+          if (over) {
             if (!manager) {
               throw new ApiError("OVER_CREDIT_LIMIT", `This would take ${customer.name} over their credit limit. Take more payment or ask a manager.`, 403, [
                 { field: "payments", message: "Over the credit limit." },
@@ -1195,12 +1234,12 @@ export class SaleService {
             }
             overLimit = true;
           }
+          if (!input.dueDate) throw new ApiError("DUE_DATE_REQUIRED", "Enter the date the customer will pay.", 400, [{ field: "dueDate", message: "Required for credit." }]);
+          if (input.dueDate < localDate(new Date(), business.timezone)) {
+            throw new ApiError("VALIDATION_ERROR", "The payment date cannot be in the past.", 400, [{ field: "dueDate", message: "In the past." }]);
+          }
+          if (!input.comment) throw new ApiError("COMMENT_REQUIRED", "Write a comment for this credit: why, and how the customer will pay.", 400, [{ field: "comment", message: "Required for credit." }]);
         }
-        if (!input.dueDate) throw new ApiError("DUE_DATE_REQUIRED", "Enter the date the customer will pay.", 400, [{ field: "dueDate", message: "Required for credit." }]);
-        if (input.dueDate < localDate(new Date(), business.timezone)) {
-          throw new ApiError("VALIDATION_ERROR", "The payment date cannot be in the past.", 400, [{ field: "dueDate", message: "In the past." }]);
-        }
-        if (!input.comment) throw new ApiError("COMMENT_REQUIRED", "Write a comment for this credit: why, and how the customer will pay.", 400, [{ field: "comment", message: "Required for credit." }]);
       }
     }
 
@@ -1238,7 +1277,7 @@ export class SaleService {
       );
       journalEntryId = posted.entryId;
     }
-    return { paid, balance, journalEntryId, overLimit, transfersWait };
+    return { paid, balance, journalEntryId, overLimit, transfersWait, creditOffline };
   }
 
   /** Takes the sale's goods out of stock (counted products only) and remembers each line's cost. */
@@ -1480,6 +1519,7 @@ export class SaleService {
     canDiscount: boolean,
     live: boolean,
     fromTyped: boolean,
+    keepPrice: boolean,
   ) {
     const selling = [product.baseUnit, ...productUnits.filter((unit) => !live || unit.forSale).map((unit) => unit.unitCode)];
     if (fromTyped && !selling.includes(input.unit)) {
@@ -1492,9 +1532,9 @@ export class SaleService {
     const quantity = round(entered * factor, 1000n);
     if (quantity <= 0n) throw new ApiError("VALIDATION_ERROR", "Enter a larger quantity.", 400, [{ field: `lines.${index}.quantity`, message: "Too small." }]);
     const pack = productUnits.find((unit) => unit.unitCode === input.unit);
-    const listPrice =
-      tierPrice(tiers?.get(`${product.id}:${input.unit}`), entered) ??
-      (input.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null)));
+    const shelfPrice =
+      input.unit === product.baseUnit ? product.priceMinor : (pack?.priceMinor ?? (product.priceMinor !== null ? round(product.priceMinor * factor, 1000n) : null));
+    const listPrice = tierPrice(tiers?.get(`${product.id}:${input.unit}`), entered) ?? shelfPrice;
     const unitPrice = input.unitPriceMinor !== undefined ? BigInt(input.unitPriceMinor) : listPrice;
     if (unitPrice === null) {
       throw new ApiError("PRICE_REQUIRED", `Enter a price for ${product.name}.`, 400, [{ field: `lines.${index}.unitPriceMinor`, message: "Price needed." }]);
@@ -1504,11 +1544,17 @@ export class SaleService {
       throw new ApiError("VALIDATION_ERROR", "Enter a price.", 400, [{ field: `lines.${index}.lineTotalMinor`, message: "Enter a price." }]);
     }
     const listLine = listPrice !== null ? round(listPrice * entered, 1000n) : null;
+    const shelfLine = shelfPrice !== null ? round(shelfPrice * entered, 1000n) : null;
     const lineTotal = exact ?? round(unitPrice * entered, 1000n);
-    const below = exact !== null ? listLine !== null && exact < listLine : listPrice !== null && unitPrice < listPrice;
+    const cheaper = (price: bigint | null, whole: bigint | null) => (exact !== null ? whole !== null && exact < whole : price !== null && unitPrice < price);
+    // A live sale is checked against the price in force (the list, or today's price). An offline sale is also
+    // flagged when the phone's price is under today's price even if a list price matches it (ADR-050).
+    const below = cheaper(listPrice, listLine) || (keepPrice && shelfPrice !== listPrice && cheaper(shelfPrice, shelfLine));
     const free = exact !== null ? false : unitPrice === 0n;
-    // A product picked by id is checked on every sale. A typed name is checked only at the counter (ADR-049).
-    const strictPrice = !fromTyped || live;
+    // A product picked by id is checked on a live sale. A typed name is checked only at the counter (ADR-049).
+    // An offline sale keeps the price the phone showed, even when today's price is different, and the owner is told (ADR-050).
+    const kept = keepPrice || (fromTyped && !live);
+    const strictPrice = !kept;
     if (strictPrice && free && !canDiscount) {
       throw new ApiError("FORBIDDEN", `Ask a manager to give ${product.name} away free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
     }
@@ -1517,7 +1563,7 @@ export class SaleService {
     }
     const reduction = below && listLine !== null ? (exact !== null ? listLine - exact : round(((listPrice as bigint) - unitPrice) * entered, 1000n)) : 0n;
     return {
-      below: fromTyped && !strictPrice && !canDiscount && (free || below),
+      below: kept && !canDiscount && (free || below),
       line: { product, unit: input.unit, entered, quantity, unitPrice, lineTotal, reduction, description: product.name, other: false as const, saved: false as const },
     };
   }
@@ -1599,11 +1645,77 @@ export class SaleService {
     });
   }
 
+  /** The owner is told when an offline sale was given on credit that would not be allowed at the counter. */
+  private async flagCreditOffline(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    businessId: string,
+    branchId: string,
+    saleId: string,
+    detail: { customerName: string; reason: "not_approved" | "over_limit" | "both" },
+  ) {
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: "sale.credit_offline",
+        entityType: "sale",
+        entityId: saleId,
+        correlationId: tenant.correlationId,
+        businessId,
+        branchId,
+        actorType: tenant.actorType ?? "HUMAN",
+        metadata: { reason: detail.reason },
+      },
+      tx,
+    );
+    const owners = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenant.tenantId), eq(memberships.role, "OWNER"), eq(memberships.status, "ACTIVE")));
+    await this.notifications.notify(tx, tenant.tenantId, owners.map((row) => row.id), {
+      kind: "sale.credit_offline",
+      saleId,
+      actorName: await this.actorName(tx, tenant),
+      data: { summary: detail.customerName, reason: detail.reason },
+    });
+  }
+
+  /** The owner is told when an offline sale was recorded in a shop that has since closed. */
+  private async flagClosedShop(tx: DbExecutor, tenant: TenantContext, businessId: string, branchId: string, saleId: string, shopName: string) {
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: "sale.closed_shop",
+        entityType: "sale",
+        entityId: saleId,
+        correlationId: tenant.correlationId,
+        businessId,
+        branchId,
+        actorType: tenant.actorType ?? "HUMAN",
+        metadata: { shop: shopName },
+      },
+      tx,
+    );
+    const owners = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenant.tenantId), eq(memberships.role, "OWNER"), eq(memberships.status, "ACTIVE")));
+    await this.notifications.notify(tx, tenant.tenantId, owners.map((row) => row.id), {
+      kind: "sale.closed_shop",
+      saleId,
+      actorName: await this.actorName(tx, tenant),
+      data: { summary: shopName },
+    });
+  }
+
   /**
    * Prices each line from the product (or the price typed), checks discounts, and converts to base units.
    * `live`: a sale made now at the counter. A typed name that is a product is price-checked only then.
-   * Offline, imported and photo-read sales keep the seller's price and tell the owner. Pack rules (ADR-046)
-   * are not applied to those. A product chosen by id is still price-checked on every source.
+   * Offline sales keep the price the phone showed, for a product picked by id as well as a typed name, and tell
+   * the owner when that price is below today's. Imported and photo-read sales keep a typed price and tell the owner.
+   * Pack rules (ADR-046) are not applied except on a live sale. A product chosen by id is still price-checked on a live sale.
    */
   private async priceLines(
     tx: DbExecutor,
@@ -1612,6 +1724,7 @@ export class SaleService {
     payload: SaleCreateInput,
     priceList: { id: string; day: string } | null = null,
     live = false,
+    keepPrice = false,
   ) {
     const typedKeys = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [] : [savedItemKey(line.description)])).filter((key) => key.length > 0))];
     const matched = await this.productsForTypedNames(tx, tenant.tenantId, business.id, typedKeys);
@@ -1645,6 +1758,7 @@ export class SaleService {
             canDiscount,
             live,
             true,
+            keepPrice,
           );
           if (priced) {
             lines.push(priced.line);
@@ -1683,9 +1797,10 @@ export class SaleService {
       if (!product || product.archivedAt) {
         throw new ApiError("PRODUCT_NOT_FOUND", "A product in this sale was not found.", 404, [{ field: `lines.${index}.productId`, message: "Not found." }]);
       }
-      const priced = this.priceListedLine(product, units.get(product.id) ?? [], { unit: line.unit, quantity: line.quantity, unitPriceMinor: line.unitPriceMinor }, index, fromList, canDiscount, live, false);
+      const priced = this.priceListedLine(product, units.get(product.id) ?? [], { unit: line.unit, quantity: line.quantity, unitPriceMinor: line.unitPriceMinor }, index, fromList, canDiscount, live, false, keepPrice);
       if (!priced) continue;
       lines.push(priced.line);
+      if (priced.below) belowPrice.push(product.name);
     }
     return { lines, belowPrice, likeProduct };
   }
@@ -1884,6 +1999,121 @@ export class SaleService {
     if (tenant.permissions.includes(Permission.SALES_READ_ALL) || sale.membershipId === tenant.membershipId) return "full";
     if (tenant.permissions.includes(Permission.SALES_COLLECT) && (sale.status === "awaiting_payment" || sale.collectedMembershipId === tenant.membershipId)) return "full";
     return "release";
+  }
+
+  /** Offline sales are recorded in the shop they were made in, even after that shop has closed (ADR-050). */
+  private async branchForSale(tx: DbExecutor, tenant: TenantContext, businessId: string, source: SaleSource) {
+    if (source !== "offline") return resolveBranch(tx, tenant, businessId);
+    // The sync already chose the shop the sale was made in, including one that has since closed.
+    const branchId = tenant.branchId ?? tenant.membershipBranchId;
+    if (!branchId) throw new ApiError("BRANCH_REQUIRED", "Choose a shop first.", 400);
+    return findBranch(tx, tenant, businessId, branchId);
+  }
+
+  /** Sales the server could not record from a phone. The owner and managers deal with them (ADR-050). */
+  async listProblems(tenant: TenantContext) {
+    this.assertProblemRole(tenant);
+    const business = await requireBusiness(this.db, tenant);
+    const filters = [eq(syncProblems.tenantId, tenant.tenantId), eq(syncProblems.businessId, business.id), isNull(syncProblems.resolvedAt)];
+    if (tenant.membershipBranchId) filters.push(eq(syncProblems.branchId, tenant.membershipBranchId));
+    const rows = await this.db.select().from(syncProblems).where(and(...filters)).orderBy(desc(syncProblems.createdAt)).limit(50);
+    const productIds = new Set<string>();
+    for (const row of rows) {
+      for (const line of problemLines(row.payload)) if (line.productId) productIds.add(line.productId);
+    }
+    const named =
+      productIds.size === 0
+        ? []
+        : await this.db
+            .select({ id: products.id, name: products.name })
+            .from(products)
+            .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), inArray(products.id, [...productIds])));
+    const names = new Map(named.map((row) => [row.id, row.name]));
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        operationId: row.operationId,
+        errorCode: row.errorCode,
+        errorMessage: row.errorMessage,
+        soldAt: typeof row.payload.soldAt === "string" ? row.payload.soldAt : null,
+        summary: problemSummary(row.payload, names),
+        totalMinor: problemTotal(row.payload),
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /** Records the phone's sale as the owner, at the phone's prices and time. A later sync of the same operation is a duplicate. */
+  async recordProblem(tenant: TenantContext, id: string) {
+    this.assertProblemRole(tenant);
+    const problem = await this.requireOpenProblem(tenant, id);
+    const soldAt = typeof problem.payload.soldAt === "string" ? new Date(problem.payload.soldAt) : undefined;
+    const scoped: TenantContext = {
+      ...tenant,
+      businessId: problem.businessId ?? tenant.businessId,
+      branchId: problem.branchId ?? tenant.branchId,
+      membershipBranchId: null,
+    };
+    const sale = await this.create(scoped, problem.payload, {
+      source: "offline",
+      ...(soldAt && !Number.isNaN(soldAt.getTime()) ? { soldAt } : {}),
+      allowOlder: true,
+    });
+    const now = new Date();
+    await this.db
+      .update(syncProblems)
+      .set({ resolvedAt: now, resolvedBy: tenant.userId, resolution: "recorded" })
+      .where(and(eq(syncProblems.tenantId, tenant.tenantId), eq(syncProblems.id, problem.id)));
+    await this.db
+      .update(idempotencyKeys)
+      .set({ status: "completed", responseStatus: 200, responseBody: { sale }, completedAt: now })
+      .where(and(eq(idempotencyKeys.tenantId, tenant.tenantId), eq(idempotencyKeys.key, problem.operationId)));
+    return sale;
+  }
+
+  /** The owner says this was not a sale. The reason is kept in the activity log. The sale is not recorded. */
+  async dismissProblem(tenant: TenantContext, id: string, raw: unknown) {
+    this.assertProblemRole(tenant);
+    const { reason } = z.object({ reason: z.string().trim().min(1, "Say why this was not a sale.").max(240) }).parse(raw ?? {});
+    const problem = await this.requireOpenProblem(tenant, id);
+    const now = new Date();
+    await this.db
+      .update(syncProblems)
+      .set({ resolvedAt: now, resolvedBy: tenant.userId, resolution: "not_a_sale", reason })
+      .where(and(eq(syncProblems.tenantId, tenant.tenantId), eq(syncProblems.id, problem.id)));
+    await this.audit.record({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.userId,
+      action: "sale.not_a_sale",
+      entityType: "sync_problem",
+      entityId: problem.id,
+      correlationId: tenant.correlationId,
+      businessId: problem.businessId,
+      branchId: problem.branchId,
+      actorType: tenant.actorType ?? "HUMAN",
+      metadata: { reason, operationId: problem.operationId },
+    });
+    return { id: problem.id, resolution: "not_a_sale" as const };
+  }
+
+  private assertProblemRole(tenant: TenantContext) {
+    if (tenant.role !== "OWNER" && tenant.role !== "ADMINISTRATOR" && tenant.role !== "MANAGER") {
+      throw new ApiError("FORBIDDEN", "Only the owner or a manager can deal with these sales.", 403);
+    }
+  }
+
+  private async requireOpenProblem(tenant: TenantContext, id: string) {
+    const business = await requireBusiness(this.db, tenant);
+    const [problem] = await this.db
+      .select()
+      .from(syncProblems)
+      .where(and(eq(syncProblems.tenantId, tenant.tenantId), eq(syncProblems.businessId, business.id), eq(syncProblems.id, id)))
+      .limit(1);
+    if (!problem || (tenant.membershipBranchId && problem.branchId !== tenant.membershipBranchId)) {
+      throw new ApiError("NOT_FOUND", "That sale was not found.", 404);
+    }
+    if (problem.resolvedAt) throw new ApiError("ALREADY_DEALT", "This has already been dealt with.", 409);
+    return problem;
   }
 
   private async requireSale(executor: DbExecutor, tenant: TenantContext, id: string, lock = false): Promise<SaleRow> {

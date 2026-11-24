@@ -1,11 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { type SyncOperationResult, syncPushSchema } from "@bizora/contracts";
 import { ApiError } from "../../common/errors.js";
+import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { asRefusal, IdempotencyService, requestHash } from "../idempotency/idempotency.service.js";
 import { and, eq } from "drizzle-orm";
 import type { AppDatabase } from "../../db/database.js";
-import { branches } from "../../db/schema.js";
+import { branches, syncProblems } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { WorkRulesService } from "../work-rules/work-rules.service.js";
 import { SyncHandlerRegistry } from "./sync-handler.registry.js";
@@ -45,7 +46,7 @@ export class SyncService {
               throw new ApiError("FORBIDDEN", "You do not have permission to perform this action.", 403);
             }
             // Work done offline belongs to the shop it was done in, even if the person has since switched shop.
-            const { scoped, payload } = await this.inShopOf(tenant, operation.payload);
+            const { scoped, payload } = await this.inShopOf(tenant, operation.payload, operation.type);
             return { value: await handler.handle(scoped, { ...operation, payload }), status: 200 };
           },
         );
@@ -58,7 +59,8 @@ export class SyncService {
       } catch (error) {
         const refusal = asRefusal(error);
         if (refusal) {
-          results.push({ id: operation.id, status: "rejected", error: { code: refusal.code, message: refusal.message } });
+          const stored = await this.holdRejectedSale(tenant, operation, refusal);
+          results.push({ id: operation.id, status: "rejected", error: { code: refusal.code, message: refusal.message }, ...(stored ? { stored: true } : {}) });
           continue;
         }
         // Anything else (database down, bug): stop here so later operations keep their order. The device retries.
@@ -70,24 +72,63 @@ export class SyncService {
 
   /**
    * The phone records which shop offline work was done in (`branchId` on the payload). It is checked like a shop
-   * chosen at sign-in: it must be this business's, open, and one the person may work in. Without it (older phones),
-   * the shop selected now is used, as before.
+   * chosen at sign-in: it must be this business's, and one the person may work in. Without it (older phones),
+   * the shop selected now is used, as before. A sale for a shop closed after the sale was made is still recorded
+   * there (ADR-050). Other work in a closed shop is refused.
    */
-  private async inShopOf(tenant: TenantContext, raw: unknown): Promise<{ scoped: TenantContext; payload: unknown }> {
+  private async inShopOf(tenant: TenantContext, raw: unknown, type: string): Promise<{ scoped: TenantContext; payload: unknown }> {
     if (!raw || typeof raw !== "object" || typeof (raw as { branchId?: unknown }).branchId !== "string") return { scoped: tenant, payload: raw };
     const { branchId, ...payload } = raw as { branchId: string } & Record<string, unknown>;
     if (branchId === tenant.branchId) return { scoped: tenant, payload };
-    if (tenant.membershipBranchId && tenant.membershipBranchId !== branchId) {
-      throw new ApiError("SHOP_NOT_ALLOWED", "This was saved in a shop you no longer work in. Ask the owner to record it.", 403);
-    }
     const [branch] = await this.db.select().from(branches).where(and(eq(branches.tenantId, tenant.tenantId), eq(branches.id, branchId))).limit(1);
     if (!branch || (tenant.businessId && branch.businessId !== tenant.businessId)) {
       throw new ApiError("SHOP_NOT_FOUND", "The shop this was saved in is no longer available. Record it again in the right shop.", 404);
     }
-    if (branch.closedAt) {
+    const closedSale = type === "sale.create" && Boolean(branch.closedAt);
+    if (tenant.membershipBranchId && tenant.membershipBranchId !== branchId && !closedSale) {
+      throw new ApiError("SHOP_NOT_ALLOWED", "This was saved in a shop you no longer work in. Ask the owner to record it.", 403);
+    }
+    if (branch.closedAt && !closedSale) {
       throw new ApiError("SHOP_CLOSED", `${branch.name} was closed after this was saved. Record it again in the shop that took over.`, 409);
     }
     return { scoped: { ...tenant, branchId, businessId: branch.businessId }, payload };
+  }
+
+  /**
+   * A refused sale stays on the server, so the phone can drop its copy only after this row exists.
+   * The same operation sent again does not create a second row.
+   */
+  private async holdRejectedSale(tenant: TenantContext, operation: { id: string; type: string; payload?: unknown }, refusal: ApiError): Promise<boolean> {
+    if (operation.type !== "sale.create") return false;
+    const payload = operation.payload && typeof operation.payload === "object" ? (operation.payload as Record<string, unknown>) : {};
+    const branchFromPhone = typeof payload.branchId === "string" && /^[0-9a-f-]{36}$/i.test(payload.branchId) ? payload.branchId : null;
+    try {
+      const inserted = await this.db
+        .insert(syncProblems)
+        .values({
+          id: newId(),
+          tenantId: tenant.tenantId,
+          businessId: tenant.businessId,
+          branchId: branchFromPhone ?? tenant.branchId,
+          membershipId: tenant.membershipId,
+          deviceId: tenant.deviceId ?? null,
+          operationId: operation.id,
+          payload,
+          errorCode: refusal.code.slice(0, 64),
+          errorMessage: refusal.message.slice(0, 400),
+        })
+        .onConflictDoNothing()
+        .returning({ id: syncProblems.id });
+      if (inserted.length > 0) return true;
+      const [existing] = await this.db
+        .select({ id: syncProblems.id })
+        .from(syncProblems)
+        .where(and(eq(syncProblems.tenantId, tenant.tenantId), eq(syncProblems.operationId, operation.id)))
+        .limit(1);
+      return Boolean(existing);
+    } catch {
+      return false;
+    }
   }
 
   /**
