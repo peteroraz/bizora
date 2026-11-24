@@ -209,3 +209,53 @@ pnpm --filter @bizora/api sample remove --yes                        # removes e
 
 1. The owner downloads their records (Settings › Download your records).
 2. If the account is to be closed, follow the Terms (section 9) and the law on keeping records.
+
+## 15. Support and escalation
+
+**Before the first pilot business**, the owner fills in the names below. This is blocker B10 in the readiness report. Until then, nobody is on call.
+
+| Role | Who | How to reach them | When |
+| --- | --- | --- | --- |
+| Pilot support (first line) | *to be named by the owner* | The support WhatsApp number, also shown on the homepage once `NEXT_PUBLIC_SUPPORT_WHATSAPP` is set | Monday to Saturday, 8:00–20:00 West Africa Time |
+| Engineer on call (second line) | *to be named* | Phone and WhatsApp, given to first line only | Same hours; for P1 at any time |
+| Owner (decisions) | *the owner* | Phone | For rollbacks, switching a feature off for everyone, and anything touching a business's money records |
+
+**How a shop reaches support:**
+1. **WhatsApp the support number** with:
+   - the business name;
+   - what they were doing;
+   - a screenshot.
+2. **If the screen shows a support code** ("tell Bizora support this code: 13dc939a"), send the code. It finds the exact request in the logs (step 12, Errors).
+3. **For sales stuck on the phone:** the sync badge shows how many are waiting. Ask them **not to clear the browser or uninstall the app** until support has looked. Work that was never sent cannot be recovered.
+
+**How fast:**
+
+| Priority | Examples | First answer | Fixed or worked around |
+| --- | --- | --- | --- |
+| **P1** | The business cannot sell; sales or money are wrong; Bizora is down; another business's data is visible | 30 minutes in support hours; 2 hours outside them | Same day: a workaround (switch the feature off, roll back) within 4 hours |
+| **P2** | One feature does not work and there is a way around it (sell by typing instead of voice; count again) | 4 hours in support hours | 2 working days |
+| **P3** | A question, a wording problem, a request | 1 working day | Planned with the next release, or answered |
+
+**Steps for first line:**
+1. Find the business in the Admin portal and look at **Last 7 days**: refusals, voice problems, last sync.
+2. If you need to see their records, open a **support view** with the reason. The owner is emailed, and sees it in Settings › Bizora support.
+3. If it is a known problem with a switch (voice, photo reads), **switch it off for that business** with the reason (step 13).
+4. For anything that is P1, or that needs a code or data change, **hand it to the engineer on call** with:
+   - the business ID;
+   - the support code or the time;
+   - what was seen.
+
+**Steps for the engineer:**
+1. Check Error Reporting and Cloud Logging by the business ID or the support code (step 12).
+2. For a bad deploy, roll back (step 13). For damaged data, stop writes and follow `docs/runbooks/restore.md`.
+3. Never delete or edit a business's money records by hand. A wrong record is reversed in the app, never removed (Terms section 13; readiness report section 4).
+4. Tell first line what to say to the shop, and write what happened and what was done in the incident log (`docs/runbooks/incidents.md`).
+
+**After every P1:** a short note within 2 working days covering:
+- what happened;
+- how many businesses it touched;
+- what was done;
+- what stops it happening again.
+
+The owner decides whether the businesses affected are told in writing.
+
