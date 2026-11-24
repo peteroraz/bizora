@@ -1325,7 +1325,9 @@
     "onTheWayIn": "{quantity} on the way here",
     "onTheWayOut": "{quantity} sent, not yet received",
     "pricesLink": "Price lists",
-    "deliveryChargesLink": "Delivery with charges"
+    "deliveryChargesLink": "Delivery with charges",
+    "chooseShopTitle": "Choose a shop to see its stock",
+    "chooseShopBody": "Stock is kept shop by shop. Pick a shop at the top of the screen, where it says All shops."
   },
   "sales": {
     "title": "Sales",

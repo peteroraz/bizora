@@ -329,7 +329,7 @@ function NewProductScreen() {
           <SubmitButton pending={pending} pendingLabel={t("saving")}>
             {t("save")}
           </SubmitButton>
-          <Link href="/app/stock" className="text-sm text-primary">
+          <Link href="/app/stock" className="inline-flex min-h-11 items-center text-sm text-primary">
             {t("back")}
           </Link>
         </div>
