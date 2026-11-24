@@ -2002,6 +2002,46 @@ export const stockReceipts = pgTable("stock_receipts", {
 });
 
 /** A store keeper's stock change waiting for a manager or owner to approve and complete it (ADR-034). */
+/** Product attributes and their values on variants (migration 0048, ADR-060). */
+export const attributeDefinitions = pgTable("attribute_definitions", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  name: varchar("name", { length: 60 }).notNull(),
+  nameKey: varchar("name_key", { length: 60 }).notNull(),
+  kind: varchar("kind", { length: 12 }).notNull(),
+  unit: varchar("unit", { length: 16 }),
+  position: integer("position").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  ...timestamps,
+});
+
+export const attributeOptions = pgTable("attribute_options", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  attributeId: uuid("attribute_id").notNull(),
+  value: varchar("value", { length: 60 }).notNull(),
+  valueKey: varchar("value_key", { length: 60 }).notNull(),
+  position: integer("position").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const variantAttributeValues = pgTable("variant_attribute_values", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  businessId: uuid("business_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  attributeId: uuid("attribute_id").notNull(),
+  optionId: uuid("option_id"),
+  textValue: varchar("text_value", { length: 120 }),
+  numberValue: numeric("number_value", { precision: 18, scale: 4 }),
+  boolValue: boolean("bool_value"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by"),
+});
+
 export const stockRequests = pgTable(
   "stock_requests",
   {

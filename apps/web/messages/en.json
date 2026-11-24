@@ -1325,7 +1325,8 @@
     "onTheWayIn": "{quantity} on the way here",
     "onTheWayOut": "{quantity} sent, not yet received",
     "pricesLink": "Price lists",
-    "deliveryChargesLink": "Delivery with charges"
+    "deliveryChargesLink": "Delivery with charges",
+    "attributesLink": "Attributes"
   },
   "sales": {
     "title": "Sales",
@@ -2940,6 +2941,51 @@
       "saved": "This customer now buys at {name} prices.",
       "cleared": "This customer now buys at everyday prices.",
       "failed": "That did not save. Check your connection and try again."
+    }
+  },
+  "attributes": {
+    "title": "Attributes",
+    "lead": "What sets your products apart, such as Colour, Size or Storage. A list with choices can make variants on a product's page.",
+    "back": "Stock",
+    "failed": "That did not save. Check your connection and try again.",
+    "name": "Attribute",
+    "nameHint": "For example Colour, Size, Storage or Make.",
+    "kind": "What kind",
+    "kinds": {
+      "select": "One choice from a list",
+      "multi_select": "Several choices from a list",
+      "text": "Words",
+      "number": "A number",
+      "boolean": "Yes or no"
+    },
+    "choices": "Choices",
+    "choicesHint": "Separate them with commas: Red, Black, Navy blue.",
+    "unit": "Measured in",
+    "unitHint": "Optional, such as GB or kg.",
+    "add": "Add attribute",
+    "added": "{name} added.",
+    "none": "No attributes yet.",
+    "turnOff": "Stop using",
+    "turnOn": "Use again",
+    "turnedOff": "{name} is no longer offered.",
+    "turnedOn": "{name} is offered again.",
+    "moreChoices": "More choices for {name}",
+    "moreChoicesPlaceholder": "More choices, separated by commas",
+    "addChoices": "Add",
+    "choicesAdded": "Choices added to {name}.",
+    "maker": {
+      "title": "Make variants",
+      "lead": "Tick the choices. Bizora makes one {name} for each combination, each with its own stock and price. Ones that already exist are left alone.",
+      "price": "Price for each new variant",
+      "priceHint": "Optional. You can change each one after.",
+      "badPrice": "Enter the price, like 8,500.",
+      "check": "See what will be made",
+      "make": "{count, plural, =0 {Make variants} one {Make # variant} other {Make # variants}}",
+      "willMake": "{count, plural, one {# variant will be made:} other {# variants will be made:}}",
+      "nothingNew": "These all exist already.",
+      "alreadyThere": "{count, plural, one {# already exists and is left as it is.} other {# already exist and are left as they are.}}",
+      "made": "{count, plural, one {# variant made.} other {# variants made.}}",
+      "failed": "That did not work. Check your connection and try again."
     }
   }
 }

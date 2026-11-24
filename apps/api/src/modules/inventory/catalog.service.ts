@@ -23,6 +23,7 @@ import { DB } from "../../tokens.js";
 import { AuditService } from "../audit/audit.service.js";
 import { categoryAndBelow, categoryPath, copyCategoryToVariants, requireBrand, requireCategory, requireItem } from "./catalog-scope.js";
 import { requireBusiness } from "./inventory-scope.js";
+import { AttributeService } from "./attribute.service.js";
 import { ProductService } from "./product.service.js";
 
 const like = (value: string) => `%${value.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
@@ -42,6 +43,7 @@ export class CatalogService {
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(ProductService) private readonly products: ProductService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(AttributeService) private readonly attributes: AttributeService,
   ) {}
 
   // Categories
@@ -290,8 +292,12 @@ export class CatalogService {
     const item = await requireItem(this.db, tenant, business.id, id, { includeArchived: true });
     const brand = item.brandId ? await requireBrand(this.db, tenant, business.id, item.brandId) : null;
     const variants = await this.variantsOf(tenant, [item.id]);
+    const presented = this.presentItem(tenant, item, brand?.name ?? null, null, variants.get(item.id) ?? []);
+    // Each variant's attributes (ADR-060), such as Colour: Red, Size: M.
+    const attributes = await this.attributes.valuesOf(this.db, tenant.tenantId, presented.variants.map((variant) => variant.id));
     return {
-      ...this.presentItem(tenant, item, brand?.name ?? null, null, variants.get(item.id) ?? []),
+      ...presented,
+      variants: presented.variants.map((variant) => ({ ...variant, attributes: attributes.get(variant.id) ?? [] })),
       categoryPath: await categoryPath(this.db, tenant.tenantId, business.id, item.categoryId),
       details: {
         description: item.description,

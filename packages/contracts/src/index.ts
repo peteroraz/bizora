@@ -67,6 +67,7 @@ export * from "./sync.js";
 export * from "./ledger.js";
 export * from "./stock.js";
 export * from "./catalog.js";
+export * from "./attributes.js";
 export * from "./stock-operations.js";
 export * from "./pricing.js";
 export * from "./sales.js";

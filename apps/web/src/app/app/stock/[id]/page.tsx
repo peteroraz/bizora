@@ -15,7 +15,7 @@ import {
 import { Badge, Button, Card, FormField, Input, PageHeader, SafeForm, Select, SubmitButton } from "@bizora/ui";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { RequireAccess } from "../../../../components/require-access";
 import { ProductBuying } from "../../../../components/product-buying";
 import { useStockText, useUnitName } from "../../../../components/stock-quantity";
@@ -28,6 +28,8 @@ import { isNetworkFailure } from "../../../../lib/offline/sync";
 import type { ProductView } from "../../../../lib/stock-client";
 import { BackLink } from "../../../../components/action-link";
 import { ProductPhotos } from "../../../../components/product-photos";
+// Making variants from attributes (ADR-060) loads only for people who manage products.
+const VariantMaker = lazy(() => import("../../../../components/variant-maker"));
 import { AmountInput, NameInput, QuantityInput, SentenceInput } from "../../../../components/typing";
 
 type Detail = ProductView & {
@@ -263,6 +265,11 @@ function ProductScreen() {
       ) : null}
 
       <ProductPhotos productId={product.id} productName={product.name} canManage={can(access, Permission.PRODUCTS_MANAGE) && !product.archived} />
+      {product.item && can(access, Permission.PRODUCTS_MANAGE) && !product.archived ? (
+        <Suspense fallback={null}>
+          <VariantMaker itemId={product.item.id} itemName={product.item.name} currency={product.currency} onMade={() => void load()} />
+        </Suspense>
+      ) : null}
 
       <Card>
         <p className="text-sm font-medium">{t("shops")}</p>
