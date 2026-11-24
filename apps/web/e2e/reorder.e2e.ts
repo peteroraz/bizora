@@ -16,8 +16,8 @@ test("the owner sets when to buy more cement, then sees how much to buy and from
   const rules = page.getByTestId("reorder-rules");
   await rules.getByLabel("Reorder point (bags)").fill("10");
   await rules.getByLabel("Fill up to (bags)").fill("40");
-  await rules.getByLabel("Usual supplier").selectOption({ label: "Dangote depot" });
-  await rules.getByLabel("Days the supplier takes").fill("3");
+  await rules.getByLabel("Usually bought from").selectOption({ label: "Dangote depot" });
+  await rules.getByLabel("Days to deliver").fill("3");
   await rules.getByRole("button", { name: "Save" }).click();
   await expect(rules.getByText("Saved.")).toBeVisible();
 
