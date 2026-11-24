@@ -336,6 +336,31 @@ describe("record first, organise later", () => {
     );
     expect(syncedBooks.rows[0]).toMatchObject({ debit: "200000", credit: "200000", cash: "200000" });
   });
+
+  it("refuses a whole sale typed as one item's name at the counter, but keeps it from an offline phone (ADR-057)", async () => {
+    const sentence = "20 bag of rice , 750,000, 3 cups of ogiri, 5500, 1 catoon of indomie, 15000, new customer";
+    const refused = await sell(cashier, [{ description: sentence, quantity: "1", unit: "piece", unitPriceMinor: "100", saved: true }], "100").expect(400);
+    expect(refused.body.error.code).toBe("ITEM_NAME_TOO_LONG");
+    expect(refused.body.error.message).toContain("Read this as a sale");
+    const offlineId = uuidv7();
+    const pushed = await request(http)
+      .post("/api/v1/sync/push")
+      .set(auth(cashier))
+      .send({
+        operations: [
+          {
+            id: uuidv7(),
+            type: "sale.create",
+            occurredAt: new Date().toISOString(),
+            payload: { id: offlineId, lines: [{ description: sentence, quantity: "1", unit: "piece", unitPriceMinor: "100", saved: true }], payments: [{ method: "cash", amountMinor: "100" }], soldAt: new Date().toISOString() },
+          },
+        ],
+      })
+      .expect(200);
+    expect(pushed.body.data.results[0].status).toBe("applied");
+    // A name of 60 letters is still fine.
+    await sell(cashier, [{ description: "A".repeat(60), quantity: "1", unit: "piece", unitPriceMinor: "100", saved: true }], "100").expect(201);
+  });
 });
 
 async function invite(http: Parameters<typeof request>[0], ownerToken: string, email: string, role: string, branchId: string, businessId: string) {

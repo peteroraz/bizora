@@ -19,3 +19,4 @@ export {
   type SaleReview,
 } from "./review.js";
 export { speechPrompt } from "./prompt.js";
+export { looksLikeSpokenSale, splitSpokenSales } from "./split.js";

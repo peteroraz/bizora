@@ -24,6 +24,7 @@ import {
   type SaleStatus,
   compactItemKey,
   savedItemKey,
+  TYPED_ITEM_NAME_MAX,
   sellsTyped,
 } from "@bizora/contracts";
 import { aliasedTable, and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, or, sql, type SQL } from "drizzle-orm";
@@ -1776,6 +1777,15 @@ export class SaleService {
           throw new ApiError("FORBIDDEN", `Ask a manager to give "${line.description}" free.`, 403, [{ field: `lines.${index}.unitPriceMinor`, message: "Enter the price." }]);
         }
         const description = line.description.replace(/\s+/g, " ");
+        // A whole sale typed into the item box is not an item name (ADR-057). Offline sales are kept as they came.
+        if (live && line.saved === true && description.length > TYPED_ITEM_NAME_MAX) {
+          throw new ApiError(
+            "ITEM_NAME_TOO_LONG",
+            `That looks like a whole sale, not an item's name. Use "Read this as a sale", or keep the name under ${TYPED_ITEM_NAME_MAX} letters.`,
+            400,
+            [{ field: `lines.${index}.description`, message: "Too long for an item name." }],
+          );
+        }
         const hint = near.get(savedItemKey(line.description));
         if (hint) likeProduct.push({ typed: description.slice(0, 160), name: hint.name });
         lines.push({

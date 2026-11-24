@@ -24,6 +24,8 @@ export type VoiceLexicon = {
   /** Price markers: "AT 75k", "FOR 36k", "@ 500". */
   at: string[];
   forTotal: string[];
+  /** Said right after an amount, it makes it the price of all of them: "750k FOR ALL". */
+  forAll: string[];
   each: string[];
   per: string[];
   /** Sale verbs before a customer's name: "Emeka COLLECTED…". */
@@ -70,6 +72,7 @@ export const ENGLISH: VoiceLexicon = {
   of: ["of"],
   at: ["at", "@", "price", "priced", "costing", "cost"],
   forTotal: ["for"],
+  forAll: ["for all of them", "for them all", "for all", "for everything", "for the whole", "for the lot", "for both", "all together", "altogether", "in total", "total"],
   each: ["each", "apiece", "a piece", "per one", "one one"],
   per: ["per", "a", "an", "every", "for each", "for one"],
   customerVerbs: ["collected", "collect", "took", "take", "bought", "buy", "picked", "carried", "purchased", "ordered", "got", "came for", "came and took"],
@@ -86,7 +89,12 @@ export const ENGLISH: VoiceLexicon = {
     pos: "pos", "p.o.s": "pos", card: "pos", swipe: "pos", swiped: "pos", atm: "pos",
   },
   numberSoundAlikes: { to: "two", too: "two", for: "four" },
-  soundAlikes: { backs: "bags", back: "bag", bax: "bags", cartoons: "cartons", cartoon: "carton", creates: "crates", create: "crate", tens: "tins" },
+  soundAlikes: {
+    backs: "bags", back: "bag", bax: "bags", cartoons: "cartons", cartoon: "carton", creates: "crates", create: "crate", tens: "tins",
+    // Market spellings typed in a hurry.
+    catoon: "carton", catoons: "cartons", catton: "carton", cattons: "cartons", carto: "carton", ctn: "carton", ctns: "cartons",
+    dericas: "dericas", derika: "derica", derikas: "dericas", mudus: "mudus", modu: "mudu",
+  },
   filler: ["he", "she", "they", "him", "her", "me", "us", "i", "we", "the", "it", "is", "was", "will", "has", "have", "just", "only", "so", "then", "also", "um", "uh", "eh", "oh", "okay", "ok", "sum", "amount", "money", "already", "about", "around", "like"],
   currencies: {
     naira: "NGN", nairas: "NGN", "₦": "NGN", "#": "NGN", n: "NGN",

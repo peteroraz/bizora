@@ -1719,7 +1719,9 @@
       "savedVoice": "Recorded by voice.",
       "heard": "Heard: “{words}”",
       "newItem": "New: {name} (typed item)",
-      "checkEverything": "Check every quantity, price and name against what you said before confirming. Voice can mishear numbers."
+      "checkEverything": "Check every quantity, price and name against what you said before confirming. Voice can mishear numbers.",
+      "saleOf": "Sale {number} of {total}",
+      "skipSale": "Leave this sale out"
     },
     "waiting": {
       "title": "{count, plural, one {# sale} other {# sales}} on this phone, not yet confirmed",
@@ -1737,7 +1739,8 @@
       "priceKind": "Each or for all",
       "each": "Each",
       "all": "For all of them",
-      "priceAll": "Price for all"
+      "priceAll": "Price for all",
+      "tooLong": "Too long for an item's name (more than {max} letters). Use \"Read this as a sale\", or shorten the name."
     },
     "topItems": "What sold",
     "topEmpty": "Nothing sold in this period yet.",
@@ -1750,7 +1753,9 @@
       "failed": "It was not sent. Check the address and your connection, then try again."
     },
     "customerOffline": "No network: showing customers saved on this phone.",
-    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online."
+    "noCustomerOffline": "No network, and no customer saved on this phone matches. Add them as a new customer, or record the sale when you are back online.",
+    "savedNext": "Sale {number} saved. Check the next one.",
+    "readAsSale": "Read this as a sale"
   },
   "imports": {
     "chooseFile": "Choose a CSV file",

@@ -42,6 +42,11 @@ export type ReviewLine = {
   priceMinor: bigint | null;
   priceSource: "said" | "list" | "typed" | "none";
   totalMinor: bigint | null;
+  /**
+   * "3 cups of ogiri 5,500 for all": the exact amount for the whole line, kept as said when it does not divide evenly,
+   * so the sale charges exactly that (a new item only; a listed product is charged per unit).
+   */
+  exactTotalMinor: bigint | null;
 };
 
 export type ReviewWarning =
@@ -126,6 +131,7 @@ function reviewLine(spoken: SpokenLine, products: ReviewProduct[], lexicon: Voic
     priceMinor: null,
     priceSource: "none",
     totalMinor: null,
+    exactTotalMinor: null,
   });
 }
 
@@ -155,8 +161,14 @@ export function priceLine(line: ReviewLine): ReviewLine {
     if (spoken.unclearAmountMinor === spokenLineTotal(next.listPriceMinor, next.quantity)) said = next.listPriceMinor;
     else if (spoken.unclearAmountMinor === next.listPriceMinor) said = next.listPriceMinor;
   }
-  if (said === null && spoken.lineTotalMinor !== null && next.quantity !== null && next.quantity > 0n && (spoken.lineTotalMinor * 1000n) % next.quantity === 0n) {
-    said = (spoken.lineTotalMinor * 1000n) / next.quantity;
+  next.exactTotalMinor = null;
+  if (said === null && spoken.lineTotalMinor !== null && next.quantity !== null && next.quantity > 0n) {
+    if ((spoken.lineTotalMinor * 1000n) % next.quantity === 0n) said = (spoken.lineTotalMinor * 1000n) / next.quantity;
+    else {
+      // Does not divide evenly: the price of one is shown rounded, and a new item keeps the exact amount for all.
+      said = (spoken.lineTotalMinor * 1000n + next.quantity / 2n) / next.quantity;
+      if (product?.typed && line.priceOverride === null) next.exactTotalMinor = spoken.lineTotalMinor;
+    }
   }
   next.saidPriceMinor = said;
   if (line.priceOverride !== null) {
@@ -176,7 +188,7 @@ export function priceLine(line: ReviewLine): ReviewLine {
     next.priceMinor = null;
     next.priceSource = "none";
   }
-  next.totalMinor = next.priceMinor !== null && next.quantity !== null ? spokenLineTotal(next.priceMinor, next.quantity) : null;
+  next.totalMinor = next.exactTotalMinor ?? (next.priceMinor !== null && next.quantity !== null ? spokenLineTotal(next.priceMinor, next.quantity) : null);
   return next;
 }
 

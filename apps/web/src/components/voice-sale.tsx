@@ -7,6 +7,7 @@ import {
   checkReview,
   parseSpokenSale,
   speechPrompt,
+  splitSpokenSales,
   priceLine,
   rank,
   sellingUnitsOf,
@@ -32,7 +33,7 @@ import { useUnitName } from "./stock-quantity";
 
 export type VoicePayment = { method: "cash" | "transfer" | "pos"; amountMinor: bigint };
 export type VoiceResult = {
-  lines: { product: CachedProduct; unit: string; quantity: string; price: string }[];
+  lines: { product: CachedProduct; unit: string; quantity: string; price: string; priceMode?: "each" | "total" }[];
   customer: { id: string; name: string; credit: { allowed: boolean; limitMinor: string | null } } | null;
   payments: VoicePayment[];
   dueDate: string;
@@ -45,6 +46,9 @@ export type VoiceResult = {
   split: { cash: string; transfer: string; pos: string };
 };
 
+/** The sales still to read after this one, from the same go (ADR-057). */
+export type NextSales = { texts: string[]; done: number; total: number };
+
 type Props = {
   products: CachedProduct[];
   currency: string;
@@ -55,9 +59,16 @@ type Props = {
   typedItems?: boolean;
   /** At a sales desk the cashier takes the money; the payment said is only what the customer asked for. */
   desk?: boolean;
-  /** Fill the sale with what was said; `save` also records it straight away. */
-  onDone: (result: VoiceResult, save: boolean) => void;
+  /**
+   * Fill the sale with what was said; `save` also records it straight away. `rest` holds the other sales said or
+   * typed in the same go (ADR-057), each to be read and confirmed on its own after this one is saved.
+   */
+  onDone: (result: VoiceResult, save: boolean, next: NextSales | null) => void;
   onClose: () => void;
+  /** Sales still to read from an earlier go, or a sale typed in the search box: read at once, the first one shown. */
+  queued?: string[];
+  /** Where this go stands: sale `done + 1` of `total`. */
+  progressOf?: { done: number; total: number };
 };
 
 type Stage = "start" | "recording" | "reading" | "typing" | "review";
@@ -73,7 +84,7 @@ const METHODS: VoicePayment["method"][] = ["cash", "transfer", "pos"];
 /** Units offered for typed items (ADR-041). */
 const TYPED_UNITS = ["piece", "pack", "carton", "bag", "sachet", "bottle", "tin", "crate", "dozen", "paint", "kg", "litre"];
 
-export default function VoiceSale({ products, currency, owner, canChangePrice, canGiveCredit, typedItems = false, desk = false, onDone, onClose }: Props) {
+export default function VoiceSale({ products, currency, owner, canChangePrice, canGiveCredit, typedItems = false, desk = false, onDone, onClose, queued, progressOf }: Props) {
   const t = useTranslations("sales.voice");
   const locale = useLocale();
   const unitName = useUnitName();
@@ -88,6 +99,9 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
   const [typed, setTyped] = useState("");
+  // Several sales in one go (ADR-057): the ones after the sale shown, and how far through the go this is.
+  const [rest, setRest] = useState<string[]>([]);
+  const [place, setPlace] = useState<{ done: number; total: number }>(progressOf ?? { done: 0, total: 1 });
   const [transcript, setTranscript] = useState("");
   const [review, setReview] = useState<SaleReview | null>(null);
   // Goes up each time the words are read again, so typed boxes start fresh from the new reading.
@@ -121,6 +135,16 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
     })();
   }, []);
 
+  // Sales waiting from an earlier go (or typed in the search box) are read straight away.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || !queued || queued.length === 0) return;
+    started.current = true;
+    const [first = "", ...after] = queued;
+    read(first, progressOf, after);
+    // read() is stable enough for a first run; it must run only once.
+  }, []);
+
   // Customer names for matching, saved on the phone and refreshed when there is a network.
   useEffect(() => {
     if (!owner) return;
@@ -142,14 +166,20 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
 
   const reviewCustomers: ReviewCustomer[] = useMemo(() => customers.map((customer) => ({ id: customer.id, name: customer.name, creditAllowed: customer.creditAllowed })), [customers]);
 
-  function read(text: string) {
-    const words = text.trim();
-    setTranscript(words);
-    if (!words) {
+  function read(text: string, at?: { done: number; total: number }, after: string[] = []) {
+    const all = text.trim();
+    if (!all) {
+      setTranscript("");
       setProblem(t("nothingHeard"));
       setStage("start");
       return;
     }
+    // Several sales said or typed in one go are read one at a time; each is confirmed on its own.
+    const parts = splitSpokenSales(all);
+    const [words = all, ...others] = parts.length > 0 ? parts : [all];
+    setRest([...others, ...after]);
+    setPlace(at ? { done: at.done, total: at.total + others.length } : { done: 0, total: 1 + others.length + after.length });
+    setTranscript(words);
     const sale = parseSpokenSale(words, { currency });
     const built = buildReview(sale, products, reviewCustomers, options);
     setReview(built);
@@ -308,6 +338,8 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
         // A price other than the list price goes on the line only for someone allowed to change prices; a typed
         // item always carries the price it sold for.
         const price = (canChangePrice || product.typed) && line.priceMinor !== null && (product.typed || line.priceMinor !== line.listPriceMinor) ? amountText(line.priceMinor, currency) : "";
+        // "3 cups 5,500 for all" that does not divide evenly keeps the exact amount for the whole line (ADR-057).
+        if (product.typed && line.exactTotalMinor !== null) return { product, unit: line.unit ?? product.baseUnit, quantity, price: amountText(line.exactTotalMinor, currency), priceMode: "total" as const };
         return { product, unit: line.unit ?? product.baseUnit, quantity, price };
       });
     const paid = payments
@@ -337,7 +369,18 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
         split: mode === "split" ? { cash: text("cash"), transfer: text("transfer"), pos: text("pos") } : { cash: "", transfer: "", pos: "" },
       },
       save,
+      rest.length > 0 ? { texts: rest, done: place.done + 1, total: place.total } : null,
     );
+  }
+
+  /** Leaves this sale out and shows the next one said in the same go. */
+  function skip() {
+    const [next, ...after] = rest;
+    if (next === undefined) {
+      close();
+      return;
+    }
+    read(next, { done: place.done + 1, total: place.total }, after);
   }
 
   const ready = state?.status === "installed";
@@ -479,6 +522,11 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
 
       {stage === "review" && review ? (
         <div className="space-y-4" data-testid="voice-review">
+          {place.total > 1 ? (
+            <p className="text-sm font-semibold" data-testid="voice-sale-of">
+              {t("saleOf", { number: place.done + 1, total: place.total })}
+            </p>
+          ) : null}
           {/* Voice can mishear a number and still look complete (benchmark round 3), so every review says so. */}
           <p className="rounded-control border border-warning bg-warning-bg px-3 py-2 text-sm text-warning" data-testid="voice-check-notice">
             {t("checkEverything")}
@@ -486,7 +534,7 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
           <FormField id="voice-heard" label={t("heardLabel")} hint={t("heardHint")}>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Textarea id="voice-heard" value={transcript} rows={2} maxLength={600} onChange={(event) => setTranscript(event.target.value)} data-testid="voice-transcript" />
-              <Button type="button" variant="secondary" onClick={() => read(transcript)}>
+              <Button type="button" variant="secondary" onClick={() => read(transcript, place, rest)}>
                 {t("readAgain")}
               </Button>
             </div>
@@ -702,6 +750,11 @@ export default function VoiceSale({ products, currency, owner, canChangePrice, c
             <Button type="button" variant="ghost" onClick={() => (ready ? void startListening() : setStage("typing"))}>
               {ready ? t("recordAgain") : t("typeAgain")}
             </Button>
+            {rest.length > 0 ? (
+              <Button type="button" variant="ghost" onClick={skip} data-testid="voice-skip">
+                {t("skipSale")}
+              </Button>
+            ) : null}
             <Button type="button" variant="ghost" onClick={close}>
               {t("cancel")}
             </Button>
