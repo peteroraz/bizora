@@ -46,6 +46,14 @@ function unexpectedMessage(reference?: string) {
   return `Something went wrong on our side. Try again in a moment.${reference ? ` If it keeps happening, tell Bizora support this code: ${reference.slice(0, 8)}.` : ""}`;
 }
 
+/** A missing book account is a fault on our side. Traders never see account codes or JSON. */
+export function booksCouldNotSave(correlationId: string | null | undefined) {
+  const reference = (correlationId && correlationId.trim().length > 0 ? correlationId : "unknown").slice(0, 8);
+  return `Bizora could not save this to your books. Try again, and if it keeps happening, contact support with this code: ${reference}.`;
+}
+
+const BOOKS_ACCOUNT_CODES = new Set(["LEDGER_ACCOUNT_NOT_FOUND", "LEDGER_ACCOUNT_AMBIGUOUS"]);
+
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
   constructor(private readonly logger?: Pick<Logger, "error">) {}
@@ -93,10 +101,17 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
 
     if (exception instanceof ApiError) {
       if (exception.getStatus() >= 500) this.report(exception, request, exception.getStatus());
+      let message = exception.message;
+      if (BOOKS_ACCOUNT_CODES.has(exception.code)) {
+        if (message.includes("{") || message.includes("account")) {
+          this.logger?.error({ code: exception.code, detail: message, correlationId }, "ledger account could not be resolved");
+        }
+        message = booksCouldNotSave(correlationId);
+      }
       response.status(exception.getStatus()).json({
         error: {
           code: exception.code,
-          message: exception.message,
+          message,
           fieldErrors: exception.fieldErrors,
           correlationId,
         },

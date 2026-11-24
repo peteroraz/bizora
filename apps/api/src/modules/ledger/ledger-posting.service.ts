@@ -1,8 +1,8 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { LedgerRole } from "@bizora/contracts";
 import { convert, money } from "@bizora/money";
 import { and, asc, eq, lte, sql } from "drizzle-orm";
-import { ApiError } from "../../common/errors.js";
+import { ApiError, booksCouldNotSave } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { AppDatabase, DbExecutor } from "../../db/database.js";
 import { businesses, journalEntries, journalLines, ledgerAccounts, ledgerPeriods } from "../../db/schema.js";
@@ -34,7 +34,7 @@ export type PostingRequest = {
   lines: PostingLine[];
 };
 
-export type PostingActor = { tenantId: string; userId: string | null };
+export type PostingActor = { tenantId: string; userId: string | null; correlationId?: string | null };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -56,6 +56,7 @@ function assertDate(date: string) {
  */
 @Injectable()
 export class LedgerPostingService {
+  private readonly logger = new Logger(LedgerPostingService.name);
   constructor(
     @Inject(DB) private readonly db: AppDatabase,
     @Inject(ChartOfAccountsService) private readonly chart: ChartOfAccountsService,
@@ -294,11 +295,17 @@ export class LedgerPostingService {
     return request.lines.map((line) => {
       const matches = find(accounts, line.account);
       const label = JSON.stringify(line.account);
-      if (matches.length === 0) throw new ApiError("LEDGER_ACCOUNT_NOT_FOUND", `No account matches ${label}.`, 422);
-      if (matches.length > 1) throw new ApiError("LEDGER_ACCOUNT_AMBIGUOUS", `More than one account matches ${label}; use its code.`, 422);
+      if (matches.length === 0) this.accountProblem(actor, "LEDGER_ACCOUNT_NOT_FOUND", label);
+      if (matches.length > 1) this.accountProblem(actor, "LEDGER_ACCOUNT_AMBIGUOUS", label);
       const account = matches[0] as typeof ledgerAccounts.$inferSelect;
       if (account.archivedAt) throw new ApiError("LEDGER_ACCOUNT_ARCHIVED", `Account ${account.code} is archived.`, 422);
       return account.id;
     });
+  }
+
+  /** The account lookup stays in the server log. The trader sees a short support code and no account JSON. */
+  private accountProblem(actor: PostingActor, code: "LEDGER_ACCOUNT_NOT_FOUND" | "LEDGER_ACCOUNT_AMBIGUOUS", label: string): never {
+    this.logger.error({ code, account: label, tenantId: actor.tenantId, businessHint: actor.correlationId ?? null }, "ledger account could not be resolved");
+    throw new ApiError(code, booksCouldNotSave(actor.correlationId), 422);
   }
 }

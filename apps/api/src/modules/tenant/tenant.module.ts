@@ -1,5 +1,6 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { AddressModule } from "../addresses/address.module.js";
+import { LedgerModule } from "../ledger/ledger.module.js";
 import { EntitlementsModule } from "../entitlements/entitlements.module.js";
 import { SessionService } from "../identity/session.service.js";
 import { PermissionGuard } from "../rbac/permission.guard.js";
@@ -9,7 +10,7 @@ import { TenantGuard } from "./tenant.guard.js";
 import { TenantRepository } from "./tenant.repository.js";
 
 @Module({
-  imports: [AddressModule, EntitlementsModule],
+  imports: [AddressModule, EntitlementsModule, forwardRef(() => LedgerModule)],
   controllers: [TenantController],
   providers: [TenantRepository, TenantGuard, OnboardingService, PermissionGuard, SessionService],
   exports: [TenantRepository, TenantGuard, OnboardingService, SessionService],

@@ -3,7 +3,7 @@ import { BadRequestException, ForbiddenException, HttpException, NotFoundExcepti
 import { ThrottlerException } from "@nestjs/throttler";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { ApiError, ErrorEnvelopeFilter, plainMessage } from "./common/errors.js";
+import { ApiError, ErrorEnvelopeFilter, booksCouldNotSave, plainMessage } from "./common/errors.js";
 
 /** Pilot readiness, item 21: people see what happened and what to do, never a framework's own words. */
 describe("error wording", () => {
@@ -38,6 +38,16 @@ describe("error wording", () => {
     expect(shown(new ApiError("PLAN_LIMIT", "Your plan allows 1 shop(s). Upgrade your plan to add another shop.", 402)).message).toMatch(/^Your plan allows/);
     expect(shown(new BadRequestException("Choose a shop first.")).message).toBe("Choose a shop first.");
     expect(plainMessage(409, "Conflict")).toBe("This was changed by someone else. Refresh and try again.");
+  });
+
+  it("never shows account JSON when the books have no matching account", () => {
+    const missing = shown(new ApiError("LEDGER_ACCOUNT_NOT_FOUND", `No account matches ${JSON.stringify({ role: "service_income" })}.`, 422));
+    const ambiguous = shown(new ApiError("LEDGER_ACCOUNT_AMBIGUOUS", `More than one account matches ${JSON.stringify({ role: "expense" })}.`, 422));
+    expect(missing).toMatchObject({ status: 422, code: "LEDGER_ACCOUNT_NOT_FOUND", message: booksCouldNotSave("a1b2c3d4-e5f6") });
+    expect(ambiguous.message).toBe(booksCouldNotSave("a1b2c3d4-e5f6"));
+    expect(missing.message).not.toContain("{");
+    expect(missing.message).not.toContain("service_income");
+    expect(ambiguous.message).not.toContain("expense");
   });
 
   it("gives a short code to tell support when something breaks on our side", () => {
