@@ -9,8 +9,12 @@ import {
   paidFromText,
   paymentFromText,
   Permission,
+  gtinSchema,
+  nameKey,
   productImportSchema,
   salesImportSchema,
+  skuSchema,
+  variantName,
   STOCK_ADD_REASONS,
   STOCK_REMOVE_REASONS,
   parseCountQuantity,
@@ -35,6 +39,8 @@ import { branches, customers, products, stockBalances } from "../../db/schema.js
 import { DB } from "../../tokens.js";
 import { productUnitsFor, requireBusiness, resolveBranch, type ProductRow, type ProductUnitRow } from "../inventory/inventory-scope.js";
 import { AuditService } from "../audit/audit.service.js";
+import { CatalogService } from "../inventory/catalog.service.js";
+import { brandFromName, CATEGORY_PATH_MAX, categoryFromPath, categoryLevels, itemByName, priceListsByName, setListPrice, setSupplierCode, yesNo } from "../inventory/product-file.js";
 import { ProductService } from "../inventory/product.service.js";
 import { StockService } from "../inventory/stock.service.js";
 import { SaleService } from "./sale.service.js";
@@ -60,6 +66,7 @@ export class ImportService {
     @Inject(SaleService) private readonly sales: SaleService,
     @Inject(StockService) private readonly stock: StockService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CatalogService) private readonly catalog: CatalogService,
   ) {}
 
   async products(tenant: TenantContext, raw: unknown) {
@@ -67,21 +74,38 @@ export class ImportService {
     this.assertSize(payload.rows.length);
     const business = await requireBusiness(this.db, tenant);
     const seeCost = tenant.permissions.includes(Permission.PRICES_COST_READ);
+    const managesLists = tenant.permissions.includes(Permission.PRICING_LISTS_MANAGE);
+    const managesSuppliers = tenant.permissions.includes(Permission.PURCHASES_MANAGE);
     const existing = await this.db
       .select()
       .from(products)
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)));
     const byName = new Map(existing.map((product) => [product.name.trim().toLowerCase(), product]));
     const units = await productUnitsFor(this.db, tenant.tenantId, existing.map((product) => product.id));
+    const lists = await priceListsByName(this.db, tenant.tenantId, business.id);
     const seen = new Set<string>();
 
-    type Plan = { row: number; existing: ProductRow | null; body: Record<string, unknown> };
+    /** What to save for a row, and what to add once the product exists (ADR-065). */
+    type Extra = {
+      categoryPath: string | null;
+      brand: string | null;
+      supplier: string | null;
+      supplierCode: string;
+      priceList: { id: string; priceMinor: bigint } | null;
+      item: string | null;
+      variant: string | null;
+    };
+    type Plan = { row: number; existing: ProductRow | null; body: Record<string, unknown>; extra: Extra };
     const plans: Plan[] = [];
     const results: ImportRowResult[] = payload.rows.map((row, index) => {
       const errors: { field: string; message: string }[] = [];
-      const name = row.name.trim();
+      const variant = row.variant.trim() || null;
+      const itemName = variant ? (row.item.trim() || row.name.trim()) : null;
+      // A variant row is "Polo shirt" + "Red / M": the product is "Polo shirt Red / M".
+      const name = variant && itemName ? variantName(itemName, variant) : row.name.trim();
       if (!name) errors.push({ field: "name", message: "Enter the product name." });
       if (name.length > 160) errors.push({ field: "name", message: "Use 160 characters or fewer." });
+      if (variant && variant.length > 80) errors.push({ field: "variant", message: "Use 80 characters or fewer." });
       const key = name.toLowerCase();
       if (name && seen.has(key)) errors.push({ field: "name", message: "This product is already in the file." });
       seen.add(key);
@@ -90,23 +114,60 @@ export class ImportService {
       const price = this.money(row.price, "price", errors, business.baseCurrencyCode);
       const cost = this.money(row.cost, "cost", errors, business.baseCurrencyCode);
       if (cost !== null && !seeCost) errors.push({ field: "cost", message: "Only someone who can see cost prices can import them. Leave cost empty." });
-      const quantity = this.quantity(row.quantity, "quantity", errors);
-      const lowStock = this.quantity(row.lowStock, "lowStock", errors);
+      // A file Bizora exported says 0 for none in stock, and may say 0 for the low stock level (ADR-065).
+      const quantity = row.quantity.trim() === "0" ? null : this.quantity(row.quantity, "quantity", errors);
+      const lowStock = row.lowStock.trim() === "0" ? 0n : this.quantity(row.lowStock, "lowStock", errors);
       const packUnit = row.packUnit.trim() ? unitFromText(row.packUnit) : null;
       if (row.packUnit.trim() && !packUnit) errors.push({ field: "packUnit", message: `Unknown pack "${row.packUnit}".` });
       const packSize = this.quantity(row.packSize, "packSize", errors);
       const packPrice = this.money(row.packPrice, "packPrice", errors, business.baseCurrencyCode);
       if ((packUnit === null) !== (packSize === null)) errors.push({ field: "packSize", message: "Give both the pack and how many are in it." });
+      const forSale = yesNo(row.packForSale);
+      const forPurchase = yesNo(row.packForPurchase);
+      if (forSale === "bad") errors.push({ field: "packForSale", message: "Write yes or no." });
+      if (forPurchase === "bad") errors.push({ field: "packForPurchase", message: "Write yes or no." });
+      if ((forSale !== null || forPurchase !== null) && !packUnit) errors.push({ field: "packUnit", message: "Name the pack these yes/no answers are for." });
+      const sku = row.sku.trim() || null;
+      if (sku && !skuSchema.safeParse(sku).success) errors.push({ field: "sku", message: "Use letters, numbers, spaces and . _ - / only, up to 64." });
+      const gtin = row.gtin.replace(/\s+/g, "") || null;
+      if (gtin && !gtinSchema.safeParse(gtin).success) errors.push({ field: "gtin", message: "This GTIN is not right: check the digits." });
+      if (row.category.trim() && categoryLevels(row.category).length > CATEGORY_PATH_MAX) errors.push({ field: "category", message: `Use at most ${CATEGORY_PATH_MAX} levels, like Drinks > Soft drinks.` });
+      const supplier = row.supplier.trim() || null;
+      if (row.supplierCode.trim() && !supplier) errors.push({ field: "supplier", message: "Name the supplier this code is from." });
+      if (supplier && supplier.length < 2) errors.push({ field: "supplier", message: "Write the supplier's name." });
+      if (supplier && !managesSuppliers) errors.push({ field: "supplier", message: "Only someone who manages buying can set suppliers. Leave it empty." });
+      let priceList: Extra["priceList"] = null;
+      const listName = row.priceList.trim();
+      const listPrice = this.money(row.priceListPrice, "priceListPrice", errors, business.baseCurrencyCode);
+      if (listName || listPrice !== null) {
+        const list = lists.get(nameKey(listName));
+        if (!listName || listPrice === null) errors.push({ field: listName ? "priceListPrice" : "priceList", message: "Give both the price list and its price." });
+        else if (!managesLists) errors.push({ field: "priceList", message: "Only someone who manages price lists can set these prices. Leave them empty." });
+        else if (!list) errors.push({ field: "priceList", message: `There is no price list called "${listName}". Add it under Prices first.` });
+        else priceList = { id: list.id, priceMinor: listPrice };
+      }
       const match = byName.get(key) ?? null;
       if (errors.length > 0) return { row: index + 1, status: "error", errors };
 
       const packs =
         packUnit && packSize
-          ? [{ unitCode: packUnit, baseQuantity: decimal(packSize), ...(packPrice !== null ? { priceMinor: packPrice.toString() } : {}) }]
+          ? [
+              {
+                unitCode: packUnit,
+                baseQuantity: decimal(packSize),
+                ...(packPrice !== null ? { priceMinor: packPrice.toString() } : {}),
+                ...(forSale !== null ? { forSale } : {}),
+                ...(forPurchase !== null ? { forPurchase } : {}),
+              },
+            ]
           : undefined;
+      const path = row.category.trim() && categoryLevels(row.category).length > 1 ? row.category.trim() : null;
+      const extra: Extra = { categoryPath: path, brand: row.brand.trim() || null, supplier, supplierCode: row.supplierCode, priceList, item: itemName, variant };
+      const codes = { ...(sku ? { sku } : {}), ...(gtin ? { gtin } : {}) };
       if (match) {
         const current = units.get(match.id) ?? [];
-        plans.push({ row: index + 1, existing: match, body: this.updateBody(match, current, { category: row.category, price, cost, lowStock, barcode: row.barcode, packs, seeCost }) });
+        const body = this.updateBody(match, current, { category: path ? "" : row.category, price, cost, lowStock, barcode: row.barcode, packs, seeCost });
+        plans.push({ row: index + 1, existing: match, body: { ...body, ...codes, sku: sku ?? match.sku, gtin: gtin ?? match.gtin }, extra });
         return {
           row: index + 1,
           status: "update",
@@ -116,26 +177,64 @@ export class ImportService {
       plans.push({
         row: index + 1,
         existing: null,
+        extra,
         body: {
           name,
-          category: row.category.trim() || null,
+          ...(path ? {} : { category: row.category.trim() || null }),
           baseUnit: unit,
           priceMinor: price?.toString() ?? null,
           lowStockLevel: lowStock !== null ? decimal(lowStock) : null,
           barcode: row.barcode.trim() || null,
+          ...codes,
           ...(packs ? { packs } : {}),
           ...(cost !== null ? { defaultCostMinor: cost.toString() } : {}),
           ...(quantity !== null ? { openingQuantity: decimal(quantity) } : {}),
           ...(quantity !== null && cost !== null ? { openingCostMinor: round(cost * quantity, 1000n).toString() } : {}),
         },
       });
-      return { row: index + 1, status: "create", message: quantity !== null ? `New product with ${decimal(quantity)} ${unit} in stock.` : "New product." };
+      const what = variant ? `New variant ${variant} of ${itemName}` : "New product";
+      return { row: index + 1, status: "create", message: quantity !== null ? `${what} with ${decimal(quantity)} ${unit} in stock.` : `${what}.` };
     });
 
     if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    const reason = payload.source === "capture" ? "Updated from a photo or scan" : "Updated from a product file";
+    // Variants of the same new item are made together, as one item (ADR-046).
+    const items = new Map<string, string>();
     for (const plan of plans) {
-      if (plan.existing) await this.productService.update(tenant, plan.existing.id, { ...plan.body, changeReason: payload.source === "capture" ? "Updated from a photo or scan" : "Updated from a product file" });
-      else await this.productService.create(tenant, plan.body);
+      const { extra } = plan;
+      const categoryId = extra.categoryPath ? await categoryFromPath(this.db, tenant, business.id, extra.categoryPath) : undefined;
+      const brandId = extra.brand ? await brandFromName(this.db, tenant, business.id, extra.brand) : undefined;
+      const linked = { ...(categoryId ? { categoryId } : {}), ...(brandId ? { brandId } : {}) };
+      let productId: string;
+      if (plan.existing) {
+        await this.productService.update(tenant, plan.existing.id, { ...plan.body, ...linked, changeReason: reason });
+        productId = plan.existing.id;
+      } else if (extra.variant && extra.item) {
+        const itemKey = nameKey(extra.item);
+        const itemId = items.get(itemKey) ?? (await itemByName(this.db, tenant.tenantId, business.id, extra.item))?.id;
+        if (itemId) {
+          const { name: _name, category: _category, ...variantBody } = plan.body;
+          productId = ((await this.productService.create(tenant, { ...variantBody, name: plan.body.name, catalogItemId: itemId, variantLabel: extra.variant })) as { id: string }).id;
+          items.set(itemKey, itemId);
+        } else {
+          const { name: _name, category, ...variantBody } = plan.body;
+          const made = await this.catalog.createItem(tenant, {
+            name: extra.item,
+            ...linked,
+            ...(!categoryId && typeof category === "string" && category ? { categoryId: await categoryFromPath(this.db, tenant, business.id, category) } : {}),
+            variants: [{ ...variantBody, variantLabel: extra.variant }],
+          });
+          items.set(itemKey, made.id);
+          productId = (made.variants as { id: string }[])[0]!.id;
+        }
+      } else {
+        productId = ((await this.productService.create(tenant, { ...plan.body, ...linked })) as { id: string }).id;
+      }
+      if (extra.supplier) await setSupplierCode(this.db, tenant, business, productId, extra.supplier, extra.supplierCode);
+      if (extra.priceList) {
+        const [saved] = await this.db.select({ baseUnit: products.baseUnit }).from(products).where(and(eq(products.tenantId, tenant.tenantId), eq(products.id, productId))).limit(1);
+        await setListPrice(this.db, tenant, business.id, extra.priceList.id, productId, saved?.baseUnit ?? "piece", extra.priceList.priceMinor);
+      }
     }
     await this.recordImport(tenant, business.id, "products", payload.source, results.length);
     return this.outcome(results, true);
@@ -501,11 +600,18 @@ export class ImportService {
   private updateBody(
     product: ProductRow,
     current: ProductUnitRow[],
-    changes: { category: string; price: bigint | null; cost: bigint | null; lowStock: bigint | null; barcode: string; packs?: { unitCode: string; baseQuantity: string; priceMinor?: string }[]; seeCost: boolean },
+    changes: { category: string; price: bigint | null; cost: bigint | null; lowStock: bigint | null; barcode: string; packs?: { unitCode: string; baseQuantity: string; priceMinor?: string; forSale?: boolean; forPurchase?: boolean }[]; seeCost: boolean },
   ) {
-    const packs =
-      changes.packs ??
-      current.map((unit) => ({ unitCode: unit.unitCode, baseQuantity: decimal(unit.baseQuantity), ...(unit.priceMinor !== null ? { priceMinor: unit.priceMinor.toString() } : {}) }));
+    // The file's pack replaces the pack with the same unit; the product's other packs are kept (ADR-065).
+    const kept = current.map((unit) => ({
+      unitCode: unit.unitCode,
+      baseQuantity: decimal(unit.baseQuantity),
+      ...(unit.priceMinor !== null ? { priceMinor: unit.priceMinor.toString() } : {}),
+      forSale: unit.forSale,
+      forPurchase: unit.forPurchase,
+    }));
+    const given = changes.packs ?? [];
+    const packs = [...kept.filter((unit) => !given.some((pack) => pack.unitCode === unit.unitCode)), ...given];
     return {
       name: product.name,
       category: changes.category.trim() || product.category,

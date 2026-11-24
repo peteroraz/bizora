@@ -114,6 +114,16 @@ export class InventoryController {
     );
   }
 
+  /** Every product as a CSV file with the columns the product import reads (ADR-065). */
+  @Get("products/export.csv")
+  @RequirePermissions(Permission.STOCK_READ)
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  async exportProducts(@CurrentTenant() tenant: TenantContext, @Res({ passthrough: true }) response: Response) {
+    const file = await this.products.exportCsv(tenant);
+    response.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+    return file.csv;
+  }
+
   @Get("products/:id")
   @RequirePermissions(Permission.STOCK_READ)
   async get(@CurrentTenant() tenant: TenantContext, @Param("id", ParseUUIDPipe) id: string) {
