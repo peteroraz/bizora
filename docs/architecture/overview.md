@@ -41,7 +41,7 @@ Writes on tenant-owned entities include `tenant_id` in the predicate. Composite 
 
 ## Offline
 
-The web app keeps an outbox in IndexedDB. Each queued change carries a device-made UUIDv7, which is also its idempotency key, and the shop it was made in. `/api/v1/sync/push` applies changes in order and answers applied, duplicate or rejected for each (ADR-012, ADR-014, ADR-044). Remembered items, their other names and the shop's units are cached on the phone so a sale can be typed with no network (ADR-049).
+The web app keeps an outbox in IndexedDB. Each queued change carries a device-made UUIDv7, which is also its idempotency key, and the shop it was made in. `/api/v1/sync/push` applies changes in order and answers applied, duplicate or rejected for each (ADR-012, ADR-014, ADR-044). A refused sale is kept for the owner to record or set aside (ADR-050). Remembered items, their other names and the shop's units are cached on the phone so a sale can be typed with no network (ADR-049).
 
 ## Ledger
 

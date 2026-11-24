@@ -13,7 +13,7 @@ type Owner = { tenantId: string; membershipId: string };
  */
 export function SyncStatus({ owner, isSample, buttonHost }: { owner: Owner | null; isSample: boolean; buttonHost: HTMLElement | null }) {
   const t = useTranslations("shell");
-  const [outbox, setOutbox] = useState<{ pending: number; retrying: number; rejected: { id: string; error: { message: string } | null; meta?: { summary: string } }[] }>({
+  const [outbox, setOutbox] = useState<{ pending: number; retrying: number; rejected: { id: string; type: string; stored?: boolean; error: { message: string } | null; meta?: { summary: string } }[] }>({
     pending: 0,
     retrying: 0,
     rejected: [],
@@ -30,7 +30,7 @@ export function SyncStatus({ owner, isSample, buttonHost }: { owner: Owner | nul
       const refresh = () => {
         void queue
           .summary(scoped)
-          .then((next) => setOutbox({ pending: next.pending, retrying: next.retrying, rejected: next.rejected }))
+          .then((next) => setOutbox({ pending: next.pending, retrying: next.retrying, rejected: next.rejected.map((item) => ({ id: item.id, type: item.type, stored: item.stored, error: item.error, meta: item.meta })) }))
           .catch(() => undefined);
       };
       refresh();
@@ -65,7 +65,7 @@ export function SyncStatus({ owner, isSample, buttonHost }: { owner: Owner | nul
   return (
     <>
       {button && buttonHost ? createPortal(button, buttonHost) : null}
-      {outbox.rejected.length > 0 && owner ? (
+      {outbox.rejected.length > 0 && owner && outbox.rejected.some((item) => item.type !== "sale.create" || item.stored) ? (
         <div className="flex flex-wrap items-start gap-3 border-b border-border bg-card px-4 py-3 text-sm" role="alert">
           <div className="flex-1">
             <p className="font-medium text-danger">{t("syncRejected", { count: outbox.rejected.length })}</p>

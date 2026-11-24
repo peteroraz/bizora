@@ -34,7 +34,7 @@ export const syncPushSchema = z.object({
 
 export type SyncOperationResult =
   | { id: string; status: "applied" | "duplicate"; result: unknown }
-  | { id: string; status: "rejected"; error: { code: string; message: string } };
+  | { id: string; status: "rejected"; error: { code: string; message: string }; /** The server kept a copy for the owner (ADR-050). The phone may then drop its own. */ stored?: boolean };
 
 /** Official numbers per business and document type, issued by the server in order. */
 export const DOCUMENT_PREFIXES = {
