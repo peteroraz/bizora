@@ -87,7 +87,7 @@ Filling began by adding 5 products with opening stock at once, in a business tha
 ## Not measured
 
 - **Staging and production:** Cloud Run cold starts, Cloud SQL `db-f1-micro`, network latency from Nigeria.
-- **The web app's own speed on phones.** The quick sale screen's script budget is checked on every CI run: 170 KB, currently 169.8 to 169.9 KB. Speed on real low-end Android phones over 3G is in `docs/PILOT_MOBILE_TEST_MATRIX.md` and has not been tried on real phones yet.
+- **The web app's own speed on phones.** The quick sale screen's script budget is checked on every CI run: 170 KB, currently about 156 KB. It was 169.8 to 169.9 KB until the quick sale page stopped loading zod: the page needs only the offline sale number, which now lives in `packages/contracts/src/document-numbers.ts` with no zod import, and a test keeps it that way. Speed on real low-end Android phones over 3G is in `docs/PILOT_MOBILE_TEST_MATRIX.md` and has not been tried on real phones yet.
 - **Offline sync with many queued sales at once.** The device sends 50 at a time; this is covered by browser tests, not load tests.
 
 ## Running it
