@@ -15,7 +15,7 @@ import {
   stockCountRejectSchema,
 } from "@bizora/contracts";
 import { averageUnitCost, issueStock, QUANTITY_SCALE } from "@bizora/money";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import { newId } from "../../common/ids.js";
 import type { TenantContext } from "../../common/tenant-context.js";
@@ -864,8 +864,10 @@ export class StockService {
     const business = await requireBusiness(this.db, tenant);
     const branch = await resolveBranch(this.db, tenant, business.id, branchId);
     const onHand = sql<string>`coalesce(${stockBalances.quantity}, 0)`;
+    // A shop's own reorder point replaces the low stock level there (ADR-063).
+    const point = sql<string>`coalesce((SELECT r.reorder_point FROM reorder_rules r WHERE r.tenant_id = ${products.tenantId} AND r.product_id = ${products.id} AND r.branch_id = ${branch.id}), ${products.lowStockLevel})`;
     const rows = await this.db
-      .select({ id: products.id, name: products.name, baseUnit: products.baseUnit, lowStockLevel: products.lowStockLevel, quantity: onHand })
+      .select({ id: products.id, name: products.name, baseUnit: products.baseUnit, lowStockLevel: point, quantity: onHand })
       .from(products)
       .leftJoin(
         stockBalances,
@@ -877,8 +879,8 @@ export class StockService {
           eq(products.businessId, business.id),
           isNull(products.archivedAt),
           eq(products.trackStock, true),
-          isNotNull(products.lowStockLevel),
-          lte(onHand, products.lowStockLevel),
+          sql`${point} IS NOT NULL`,
+          sql`${onHand} <= ${point}`,
         ),
       )
       .orderBy(onHand, products.name)
@@ -888,9 +890,10 @@ export class StockService {
       name: row.name,
       baseUnit: row.baseUnit,
       quantity: BigInt(row.quantity).toString(),
-      lowStockLevel: row.lowStockLevel?.toString() ?? null,
+      lowStockLevel: row.lowStockLevel === null ? null : BigInt(row.lowStockLevel).toString(),
     }));
   }
+
 
   /** Shops stock can be moved to: every shop of the business, names only. */
   async shops(tenant: TenantContext) {

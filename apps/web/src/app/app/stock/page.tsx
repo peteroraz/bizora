@@ -50,6 +50,7 @@ function totalsOf(items: { quantity: string; priceMinor: string | null; trackSto
 function StockScreen() {
   const t = useTranslations("stock");
   const common = useTranslations("common");
+  const reorderText = useTranslations("reorder");
   const locale = useLocale();
   const access = useAccess();
   const stockText = useStockText();
@@ -165,6 +166,7 @@ function StockScreen() {
         actions={
           canAdd || canReceive || canLists ? (
             <>
+              <ActionLink href="/app/stock/to-buy">{reorderText("toBuyLink")}</ActionLink>
               {canLists ? <ActionLink href="/app/stock/lists">{t("lists")}</ActionLink> : null}
               {can(access, Permission.STOCK_TRANSFER) ? <ActionLink href="/app/stock/transfers">{t("transfersLink")}</ActionLink> : null}
               {can(access, Permission.STOCK_COUNT, Permission.STOCK_ADJUST) ? <ActionLink href="/app/stock/counts">{t("countsLink")}</ActionLink> : null}
