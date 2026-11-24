@@ -67,6 +67,8 @@ export const stockReceiveSchema = z.object({
   /** Total cost of what was received. Left out when unknown; the current average or default cost is used. */
   totalCostMinor: minorAmount.optional(),
   paidFrom: z.enum(PAID_FROM).default("credit"),
+  /** When cash is paid at a warehouse, the shop whose drawer paid. A shop receiving its own stock can leave this out. */
+  paidFromBranchId: z.string().uuid().optional(),
   supplier: z.string().trim().max(160).optional(),
   /** A supplier already on the list (ADR-029); otherwise the name in `supplier` is found or added. */
   supplierId: z.string().uuid().optional(),

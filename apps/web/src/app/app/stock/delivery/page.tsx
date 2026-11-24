@@ -10,7 +10,7 @@ import { RequireAccess } from "../../../../components/require-access";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { AmountInput, QuantityInput } from "../../../../components/typing";
 import { formatCurrency } from "../../../../i18n/format";
-import { usePlace } from "../../../../lib/access-context";
+import { useAccess, usePlace } from "../../../../lib/access-context";
 import { api } from "../../../../lib/api";
 import { problemOf } from "../../../../lib/money-client";
 
@@ -27,6 +27,7 @@ const selectClass = "h-11 w-full rounded-control border border-border bg-input p
 function DeliveryChargesScreen() {
   const t = useTranslations("pricing.delivery");
   const locale = useLocale();
+  const access = useAccess();
   const place = usePlace();
   const unitName = useUnitName();
   const currency = place.currency;
@@ -34,6 +35,8 @@ function DeliveryChargesScreen() {
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [paidFrom, setPaidFrom] = useState<"credit" | "cash" | "bank">("credit");
+  const [places, setPlaces] = useState<{ id: string; name: string; kind: string }[]>([]);
+  const [paidFromShop, setPaidFromShop] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [charges, setCharges] = useState<Charge[]>([{ key: uuidv7(), kind: "transport", amount: "", paidFrom: "cash" }]);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,9 @@ function DeliveryChargesScreen() {
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
+    void api("/api/v1/stock/shops")
+      .then(async (response) => (response.ok ? setPlaces(((await response.json()) as { data: { items: { id: string; name: string; kind: string }[] } }).data.items) : undefined))
+      .catch(() => undefined);
     void api("/api/v1/suppliers/names")
       .then(async (response) => (response.ok ? ((await response.json()) as { data: { items: { id: string; name: string }[] } }).data.items : []))
       .then(setSuppliers)
@@ -72,6 +78,9 @@ function DeliveryChargesScreen() {
     }
     if (chargeAmounts.some((amount) => amount === null)) return t("badCharge");
     if (paidFrom === "credit" && !supplierId) return t("needSupplier");
+    const atWarehouse = places.find((item) => item.id === access.branchId)?.kind === "warehouse";
+    const cashCharge = charges.some((charge, index) => charge.paidFrom === "cash" && (chargeAmounts[index] ?? 0n) > 0n);
+    if (atWarehouse && (paidFrom === "cash" || cashCharge) && !paidFromShop) return t("chooseShop");
     return null;
   }
 
@@ -92,8 +101,10 @@ function DeliveryChargesScreen() {
         headers: { [IDEMPOTENCY_HEADER]: id },
         body: JSON.stringify({
           id,
+          ...(access.branchId ? { branchId: access.branchId } : {}),
           ...(supplierId ? { supplierId } : {}),
           paidFrom,
+          ...(paidFromShop ? { paidFromBranchId: paidFromShop } : {}),
           lines: lines.map((line, index) => ({ productId: line.product.id, quantity: line.quantity.trim(), unit: line.unit, totalCostMinor: (goods[index] ?? 0n).toString() })),
           charges: charges
             .map((charge, index) => ({ kind: charge.kind, paidFrom: charge.paidFrom, amountMinor: (chargeAmounts[index] ?? 0n).toString() }))
@@ -141,6 +152,20 @@ function DeliveryChargesScreen() {
               <option value="bank">{t("bank")}</option>
             </select>
           </FormField>
+          {places.find((item) => item.id === access.branchId)?.kind === "warehouse" && (paidFrom === "cash" || charges.some((charge) => charge.paidFrom === "cash")) ? (
+            <FormField id="delivery-cash-shop" label={t("paidFromShop")}>
+              <select id="delivery-cash-shop" className={selectClass} value={paidFromShop} onChange={(event) => setPaidFromShop(event.target.value)} required>
+                <option value="">{t("chooseShop")}</option>
+                {places
+                  .filter((item) => item.kind !== "warehouse")
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+            </FormField>
+          ) : null}
         </Card>
         <section className="space-y-3" aria-labelledby="delivery-goods">
           <h2 id="delivery-goods" className="text-lg font-semibold">

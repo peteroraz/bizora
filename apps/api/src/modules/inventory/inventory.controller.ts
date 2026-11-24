@@ -213,7 +213,7 @@ export class InventoryController {
   }
 
   @Get("stock/shops")
-  @RequirePermissions(Permission.STOCK_TRANSFER)
+  @RequireAnyPermission(Permission.STOCK_TRANSFER, Permission.STOCK_RECEIVE, Permission.PURCHASES_MANAGE)
   async shops(@CurrentTenant() tenant: TenantContext) {
     return success({ items: await this.stock.shops(tenant) }, tenant.correlationId);
   }

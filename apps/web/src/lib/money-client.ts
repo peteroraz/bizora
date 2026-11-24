@@ -50,6 +50,8 @@ export type MoneyMove = {
 export type CashShop = {
   branchId: string;
   name: string;
+  /** Set when a warehouse still has cash from before warehouses stopped holding cash. */
+  note: string | null;
   openingMinor: string;
   inMinor: string;
   outMinor: string;

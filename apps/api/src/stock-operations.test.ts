@@ -85,7 +85,11 @@ describe("ADR-047: warehouses, transfers with a lifecycle, and count sessions", 
     sales = await staff(http, a.token, "sales@moves.test", "SALES", a.branchId, a.businessId);
     // 100 bags in the warehouse at ₦60,000 each.
     rice = (await request(http).post("/api/v1/products").set(auth(a.token)).send({ name: "Rice 50kg", baseUnit: "bag", priceMinor: "7500000" }).expect(201)).body.data.product.id as string;
-    await request(http).post("/api/v1/stock/receive").set(auth(a.token)).send({ productId: rice, branchId: warehouseId, quantity: "100", unit: "bag", totalCostMinor: "600000000", paidFrom: "cash" }).expect(201);
+    await request(http)
+      .post("/api/v1/stock/receive")
+      .set(auth(a.token))
+      .send({ productId: rice, branchId: warehouseId, quantity: "100", unit: "bag", totalCostMinor: "600000000", paidFrom: "cash", paidFromBranchId: a.branchId })
+      .expect(201);
   }, 60_000);
 
   afterAll(async () => {

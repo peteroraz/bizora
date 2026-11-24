@@ -69,6 +69,8 @@ export const stockReceiptCreateSchema = z.object({
   supplier: z.string().trim().max(160).optional(),
   /** How the goods were paid; the charges say their own. */
   paidFrom: z.enum(["cash", "bank", "credit"]).default("credit"),
+  /** When cash is paid at a warehouse, the shop whose drawer paid. A shop receiving its own stock can leave this out. */
+  paidFromBranchId: z.string().uuid().optional(),
   payBy: day.optional(),
   note: z.string().trim().max(240).optional(),
   lines: z
