@@ -54,9 +54,9 @@ export function WaitingSales() {
           </li>
         ))}
       </ul>
-      {refused.length > 0 ? (
+      {refused.some((item) => item.stored) ? (
         <button type="button" className="min-h-11 text-sm text-primary underline underline-offset-2" onClick={() => void dismissRejected(owner)}>
-          {t("dismiss", { count: refused.length })}
+          {t("dismiss")}
         </button>
       ) : null}
     </Card>

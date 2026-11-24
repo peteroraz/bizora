@@ -275,9 +275,10 @@ function QuickSaleScreen() {
       return;
     }
     const id = uuidv7();
-    const body = {
-      id,
-      lines: priced.map((item) =>
+    // A live sale sends a product price only when the person may change it. A sale saved offline sends the price
+    // the phone showed, so a later price change cannot make the payment not match (ADR-050).
+    const linesFor = (offline: boolean) =>
+      priced.map((item) =>
         item.line.product.typed
           ? {
               description: item.line.product.name,
@@ -291,9 +292,12 @@ function QuickSaleScreen() {
               productId: item.line.product.id,
               quantity: item.line.quantity.trim().replace(/,/g, ""),
               unit: item.line.unit,
-              ...(canDiscount && item.line.price.trim() && item.unitPrice !== null ? { unitPriceMinor: item.unitPrice.toString() } : {}),
+              ...(offline || (canDiscount && item.line.price.trim() && item.unitPrice !== null) ? { unitPriceMinor: String(item.unitPrice) } : {}),
             },
-      ),
+      );
+    const body = {
+      id,
+      lines: linesFor(false),
       payments: paidParts.map((part) => ({ method: part.method, amountMinor: (part.amountMinor ?? 0n).toString() })),
       ...(discountMinor > 0n ? { discountMinor: discountMinor.toString() } : {}),
       ...(customer ? { customerId: customer.id } : {}),
@@ -324,7 +328,7 @@ function QuickSaleScreen() {
           access.owner,
           "sale.create",
           // Offline, the sale names the list it was priced from, so the server prices it the same way.
-          { ...body, ...(fromList ? { priceListId: fromList.id } : {}), provisionalNumber: provisional, soldAt: new Date().toISOString() },
+          { ...body, lines: linesFor(true), ...(fromList ? { priceListId: fromList.id } : {}), provisionalNumber: provisional, soldAt: new Date().toISOString() },
           {
             meta: {
               summary: priced.map((item) => `${item.line.quantity} ${unitName(item.line.unit, Number(item.line.quantity) || 1)} ${item.line.product.name}`).join(", "),

@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import type { SyncOperationResult } from "@bizora/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { backoffDelay, clearDevice, dismissRejected, enqueue, flush, OutboxNotEmptyError, type PushFn, summary } from "./outbox";
+import { backoffDelay, canDismiss, clearDevice, dismissRejected, enqueue, flush, items, OutboxNotEmptyError, type PushFn, summary } from "./outbox";
 
 const chika = { tenantId: "t1", membershipId: "m-chika" };
 const emeka = { tenantId: "t1", membershipId: "m-emeka" };
@@ -81,6 +81,24 @@ describe("device outbox", () => {
     expect(calls).toHaveLength(1);
     await dismissRejected(chika);
     expect((await summary(chika)).rejected).toEqual([]);
+  });
+
+  it("keeps a refused sale until the server says it holds a copy", async () => {
+    const sale = await enqueue(chika, "sale.create", { lines: [] });
+    const push: PushFn = async (operations) =>
+      operations.map((operation) => ({ id: operation.id, status: "rejected" as const, error: { code: "PRODUCT_NOT_FOUND", message: "Not found" }, stored: operation.id === sale }));
+    await flush(chika, push);
+    const [held] = await items(chika, "sale.create");
+    expect(canDismiss(held!)).toBe(true);
+    await dismissRejected(chika);
+    expect(await items(chika, "sale.create")).toEqual([]);
+
+    const lost = await enqueue(chika, "sale.create", { lines: [] });
+    const unstored: PushFn = async (operations) => operations.map((operation) => ({ id: operation.id, status: "rejected" as const, error: { code: "PRODUCT_NOT_FOUND", message: "Not found" } }));
+    await flush(chika, unstored);
+    expect(canDismiss((await items(chika, "sale.create"))[0]!)).toBe(false);
+    await dismissRejected(chika);
+    expect((await items(chika, "sale.create")).map((item) => item.id)).toEqual([lost]);
   });
 
   it("refuses to wipe the device while work is waiting", async () => {

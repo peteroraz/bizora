@@ -24,6 +24,8 @@ export type OutboxItem = {
   attempts: number;
   nextAttemptAt: number;
   error: { code: string; message: string } | null;
+  /** The server kept a copy of this refused sale. Only then may this phone delete it (ADR-050). */
+  stored?: boolean;
   /** Shown on this phone while waiting (ADR-040): what was sold and for how much. Never sent to the server. */
   meta?: OutboxMeta;
 };
@@ -165,9 +167,14 @@ export async function items(owner: OutboxOwner, type?: SyncOperationType) {
   return (await all()).filter((item) => mine(owner)(item) && (!type || item.type === type));
 }
 
-/** Removes rejected items once the person has seen them. */
+/** A refused sale can leave this phone only after the server says it kept a copy. Other refused work can still be cleared. */
+export function canDismiss(item: OutboxItem) {
+  return item.status === "rejected" && (item.type !== "sale.create" || item.stored === true);
+}
+
+/** Removes refused work the person has seen. A refused sale stays until the server holds a copy (ADR-050). */
 export async function dismissRejected(owner: OutboxOwner) {
-  const rejected = (await all()).filter((item) => mine(owner)(item) && item.status === "rejected");
+  const rejected = (await all()).filter((item) => mine(owner)(item) && canDismiss(item));
   if (rejected.length > 0) await write((store) => rejected.forEach((item) => store.delete(item.id)));
 }
 
@@ -209,7 +216,7 @@ export async function flush(owner: OutboxOwner, push: PushFn, now: number = Date
       batch.forEach((item) => {
         const result = byId.get(item.id);
         if (!result) return;
-        if (result.status === "rejected") store.put({ ...item, status: "rejected", error: result.error });
+        if (result.status === "rejected") store.put({ ...item, status: "rejected", error: result.error, stored: result.stored === true });
         else store.delete(item.id);
       }),
     );

@@ -468,7 +468,7 @@
     "shopMode": "Shop mode",
     "syncWaiting": "{count, plural, one {# change waiting to sync} other {# changes waiting to sync}}",
     "syncRejected": "{count, plural, one {# change could not be saved} other {# changes could not be saved}}",
-    "syncDismiss": "Dismiss",
+    "syncDismiss": "OK, the owner will see it",
     "switchPlace": "Business and shop",
     "switchPlaceLabel": "Change business or shop (now {place})",
     "hideForNow": "Hide for a week",
@@ -1321,6 +1321,18 @@
     "lead": "Every sale in this shop for the day.",
     "mineLead": "The sales you recorded.",
     "new": "New sale",
+    "needsYou": {
+      "link": "Sales that need you",
+      "title": "Sales that need you",
+      "lead": "These sales were made offline and could not be saved. Record one to put it in the books, or say it was not a sale.",
+      "emptyTitle": "Nothing needs you",
+      "emptyBody": "When a sale made offline cannot be saved, it waits here.",
+      "record": "Record it",
+      "notASale": "It was not a sale",
+      "reason": "Why was this not a sale?",
+      "confirm": "Save the reason",
+      "failed": "That did not work. Try again."
+    },
     "import": "Import or snap sales",
     "allSales": "All sales",
     "newTitle": "New sale",
@@ -1701,7 +1713,7 @@
       "byVoice": "by voice",
       "pending": "Waiting to sync",
       "needsReview": "Needs review",
-      "dismiss": "I have seen the {count, plural, one {refused sale} other {# refused sales}}"
+      "dismiss": "OK, the owner will see it"
     },
     "typed": {
       "sell": "Use “{name}” as a new item",
@@ -1858,6 +1870,10 @@
       "comment": "{name} commented on {number}.",
       "voided": "{number} was cancelled by {name}.",
       "below_price": "{name} sold {summary} below its price while offline. The sale was kept.",
+      "credit_offline_not_approved": "Sold on credit offline to {summary}, who is not approved for credit.",
+      "credit_offline_over_limit": "Sold on credit offline to {summary}, who is over their limit.",
+      "credit_offline_both": "Sold on credit offline to {summary}, who is not approved for credit and over their limit.",
+      "closed_shop": "A sale was recorded in {summary} after that shop was closed.",
       "transfer_waiting": "{name} recorded a transfer for {number}. Check your bank and confirm it.",
       "transfer_not_received": "The transfer for {number} never came ({name} checked). Talk to the customer.",
       "stock_request": "{name} asked to change stock: {summary}. Approve or reject it under Stock.",
