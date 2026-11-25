@@ -28,6 +28,8 @@ const KINDS = [
   "stock.request_rejected",
   "work.locked_offline",
   "work.after_hours_offline",
+  "business.suspended",
+  "business.reinstated",
 ];
 /** Where each notification opens: transfers to check go to the transfers (ADR-031), stock changes to Stock (ADR-034). */
 const hrefOf = (item: Notification) =>

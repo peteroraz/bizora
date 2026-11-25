@@ -28,6 +28,11 @@ export class TenantGuard implements CanActivate {
       throw new ApiError("UNAUTHENTICATED", "Membership is no longer valid.", 401);
     }
 
+    // Bizora suspended this business (ADR-071): the owner may still read and download; nothing may change, from any
+    // session, device or queued offline work. Refused sync leaves the work waiting on the phone, so nothing is lost.
+    const hold = await this.tenants.organizationHold(membership.tenantId);
+    if (hold.hold === "suspended") assertAllowedWhileSuspended(request, membership.role);
+
     void request.headers["x-tenant-id"];
     void request.headers["x-organization-id"];
     void request.headers["x-business-id"];
@@ -85,4 +90,24 @@ export class TenantGuard implements CanActivate {
     };
     return true;
   }
+}
+
+const SUSPENDED_READS_FOR_ANYONE = new Set(["/api/v1/auth/me"]);
+
+/**
+ * What a suspended business may still do (ADR-071): an allow-list, so a new route is closed until someone opens it.
+ * Everyone may load who they are (so the app can explain); the owner may read and download. Nothing else.
+ */
+export function assertAllowedWhileSuspended(request: { method: string; originalUrl?: string; url?: string }, role: string) {
+  const path = (request.originalUrl ?? request.url ?? "").split("?")[0] ?? "";
+  const reading = request.method === "GET" || request.method === "HEAD";
+  if (reading && SUSPENDED_READS_FOR_ANYONE.has(path)) return;
+  if (reading && role === "OWNER") return;
+  throw new ApiError(
+    "BUSINESS_SUSPENDED",
+    role === "OWNER"
+      ? "Bizora has suspended this business. You can still see and download its records. Contact Bizora support to sort it out."
+      : "Bizora has suspended this business, so nothing can be recorded for now. Work saved on this phone is kept. Ask the owner.",
+    403,
+  );
 }

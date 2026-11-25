@@ -9,6 +9,17 @@ import { PermissionGuard } from "../rbac/permission.guard.js";
 import { RequirePermissions } from "../rbac/permissions.js";
 import { TenantGuard } from "../tenant/tenant.guard.js";
 
+/**
+ * Suspensions and reinstatements show the owner what happened and its category, never the investigation note,
+ * which stays in the staff log (ADR-071).
+ */
+const NOTE_KEPT_BY_BIZORA = new Set(["business.suspended", "business.reinstated"]);
+
+function reasonForOwner(row: { action: string; reason: string | null; metadata: Record<string, unknown> | null }) {
+  if (!NOTE_KEPT_BY_BIZORA.has(row.action)) return row.reason;
+  return typeof row.metadata?.reasonCode === "string" ? row.metadata.reasonCode : null;
+}
+
 /** What Bizora staff looked at or did in this business (ADR-039), for the owner to see. */
 @Controller("api/v1/support-activity")
 @UseGuards(TenantGuard, PermissionGuard)
@@ -31,7 +42,7 @@ export class SupportActivityController {
           at: row.createdAt.toISOString(),
           staffEmail: row.staffEmail,
           action: row.action,
-          reason: row.reason,
+          reason: reasonForOwner(row),
           page: typeof row.metadata?.page === "string" ? row.metadata.page : null,
         })),
       },

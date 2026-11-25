@@ -1955,7 +1955,26 @@
       "stock_request_rejected": "{name} rejected: {summary}.",
       "work_locked_offline": "{name} recorded work offline while their shop was locked. It was kept; check it in the activity log.",
       "work_after_hours_offline": "{name} recorded work offline outside opening hours. It was kept; check it in the activity log.",
-      "serial_conflict": "A sale made offline used a serial number already sold: {summary} The sale was kept without it."
+      "serial_conflict": "A sale made offline used a serial number already sold: {summary} The sale was kept without it.",
+      "business_suspended": "Bizora has suspended this business. You can still see and download its records. Contact Bizora support.",
+      "business_reinstated": "Bizora has lifted the suspension. The business can record sales again."
+    }
+  },
+  "suspended": {
+    "ownerTitle": "Bizora has suspended this business",
+    "ownerBody": "Reason: {reason}. Nothing new can be recorded for now. You can still see and download all your records. Contact Bizora support to sort it out.",
+    "download": "Download your records",
+    "staffTitle": "This business is paused",
+    "staffBody": "Bizora has suspended this business, so nothing can be recorded for now. Work saved on this phone is kept and will be sent if the business is reinstated. Ask the owner.",
+    "reason": {
+      "fraud": "suspected fraud",
+      "security": "a security problem",
+      "abuse": "misuse of Bizora",
+      "terms": "a breach of the Terms of use",
+      "ownership": "a dispute over who owns the business",
+      "regulatory": "a legal requirement",
+      "payment_dispute": "a payment dispute",
+      "other": "see Bizora support"
     }
   },
   "capture": {

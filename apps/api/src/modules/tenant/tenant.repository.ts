@@ -21,6 +21,16 @@ import type { TenantContext } from "../../common/tenant-context.js";
 export class TenantRepository {
   constructor(@Inject(DB) private readonly db: AppDatabase) {}
 
+  /** Bizora's hold on a business (ADR-071), read on every request by the tenant guard. */
+  async organizationHold(tenantId: string) {
+    const [row] = await this.db
+      .select({ hold: organizations.bizoraHold, reasonCode: organizations.holdReasonCode })
+      .from(organizations)
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+    return row ?? { hold: "none" as const, reasonCode: null };
+  }
+
   async findOrganization(tenantId: string) {
     const [row] = await this.db.select().from(organizations).where(eq(organizations.id, tenantId)).limit(1);
     return row ?? null;

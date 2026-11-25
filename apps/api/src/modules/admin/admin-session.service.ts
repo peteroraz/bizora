@@ -22,6 +22,8 @@ export type AdminStaffMember = {
   email: string;
   name: string;
   roles: AdminRole[];
+  /** When this portal session began, for actions that need a fresh sign-in (ADR-071). */
+  signedInAt: Date;
 };
 
 /** `__Host-` cookies are tied to the portal's own address and cannot be set by any other site (needs HTTPS). */
@@ -97,6 +99,7 @@ export class AdminSessionService {
     const [row] = await this.db
       .select({
         sessionId: adminSessions.id,
+        signedInAt: adminSessions.createdAt,
         staffId: adminStaff.id,
         email: adminStaff.email,
         name: adminStaff.name,
@@ -115,7 +118,7 @@ export class AdminSessionService {
       .limit(1);
     if (!row || row.status !== "active") return null;
     const roles = row.roles.filter((role): role is AdminRole => (ADMIN_ROLES as readonly string[]).includes(role));
-    return { sessionId: row.sessionId, staffId: row.staffId, email: row.email, name: row.name, roles };
+    return { sessionId: row.sessionId, staffId: row.staffId, email: row.email, name: row.name, roles, signedInAt: row.signedInAt };
   }
 
   async signOut(member: AdminStaffMember, ip: string | null) {

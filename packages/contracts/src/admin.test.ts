@@ -8,7 +8,11 @@ describe("Admin portal roles (ADR-037)", () => {
     expect(adminCan(["support"], "audit.read")).toBe(false);
     expect(adminCan(["operations"], "audit.read")).toBe(true);
     expect(adminCan(["finance", "viewer"], "support.act")).toBe(false);
-    expect(adminAbilities(["super_admin"])).toHaveLength(8);
+    expect(adminAbilities(["super_admin"])).toHaveLength(10);
+    // Suspending a business (ADR-071): operations and super admins only, never support, finance or viewers.
+    expect(adminCan(["operations"], "business.suspend")).toBe(true);
+    expect(adminCan(["support"], "business.suspend")).toBe(false);
+    expect(adminCan(["finance", "viewer"], "business.reinstate")).toBe(false);
     expect(adminCan(["owner"], "businesses.read")).toBe(false);
   });
 
