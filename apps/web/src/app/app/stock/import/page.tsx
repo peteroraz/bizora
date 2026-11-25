@@ -2,6 +2,7 @@
 
 import { PRODUCT_IMPORT_COLUMNS, Permission, type ProductImportField } from "@bizora/contracts";
 import { PageHeader } from "@bizora/ui";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { type ImportColumn, ImportReview } from "../../../../components/import-review";
 import { RequireAccess } from "../../../../components/require-access";
@@ -89,6 +90,13 @@ function ProductImportScreen() {
           <BackLink href="/app/stock">{t("backToStock")}</BackLink>
         }
       />
+      {/* This screen does not add stock to products you already have; a supplier's invoice belongs on Record a delivery. */}
+      <p className="rounded-card border border-border bg-surface px-4 py-3 text-sm" data-testid="invoice-hint">
+        {t("invoiceHint")}{" "}
+        <Link href="/app/stock/receive" className="inline-flex min-h-11 items-center font-medium text-primary">
+          {t("invoiceLink")}
+        </Link>
+      </p>
       <div className="space-y-1">
         <p className="text-sm text-muted">{t("downloadLead")}</p>
         <ProductFileDownload />

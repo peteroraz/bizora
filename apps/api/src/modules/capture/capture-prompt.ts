@@ -12,8 +12,8 @@ const FIELD_GUIDE: Record<CaptureTarget, Record<string, string>> = {
     quantity: "How many base units are in stock now, if written.",
     lowStock: "Reorder level, if written.",
     barcode: "Barcode digits, if written.",
-    packUnit: "Pack unit if a pack is described (e.g. carton).",
-    packSize: "How many base units are in one pack.",
+    packUnit: "Pack unit if a pack is described: a word such as carton, bag, crate or dozen, never a number. Else empty.",
+    packSize: "How many base units are in one pack, digits only. Fill it only together with packUnit.",
     packPrice: "Selling price for one pack, digits only.",
   },
   sales: {

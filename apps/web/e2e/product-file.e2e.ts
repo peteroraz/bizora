@@ -10,6 +10,8 @@ test("a boutique brings in shirts as variants with codes and brands, then downlo
   const { email, headers } = await shop(request);
   await signIn(page, email);
   await page.goto("/app/stock/import");
+  // A supplier's invoice is pointed to Record a delivery, which adds stock; this screen does not.
+  await expect(page.getByTestId("invoice-hint").getByRole("link", { name: "Record a delivery" })).toHaveAttribute("href", "/app/stock/receive");
   await page.locator('input[accept=".csv,text/csv"]').setInputFiles({
     name: "shirts.csv",
     mimeType: "text/csv",

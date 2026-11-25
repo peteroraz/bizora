@@ -1893,6 +1893,8 @@
     "exampleSupplier": "Dangote Distributors",
     "totalRow": "Total",
     "sentForApproval": "{count, plural, one {# row was sent to a manager or the owner to approve.} other {# rows were sent to a manager or the owner to approve.}} Stock changes when they approve.",
+    "invoiceHint": "Have a supplier's invoice? Record it as a delivery instead: that adds the goods to your stock. Only the product name is needed here; leave any column you don't use empty.",
+    "invoiceLink": "Record a delivery",
     "downloadLead": "Download your products as a spreadsheet, change it, and bring it back in here. Category can be a path, like Drinks > Soft drinks. Rows with an item group and a variant become variants of one item.",
     "downloadProducts": "Download products (CSV)",
     "downloading": "Preparing the file…",

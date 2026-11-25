@@ -106,7 +106,10 @@ export type JobField = keyof typeof JOB_COLUMNS;
 
 /** The fields each target fills, in table order. */
 export const CAPTURE_FIELDS: Record<CaptureTarget, readonly string[]> = {
-  products: Object.keys(PRODUCT_IMPORT_COLUMNS),
+  // Only what a price list, stock book or shelf count shows. The other product file columns (codes, brands, packs
+  // sold or bought, suppliers, price lists) are left for a person to type: a model asked for them guesses, and its
+  // guesses block the whole import (for example an invoice quantity written into "Pack bought").
+  products: ["name", "category", "unit", "price", "cost", "quantity", "lowStock", "barcode", "packUnit", "packSize", "packPrice"] satisfies (keyof typeof PRODUCT_IMPORT_COLUMNS)[],
   sales: Object.keys(SALES_IMPORT_COLUMNS),
   stock_in: Object.keys(STOCK_IN_IMPORT_COLUMNS),
   statement: Object.keys(STATEMENT_IMPORT_COLUMNS),

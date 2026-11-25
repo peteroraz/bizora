@@ -1,9 +1,25 @@
-import { CAPTURE_FIELDS } from "@bizora/contracts";
+import { CAPTURE_FIELDS, type CaptureTarget } from "@bizora/contracts";
 import { describe, expect, it } from "vitest";
 import { captureInstructions, captureResponseSchema } from "./capture-prompt.js";
 import { sanitize } from "./capture.service.js";
 
 describe("capture prompt and answer checks", () => {
+  it("explains every field it asks the model for", () => {
+    for (const target of Object.keys(CAPTURE_FIELDS) as CaptureTarget[]) {
+      const { user } = captureInstructions({ target, fields: CAPTURE_FIELDS[target], files: [{ mimeType: "image/jpeg", data: "" }], note: undefined, today: "2026-11-24", productNames: [], currency: "NGN" });
+      for (const field of CAPTURE_FIELDS[target]) expect(user, `${target}.${field}`).toMatch(new RegExp(`^- ${field}: \\S`, "m"));
+    }
+  });
+
+  it("asks a product photo only for what a price list or stock book shows, not packs bought, suppliers or price lists", () => {
+    expect(CAPTURE_FIELDS.products).not.toContain("packForPurchase");
+    expect(CAPTURE_FIELDS.products).not.toContain("packForSale");
+    expect(CAPTURE_FIELDS.products).not.toContain("supplier");
+    expect(CAPTURE_FIELDS.products).not.toContain("priceList");
+    const { user } = captureInstructions({ target: "products", fields: CAPTURE_FIELDS.products, files: [{ mimeType: "image/jpeg", data: "" }], note: undefined, today: "2026-11-24", productNames: [], currency: "NGN" });
+    expect(user).toContain("never a number");
+  });
+
   it("tells the model the attachments are data, gives today's date and the shop's product names", () => {
     const { system, user } = captureInstructions({
       target: "sales",
