@@ -52,11 +52,11 @@ const QuickSaleLines = lazy(linesModule);
 const savedItemsModule = () => import("../../../../lib/offline/saved-items");
 const priceListModule = () => import("../../../../components/sale-price-list");
 const SalePriceList = lazy(priceListModule);
-const picksModule = () => import("./quick-sale-picks");
 // Held sales (ADR-070): kept on the phone; the store and the panel load after the screen, or when first used.
 const heldModule = () => import("../../../../lib/offline/held-sales");
 const heldPanelModule = () => import("../../../../components/held-sales");
 const HeldPanel = lazy(heldPanelModule);
+const picksModule = () => import("./quick-sale-picks");
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -111,15 +111,15 @@ function QuickSaleScreen() {
   const [savedList, setSavedList] = useState<ReturnType<typeof asProduct>[]>([]);
   const [productAliases, setProductAliases] = useState<Record<string, string[]>>({});
   const [extraUnits, setExtraUnits] = useState<string[]>([]);
-  // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
-  const [chosenList, setChosenList] = useState("");
-  const [fromList, setFromList] = useState<ListPrices | null>(null);
   const [held, setHeld] = useState<HeldSale[]>([]);
   const [heldPanel, setHeldPanel] = useState<"hold" | "list" | null>(null);
   const [heldNote, setHeldNote] = useState<string | null>(null);
   // The held sale now back in the cart: it leaves the phone's list once recorded (or is held again under its id).
   const [resumedId, setResumedId] = useState<string | null>(null);
   const [resumedName, setResumedName] = useState("");
+  // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
+  const [chosenList, setChosenList] = useState("");
+  const [fromList, setFromList] = useState<ListPrices | null>(null);
   const typedOk = sellsTyped(access.salesItems);
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
@@ -169,12 +169,16 @@ function QuickSaleScreen() {
       if (fresh) setCatalog(fresh);
     })();
     warmOfflineCopy();
-    const loadHeld = () => void heldModule().then((store) => store.readHeld(owner, branchId)).then(setHeld).catch(() => undefined);
+    // The panel is fetched too, so Hold works with no network.
+    const loadHeld = () => {
+      void heldModule().then((store) => store.readHeld(owner, branchId)).then(setHeld).catch(() => undefined);
+      void heldPanelModule().catch(() => undefined);
+    };
     if (document.readyState === "complete") window.setTimeout(loadHeld, 0);
     else window.addEventListener("load", () => window.setTimeout(loadHeld, 0), { once: true });
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
     const preload = () => {
-      void Promise.all([heldPanelModule(), linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
+      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
       // Customer names for finding a customer with no network; refreshed at most every few hours.
       if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
     };
