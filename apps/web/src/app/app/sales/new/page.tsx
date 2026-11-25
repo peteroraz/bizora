@@ -22,6 +22,7 @@ import { BackLink } from "../../../../components/action-link";
 import { SentenceInput } from "../../../../components/typing";
 import { asProduct } from "../../../../lib/offline/typed-product";
 import type { QuickSalePicks as QuickSalePicksComponent } from "./quick-sale-picks";
+import type { HeldSale } from "../../../../lib/offline/held-sales";
 
 import type { Line } from "../../../../components/quick-sale-lines";
 import type { ListPrices } from "../../../../components/sale-price-list";
@@ -52,6 +53,10 @@ const savedItemsModule = () => import("../../../../lib/offline/saved-items");
 const priceListModule = () => import("../../../../components/sale-price-list");
 const SalePriceList = lazy(priceListModule);
 const picksModule = () => import("./quick-sale-picks");
+// Held sales (ADR-070): kept on the phone; the store and the panel load after the screen, or when first used.
+const heldModule = () => import("../../../../lib/offline/held-sales");
+const heldPanelModule = () => import("../../../../components/held-sales");
+const HeldPanel = lazy(heldPanelModule);
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -109,6 +114,12 @@ function QuickSaleScreen() {
   // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
   const [chosenList, setChosenList] = useState("");
   const [fromList, setFromList] = useState<ListPrices | null>(null);
+  const [held, setHeld] = useState<HeldSale[]>([]);
+  const [heldPanel, setHeldPanel] = useState<"hold" | "list" | null>(null);
+  const [heldNote, setHeldNote] = useState<string | null>(null);
+  // The held sale now back in the cart: it leaves the phone's list once recorded (or is held again under its id).
+  const [resumedId, setResumedId] = useState<string | null>(null);
+  const [resumedName, setResumedName] = useState("");
   const typedOk = sellsTyped(access.salesItems);
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
@@ -158,9 +169,12 @@ function QuickSaleScreen() {
       if (fresh) setCatalog(fresh);
     })();
     warmOfflineCopy();
+    const loadHeld = () => void heldModule().then((store) => store.readHeld(owner, branchId)).then(setHeld).catch(() => undefined);
+    if (document.readyState === "complete") window.setTimeout(loadHeld, 0);
+    else window.addEventListener("load", () => window.setTimeout(loadHeld, 0), { once: true });
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
     const preload = () => {
-      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
+      void Promise.all([heldPanelModule(), linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
       // Customer names for finding a customer with no network; refreshed at most every few hours.
       if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
     };
@@ -276,6 +290,8 @@ function QuickSaleScreen() {
   /** Empties the sale after saving; with more sales from the same go, the next one opens for checking. */
   function clearSale() {
     spoken.current = false;
+    setResumedId(null);
+    setResumedName("");
     setLines([]);
     setDiscount("");
     setSplit({ cash: "", transfer: "", pos: "" });
@@ -293,10 +309,72 @@ function QuickSaleScreen() {
     }
   }
 
+  /** Puts the cart aside with a name, empties the screen for the next customer (ADR-070). */
+  async function hold(name: string) {
+    const owner = access.owner;
+    const branchId = access.branchId;
+    if (!owner || !branchId) return;
+    const store = await heldModule();
+    const sale: HeldSale = {
+      id: resumedId ?? uuidv7(),
+      name: name.slice(0, 60),
+      heldAt: new Date().toISOString(),
+      lines,
+      customer: customer ? { id: customer.id, name: customer.name } : null,
+      discount,
+      mode,
+      split,
+      note,
+      dueDate,
+      comment,
+      chosenList,
+      totalMinor: total.toString(),
+      currency,
+    };
+    try {
+      setHeld(await store.putHeld(owner, branchId, sale));
+    } catch (failure) {
+      setError(failure instanceof store.HeldFullError ? t("held.full") : t("held.failed"));
+      setHeldPanel(null);
+      return;
+    }
+    setHeldPanel(null);
+    setError(null);
+    clearSale();
+    setHeldNote(t("held.done", { name: sale.name }));
+  }
+
+  /** Brings a held sale back as it was. Product prices come from today's list; the server checks them again. */
+  function resume(sale: HeldSale) {
+    setLines(sale.lines.map((line) => ({ ...line, product: line.product.typed ? line.product : (catalog?.products[line.product.id] ?? line.product) })));
+    setCustomer(sale.customer);
+    setDiscount(sale.discount);
+    setMode(sale.mode as PayMode);
+    setSplit(sale.split);
+    setNote(sale.note);
+    setDueDate(sale.dueDate);
+    setComment(sale.comment);
+    setChosenList(sale.chosenList);
+    if (sale.note || sale.discount) setExtras(true);
+    setResumedId(sale.id);
+    setResumedName(sale.name);
+    setHeldPanel(null);
+    setHeldNote(null);
+  }
+
+  /** A held sale that was resumed and has now been recorded leaves the phone's list. */
+  async function forgetResumed() {
+    const owner = access.owner;
+    const branchId = access.branchId;
+    if (!resumedId || !owner || !branchId) return;
+    setHeld(await (await heldModule()).dropHeld(owner, branchId, resumedId).catch(() => held));
+  }
+
   async function save() {
     setError(null);
     setSavedOffline(null);
     setSavedNext(null);
+    setHeldNote(null);
     const blocked = problem();
     if (blocked) {
       setError(blocked);
@@ -343,6 +421,7 @@ function QuickSaleScreen() {
       if (response.ok) {
         if (recentStore) rememberRecent(recentStore, lines.map((line) => line.product.id));
         await remember();
+        await forgetResumed();
         if (!nextSales) {
           window.location.href = `/app/sales/${payload.data.sale.id}`;
           return;
@@ -356,6 +435,7 @@ function QuickSaleScreen() {
       if (isNetworkFailure(failure) && access.owner) {
         if (recentStore) rememberRecent(recentStore, lines.map((line) => line.product.id));
         await remember();
+        await forgetResumed();
         const provisional = nextProvisionalNumber();
         await enqueue(
           access.owner,
@@ -402,6 +482,42 @@ function QuickSaleScreen() {
         <p className="rounded-card border border-success bg-success-bg px-4 py-3 text-sm text-success" role="status" data-testid="saved-next">
           {t("savedNext", { number: savedNext })}
         </p>
+      ) : null}
+      {heldNote ? (
+        <p className="rounded-card border border-success bg-success-bg px-4 py-3 text-sm text-success" role="status" data-testid="held-note">
+          {heldNote}
+        </p>
+      ) : null}
+      {resumedId ? (
+        <p className="rounded-card border border-border bg-card px-4 py-3 text-sm" role="status" data-testid="resumed-note">
+          {t("held.resumed", { name: resumedName })}
+        </p>
+      ) : null}
+      {held.length > 0 && heldPanel === null ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" onClick={() => setHeldPanel("list")} data-testid="held-open">
+            {t("held.open", { count: held.length })}
+          </Button>
+          {held.some((sale) => Date.now() - Date.parse(sale.heldAt) >= 86_400_000) ? <span className="text-sm text-warning">{t("held.old")}</span> : null}
+        </div>
+      ) : null}
+      {heldPanel ? (
+        <Suspense fallback={null}>
+          <HeldPanel
+            mode={heldPanel}
+            items={held}
+            suggestedName={customer?.name ?? resumedName}
+            cartEmpty={lines.length === 0}
+            onHold={(name) => void hold(name)}
+            onResume={resume}
+            onDelete={(id) => {
+              const owner = access.owner;
+              const branchId = access.branchId;
+              if (owner && branchId) void heldModule().then((store) => store.dropHeld(owner, branchId, id)).then(setHeld);
+            }}
+            onClose={() => setHeldPanel(null)}
+          />
+        </Suspense>
       ) : null}
       {!catalog ? <p className="text-sm text-muted">{t("noCatalog")}</p> : null}
       {voice && voiceOn && catalog ? (
@@ -562,9 +678,16 @@ function QuickSaleScreen() {
                 {money(total)}
               </p>
             </div>
-            <SubmitButton pending={pending} pendingLabel={t("saving")} className="h-12 px-6 text-base">
-              {desk ? t("sendToCashier") : t("record")}
-            </SubmitButton>
+            <div className="flex items-center gap-2">
+              {itemCount > 0 && access.owner && access.branchId ? (
+                <Button type="button" variant="outline" className="h-12" onClick={() => setHeldPanel("hold")} data-testid="hold-sale">
+                  {t("held.hold")}
+                </Button>
+              ) : null}
+              <SubmitButton pending={pending} pendingLabel={t("saving")} className="h-12 px-6 text-base">
+                {desk ? t("sendToCashier") : t("record")}
+              </SubmitButton>
+            </div>
           </div>
         </div>
       </SafeForm>

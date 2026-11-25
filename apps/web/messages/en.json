@@ -1791,7 +1791,16 @@
     "savedNext": "Sale {number} saved. Check the next one.",
     "readAsSale": "Read this as a sale",
     "reportLink": "Sales report",
-    "creditOnTerms": "Optional: this customer is on {days}-day terms."
+    "creditOnTerms": "Optional: this customer is on {days}-day terms.",
+    "held": {
+      "hold": "Hold",
+      "open": "Held sales ({count})",
+      "old": "Some were held yesterday or earlier: resume or delete them.",
+      "done": "{name} is held. Serve the next customer.",
+      "resumed": "Finishing the sale held for {name}.",
+      "full": "20 sales are already held on this phone. Resume or delete one first.",
+      "failed": "This phone could not hold the sale. Finish it or try again."
+    }
   },
   "imports": {
     "chooseFile": "Choose a CSV file",
@@ -3231,5 +3240,23 @@
     "notSupported": "This phone's browser cannot read barcodes. Type the code instead.",
     "cameraRefused": "The camera is not allowed for Bizora. Allow it in the browser's settings, or type the code.",
     "cameraFailed": "The camera could not start. Type the code instead."
+  },
+  "held": {
+    "holdTitle": "Hold this sale",
+    "holdLead": "The items stay on this phone until you resume the sale. Nothing is recorded, paid or taken from stock.",
+    "name": "Who is it for?",
+    "nameHint": "For example: man in blue cap.",
+    "hold": "Hold",
+    "cancel": "Cancel",
+    "unnamed": "Customer",
+    "listTitle": "Held sales",
+    "listLead": "Resume a sale to finish it.",
+    "finishFirst": "Record or hold the sale on screen first, then resume another.",
+    "close": "Close",
+    "none": "Nothing is held.",
+    "summary": "{count, plural, one {# item} other {# items}} · {total} · held {time}",
+    "resume": "Resume",
+    "delete": "Delete",
+    "deleteConfirm": "Yes, delete"
   }
 }
