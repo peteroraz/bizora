@@ -184,6 +184,8 @@ export const businesses = pgTable(
     /** Goods come back within this many days of the sale; later needs the owner (migration 0047, ADR-059). */
     returnsWithinDays: integer("returns_within_days"),
     returnsOnReceipt: boolean("returns_on_receipt").notNull().default(false),
+    /** Record a sale as just an amount, with no item (migration 0053, ADR-069). New shops start with it on. */
+    amountSales: boolean("amount_sales").notNull().default(true),
     visibleModules: text("visible_modules")
       .array()
       .notNull()
@@ -1247,7 +1249,7 @@ export const saleLines = pgTable(
     unitPriceMinor: bigint("unit_price_minor", { mode: "bigint" }).notNull(),
     discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
     lineTotalMinor: bigint("line_total_minor", { mode: "bigint" }).notNull(),
-    /** product, quick, or service. A snapshot of what the line was when it was sold (ADR-049). */
+    /** product, quick, service or amount (ADR-069). A snapshot of what the line was when it was sold (ADR-049). */
     lineKind: varchar("line_kind", { length: 16 }).notNull().default("product"),
     /** Set on a live sale when the typed name is close to one product. The line stays typed (migration 0045, ADR-052). */
     possibleProductId: uuid("possible_product_id"),

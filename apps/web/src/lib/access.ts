@@ -17,6 +17,8 @@ export type Access = {
   salesFlow?: "simple" | "desk";
   /** What staff can sell (ADR-041): products from the list, any typed item, or both. */
   salesItems?: "products" | "typed" | "both";
+  /** A sale can be recorded as just an amount (ADR-069). */
+  amountSales?: boolean;
   /** Where the business is: decides how phone numbers and amounts are typed (ADR-027). */
   country?: string;
   currency?: string;

@@ -63,6 +63,7 @@ export type ShellBusiness = {
   staffFeaturesEnabled?: boolean;
   salesFlow?: "simple" | "desk";
   salesItems?: "products" | "typed" | "both";
+  amountSales?: boolean;
   countryCode?: string;
   baseCurrencyCode?: string;
   timezone?: string;
@@ -134,6 +135,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       membershipBranchId: profile.membership?.branchId ?? null,
       salesFlow: currentBusiness?.salesFlow === "desk" ? ("desk" as const) : ("simple" as const),
       salesItems: currentBusiness?.salesItems ?? "products",
+      amountSales: currentBusiness?.amountSales === true,
       ...(currentBusiness?.countryCode ? { country: currentBusiness.countryCode.trim() } : {}),
       ...(currentBusiness?.baseCurrencyCode ? { currency: currentBusiness.baseCurrencyCode.trim() } : {}),
       ...(currentBusiness?.timezone ? { timezone: currentBusiness.timezone } : {}),
@@ -148,6 +150,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
       profile.tenant?.branchId,
       currentBusiness?.salesFlow,
       currentBusiness?.salesItems,
+      currentBusiness?.amountSales,
       currentBusiness?.countryCode,
       currentBusiness?.baseCurrencyCode,
       currentBusiness?.timezone,

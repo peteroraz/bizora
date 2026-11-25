@@ -26,6 +26,7 @@ import {
   savedItemKey,
   TYPED_ITEM_NAME_MAX,
   sellsTyped,
+  isAmountLine,
 } from "@bizora/contracts";
 import { aliasedTable, and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, or, sql, type SQL } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
@@ -76,7 +77,10 @@ const SEVEN_DAYS_MS = 7 * 86_400_000;
 
 const round = (numerator: bigint, denominator: bigint) => (numerator * 2n + denominator) / (denominator * 2n);
 
-type ProblemLine = { productId?: string; description?: string; quantity?: string; unit?: string };
+type ProblemLine = { productId?: string; description?: string; quantity?: string; unit?: string; amountMinor?: string };
+
+/** What an amount-only line is called on receipts and lists when the seller did not say what it was for (ADR-069). */
+const AMOUNT_LINE_NAME = "Sale";
 
 function problemLines(payload: Record<string, unknown>): ProblemLine[] {
   return Array.isArray(payload.lines) ? (payload.lines as ProblemLine[]) : [];
@@ -84,7 +88,7 @@ function problemLines(payload: Record<string, unknown>): ProblemLine[] {
 
 function problemSummary(payload: Record<string, unknown>, names: Map<string, string>) {
   const parts = problemLines(payload).map((line) => {
-    const name = line.description?.trim() || (line.productId ? names.get(line.productId) : undefined) || "A product";
+    const name = line.description?.trim() || (line.productId ? names.get(line.productId) : undefined) || (line.amountMinor ? AMOUNT_LINE_NAME : "A product");
     return [line.quantity, line.unit, name].filter(Boolean).join(" ");
   });
   return parts.join(", ") || "A sale";
@@ -188,8 +192,8 @@ export class SaleService {
       const desk = business.salesFlow === "desk" && source !== "import" && source !== "capture";
 
       const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0n);
-      // Services and other income; typed items are goods and count as sales (ADR-041).
-      const otherSubtotal = lines.reduce((sum, line) => sum + (line.other && !line.saved ? line.lineTotal : 0n), 0n);
+      // Services and other income; typed items and amounts are goods and count as sales (ADR-041, ADR-069).
+      const otherSubtotal = lines.reduce((sum, line) => sum + (line.other && !line.saved && !("amount" in line && line.amount) ? line.lineTotal : 0n), 0n);
       const discount = payload.discountMinor ? BigInt(payload.discountMinor) : 0n;
       if (discount > 0n && !tenant.permissions.includes(Permission.SALES_DISCOUNT)) {
         throw new ApiError("FORBIDDEN", "Ask a manager to give a discount.", 403, [{ field: "discountMinor", message: "Remove the discount." }]);
@@ -806,7 +810,8 @@ export class SaleService {
       })
       .from(saleLines)
       .innerJoin(sales, and(eq(sales.tenantId, saleLines.tenantId), eq(sales.id, saleLines.saleId)))
-      .where(and(...filters))
+      // Amounts with no item are not items sold (ADR-069).
+      .where(and(...filters, sql`${saleLines.lineKind} <> 'amount'`))
       .groupBy(saleLines.description, saleLines.enteredUnit, saleLines.lineKind)
       .orderBy(sql`sum(${saleLines.lineTotalMinor}) DESC`)
       .limit(20);
@@ -1748,7 +1753,7 @@ export class SaleService {
     live = false,
     keepPrice = false,
   ) {
-    const typedKeys = [...new Set(payload.lines.flatMap((line) => ("productId" in line ? [] : [savedItemKey(line.description)])).filter((key) => key.length > 0))];
+    const typedKeys = [...new Set(payload.lines.flatMap((line) => ("productId" in line || isAmountLine(line) ? [] : [savedItemKey(line.description)])).filter((key) => key.length > 0))];
     const matched = await this.productsForTypedNames(tx, tenant.tenantId, business.id, typedKeys);
     const near = await this.closeSpellings(tx, tenant.tenantId, business.id, typedKeys, matched);
     const ids = [...new Set([...payload.lines.flatMap((line) => ("productId" in line ? [line.productId] : [])), ...matched.values()])];
@@ -1767,6 +1772,30 @@ export class SaleService {
     const belowPrice: string[] = [];
     const likeProduct: { typed: string; name: string }[] = [];
     for (const [index, line] of payload.lines.entries()) {
+      // Just an amount (ADR-069): no item, so nothing to price, remember or take from stock. The shop must allow it.
+      if (isAmountLine(line)) {
+        if (!business.amountSales) {
+          throw new ApiError("AMOUNT_SALES_OFF", "This shop records what was sold, not just amounts. The owner can allow amounts in Settings.", 403, [
+            { field: `lines.${index}.amountMinor`, message: "Choose what was sold." },
+          ]);
+        }
+        const amount = BigInt(line.amountMinor);
+        lines.push({
+          product: null,
+          unit: "piece",
+          entered: 1000n,
+          quantity: 1000n,
+          unitPrice: amount,
+          lineTotal: amount,
+          reduction: 0n,
+          description: line.description?.replace(/\s+/g, " ").trim() || AMOUNT_LINE_NAME,
+          other: true as const,
+          saved: false,
+          amount: true,
+          possibleProductId: null,
+        });
+        continue;
+      }
       if (!("productId" in line)) {
         const productId = matched.get(savedItemKey(line.description));
         const product = productId ? byId.get(productId) : undefined;
@@ -1820,6 +1849,7 @@ export class SaleService {
           description,
           other: true as const,
           saved: line.saved === true,
+          amount: false,
           possibleProductId: live && hint ? hint.id : null,
         });
         continue;
@@ -1978,7 +2008,7 @@ export class SaleService {
     tenant: TenantContext,
     businessId: string,
     saleId: string,
-    lines: { product: ProductRow | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; reduction?: bigint; saved?: boolean; possibleProductId?: string | null }[],
+    lines: { product: ProductRow | null; description: string; quantity: bigint; entered: bigint; unit: string; unitPrice: bigint; lineTotal: bigint; reduction?: bigint; saved?: boolean; amount?: boolean; possibleProductId?: string | null }[],
     movements: { lineIndex: number; id: string; cost: bigint }[],
   ) {
     await tx.insert(saleLines).values(
@@ -1998,7 +2028,7 @@ export class SaleService {
           unitPriceMinor: line.unitPrice,
           discountMinor: line.reduction ?? 0n,
           lineTotalMinor: line.lineTotal,
-          lineKind: line.product ? "product" : line.saved ? "quick" : "service",
+          lineKind: line.product ? "product" : line.amount ? "amount" : line.saved ? "quick" : "service",
           possibleProductId: line.product ? null : (line.possibleProductId ?? null),
           costMinor: movement?.cost ?? null,
           stockMovementId: movement?.id ?? null,

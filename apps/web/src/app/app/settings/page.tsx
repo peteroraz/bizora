@@ -51,6 +51,7 @@ type Business = {
   salesItems?: "products" | "typed" | "both";
   rememberItems?: boolean;
   quickCatalog?: boolean;
+  amountSales?: boolean;
   returnsWithinDays?: number | null;
   returnsOnReceipt?: boolean;
 };
@@ -143,6 +144,8 @@ function SettingsScreen() {
   const [salesItems, setSalesItems] = useState<"products" | "typed" | "both">("products");
   const [rememberItems, setRememberItems] = useState(true);
   const [quickCatalog, setQuickCatalog] = useState(true);
+  const [amountSales, setAmountSales] = useState(false);
+  const [savedAmountSales, setSavedAmountSales] = useState(false);
   // The returns rule (ADR-059): blank means goods may come back at any time.
   const [returnsDays, setReturnsDays] = useState("");
   const [returnsOnReceipt, setReturnsOnReceipt] = useState(false);
@@ -204,6 +207,8 @@ function SettingsScreen() {
       setSavedItemsSetting(current.salesItems ?? "products");
       setRememberItems(current.rememberItems !== false);
       setQuickCatalog(current.quickCatalog !== false);
+      setAmountSales(current.amountSales === true);
+      setSavedAmountSales(current.amountSales === true);
       setReturnsDays(current.returnsWithinDays ? String(current.returnsWithinDays) : "");
       setReturnsOnReceipt(current.returnsOnReceipt === true);
       setModules(current.visibleModules);
@@ -297,6 +302,7 @@ function SettingsScreen() {
           salesItems,
           rememberItems,
           quickCatalog,
+          amountSales,
           returnsWithinDays: returnsDays.trim() ? Math.min(365, Math.max(1, Number(returnsDays))) : null,
           returnsOnReceipt: Boolean(returnsDays.trim()) && returnsOnReceipt,
         }),
@@ -304,7 +310,7 @@ function SettingsScreen() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? t("saveFailed"));
       // Menus and screens change with the way of selling, so load the app again.
-      if (salesFlow !== savedFlow || salesItems !== savedItemsSetting) {
+      if (salesFlow !== savedFlow || salesItems !== savedItemsSetting || amountSales !== savedAmountSales) {
         window.location.reload();
         return;
       }
@@ -617,6 +623,13 @@ function SettingsScreen() {
                   <span>
                     <span className="block font-medium">{t("quickCatalog")}</span>
                     <span className="block text-muted">{t("quickCatalogHint")}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" checked={amountSales} onChange={(event) => setAmountSales(event.target.checked)} data-testid="amount-sales-setting" />
+                  <span>
+                    <span className="block font-medium">{t("amountSales")}</span>
+                    <span className="block text-muted">{t("amountSalesHint")}</span>
                   </span>
                 </label>
                 {savedItemsSetting !== "products" ? <SavedItemsList /> : null}

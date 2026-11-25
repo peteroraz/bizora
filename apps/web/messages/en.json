@@ -779,6 +779,8 @@
     "rememberItemsHint": "The next sale can suggest them, on every phone.",
     "quickCatalog": "Let me add a list of names",
     "quickCatalogHint": "Names are enough. Prices and stock can wait.",
+    "amountSales": "Let me record just the amount",
+    "amountSalesHint": "For a quick sale with no item: type ₦3,500, pick cash, transfer or POS, done. Profit stays unknown for these sales.",
     "units": {
       "title": "Units you sell in",
       "lead": "A unit typed at the counter joins this list after two sales. Add one here and it is ready at once.",
@@ -1384,6 +1386,7 @@
     "allSales": "All sales",
     "newTitle": "New sale",
     "newLead": "Type what you sold, then how they paid. A new item is remembered for next time. Works without network.",
+    "justAmount": "Just the amount",
     "soldQuestion": "What did you sell?",
     "findProduct": "Find a product",
     "findProductPlaceholder": "Start typing…",
@@ -3231,5 +3234,20 @@
     "notSupported": "This phone's browser cannot read barcodes. Type the code instead.",
     "cameraRefused": "The camera is not allowed for Bizora. Allow it in the browser's settings, or type the code.",
     "cameraFailed": "The camera could not start. Type the code instead."
+  },
+  "amountSale": {
+    "title": "Just the amount",
+    "lead": "Type what the sale came to and how they paid. No items needed.",
+    "close": "Back to items",
+    "amount": "Amount",
+    "what": "What was it for?",
+    "whatHint": "Optional, for example: bread and drinks.",
+    "record": "Record",
+    "recordAmount": "Record {amount}",
+    "enterAmount": "Enter the amount.",
+    "sale": "Sale",
+    "recorded": "{number}: {amount} {method} recorded.",
+    "savedOffline": "No network, so {amount} {method} is saved on this phone as {number}. It will be sent when the network is back.",
+    "open": "Open"
   }
 }
