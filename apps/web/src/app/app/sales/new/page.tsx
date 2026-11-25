@@ -52,6 +52,9 @@ const savedItemsModule = () => import("../../../../lib/offline/saved-items");
 const priceListModule = () => import("../../../../components/sale-price-list");
 const SalePriceList = lazy(priceListModule);
 const picksModule = () => import("./quick-sale-picks");
+// Just the amount (ADR-069): its pad loads only when opened.
+const amountModule = () => import("../../../../components/amount-sale");
+const AmountSale = lazy(amountModule);
 
 function recentKey(tenantId: string, branchId: string) {
   return `bizora.recentProducts.${tenantId}.${branchId}`;
@@ -109,6 +112,9 @@ function QuickSaleScreen() {
   // Price lists (ADR-048): the one chosen here, and the prices the sale will use.
   const [chosenList, setChosenList] = useState("");
   const [fromList, setFromList] = useState<ListPrices | null>(null);
+  // Just the amount (ADR-069): not at the sales desk, where the cashier takes the money.
+  const amountOk = access.amountSales === true && !desk;
+  const [amountOpen, setAmountOpen] = useState(false);
   const typedOk = sellsTyped(access.salesItems);
   const listOk = sellsProducts(access.salesItems);
   // Say the sale (ADR-033): the voice panel loads only when opened.
@@ -160,7 +166,7 @@ function QuickSaleScreen() {
     warmOfflineCopy();
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
     const preload = () => {
-      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), priceListModule()]).catch(() => undefined);
+      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), ...(amountOk ? [amountModule()] : []), priceListModule()]).catch(() => undefined);
       // Customer names for finding a customer with no network; refreshed at most every few hours.
       if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
     };
@@ -182,7 +188,7 @@ function QuickSaleScreen() {
         if (fresh) applySaved(fresh);
       })();
     }
-  }, [access.owner, access.branchId, typedOk, voiceOn]);
+  }, [access.owner, access.branchId, typedOk, voiceOn, amountOk]);
 
   const place = usePlace();
   const currency = catalog?.currency ?? place.currency;
@@ -390,6 +396,17 @@ function QuickSaleScreen() {
   const change = givenMinor !== null ? givenMinor - total : null;
   const itemCount = priced.length;
 
+  if (amountOpen && amountOk) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4">
+        <PageHeader title={t("newTitle")} actions={<BackLink href="/app/sales">{t("allSales")}</BackLink>} />
+        <Suspense fallback={null}>
+          <AmountSale owner={access.owner ?? null} currency={currency} onClose={() => setAmountOpen(false)} />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <PageHeader title={t("newTitle")} intro={desk ? t("newLeadDesk") : t("newLead")} actions={<BackLink href="/app/sales">{t("allSales")}</BackLink>} />
@@ -446,6 +463,11 @@ function QuickSaleScreen() {
         <button type="button" className="flex min-h-14 w-full items-center justify-center gap-2 rounded-card border-2 border-primary text-base font-semibold text-primary" onClick={() => setVoice(true)} data-testid="say-sale">
           {t("voice.open")}
         </button>
+      ) : null}
+      {amountOk && lines.length === 0 ? (
+        <Button type="button" variant="secondary" className="w-full" onClick={() => setAmountOpen(true)} data-testid="just-amount">
+          {t("justAmount")}
+        </Button>
       ) : null}
       <p className="text-base font-semibold">{t("soldQuestion")}</p>
       <FormField id="sale-search" label={t("findProduct")}>

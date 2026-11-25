@@ -50,6 +50,16 @@ export const saleOtherLineSchema = z.object({
   lineTotalMinor: minorAmount.optional(),
 });
 
+/**
+ * Just an amount (ADR-069): what the sale came to, with no item, quantity or price. Needs the shop to allow it. It is
+ * never remembered as an item and never moves stock, so its cost stays unknown.
+ */
+export const saleAmountLineSchema = z.object({
+  amountMinor: minorAmount.refine((value) => /[1-9]/.test(value), "Enter the amount."),
+  /** What it was for, if the seller said ("bread and drinks"). Kept on the line only. */
+  description: z.string().trim().max(160).optional(),
+});
+
 /** What staff can sell (ADR-041): only products from the list, any item typed in (remembered), or both. */
 export const SALES_ITEMS = ["products", "typed", "both"] as const;
 export type SalesItems = (typeof SALES_ITEMS)[number];
@@ -74,7 +84,12 @@ export type SavedItem = {
 export const ITEM_SOURCES = ["typed", "voice"] as const;
 export const SAVED_ITEMS_LIMIT = 2000;
 
-export const saleLineInputSchema = z.union([saleProductLineSchema, saleOtherLineSchema]);
+export const saleLineInputSchema = z.union([saleProductLineSchema, saleOtherLineSchema, saleAmountLineSchema]);
+
+/** True for a line sent as just an amount. */
+export function isAmountLine(line: z.infer<typeof saleLineInputSchema>): line is z.infer<typeof saleAmountLineSchema> {
+  return "amountMinor" in line;
+}
 
 export const salePaymentInputSchema = z.object({
   method: z.enum(PAYMENT_METHODS),

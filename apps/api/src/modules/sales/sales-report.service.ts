@@ -244,7 +244,7 @@ export class SalesReportService {
           coalesce(sum(sl.entered_quantity), 0)::text AS quantity, coalesce(sum(sl.line_total_minor), 0)::text AS total,
           bool_and(sl.line_kind = 'service' OR sl.cost_minor IS NOT NULL) AS cost_known
         FROM sale_lines sl JOIN sales s ON s.tenant_id = sl.tenant_id AND s.id = sl.sale_id
-        WHERE ${this.salesWhere(scope, from, to)}
+        WHERE ${this.salesWhere(scope, from, to)} AND sl.line_kind <> 'amount'
         GROUP BY sl.description, sl.entered_unit, sl.line_kind
         ORDER BY sum(sl.line_total_minor) DESC
         LIMIT 20`),
