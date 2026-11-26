@@ -15,6 +15,8 @@ import { RbacModule } from "../rbac/rbac.module.js";
 import { StaffModule } from "../staff/staff.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { AdminMeasuresService } from "./admin-measures.service.js";
+import { AdminLifecycleService } from "./admin-lifecycle.service.js";
+import { NotificationsModule } from "../notifications/notifications.module.js";
 import { AdminAuditService } from "./admin-audit.service.js";
 import { AdminAuthController } from "./admin-auth.controller.js";
 import { AdminDirectoryService } from "./admin-directory.service.js";
@@ -26,8 +28,8 @@ import { AdminStaffService } from "./admin-staff.service.js";
 
 /** The Admin portal's API (ADR-037), under /api/admin/v1, with its own sign-in, guard and audit log. */
 @Module({
-  imports: [IdentityModule, RbacModule, StaffModule, TenantModule, EntitlementsModule, SalesModule, InventoryModule, CustomersModule, DebtorsModule, MoneyModule],
+  imports: [NotificationsModule, IdentityModule, RbacModule, StaffModule, TenantModule, EntitlementsModule, SalesModule, InventoryModule, CustomersModule, DebtorsModule, MoneyModule],
   controllers: [AdminAuthController, AdminController, AdminStaffController, AdminBusinessController, SupportActivityController],
-  providers: [AdminMeasuresService, AdminAuditService, AdminSessionService, AdminDirectoryService, AdminStaffService, AdminRecordsService, AdminLimitsService, AdminGuard, PermissionGuard],
+  providers: [AdminLifecycleService, AdminMeasuresService, AdminAuditService, AdminSessionService, AdminDirectoryService, AdminStaffService, AdminRecordsService, AdminLimitsService, AdminGuard, PermissionGuard],
 })
 export class AdminModule {}

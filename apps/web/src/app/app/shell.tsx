@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useTranslations } from "next-intl";
 import { LazySheet } from "../../components/lazy-sheet";
 import { NotificationBell } from "../../components/notification-bell";
@@ -41,6 +41,9 @@ import { navAllowed } from "../../lib/access";
 import { AccessProvider } from "../../lib/access-context";
 import { signOutEverywhere } from "../../lib/offline/sw-client";
 import { bottomItemsFor, primaryNav, type NavId } from "../../lib/nav";
+
+// Shown only for a business Bizora has suspended (ADR-071), so it is not part of anyone else's first download.
+const SuspendedNotice = lazy(() => import("../../components/suspended-notice"));
 
 const icons = {
   home: Home,
@@ -72,7 +75,7 @@ export type ShellBranch = { id: string; name: string; businessId: string };
 
 export type ShellProfile = {
   user?: { displayName: string; email: string | null; emailVerifiedAt?: string | null; kind?: string } | null;
-  organization?: { name: string; isSample?: boolean } | null;
+  organization?: { name: string; isSample?: boolean; bizoraHold?: "none" | "suspended"; holdReasonCode?: string | null } | null;
   /** Changes when the company logo changes (ADR-021); null when there is no logo. */
   logoVersion?: string | null;
   tenant?: {
@@ -312,6 +315,10 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
     );
   }
 
+  // Bizora suspended this business (ADR-071): the owner keeps reading; staff see only why.
+  const suspended = profile.organization?.bizoraHold === "suspended";
+  const ownerView = profile.tenant?.role === "OWNER";
+
   if (onboarding) return (
       <div className="min-h-screen bg-bg">
         <AccessProvider value={access}>{children}</AccessProvider>
@@ -483,8 +490,13 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
         ) : null}
         {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email && pathname === "/app" ? <EmailVerificationBanner /> : null}
         {banner}
+        {suspended ? (
+          <Suspense fallback={null}>
+            <SuspendedNotice owner={ownerView} reasonCode={profile.organization?.holdReasonCode ?? null} />
+          </Suspense>
+        ) : null}
         <main className="px-4 py-6 pb-24 md:px-8 md:pb-6">
-          <AccessProvider value={access}>{children}</AccessProvider>
+          {suspended && !ownerView ? null : <AccessProvider value={access}>{children}</AccessProvider>}
         </main>
         <nav
           className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-card md:hidden"

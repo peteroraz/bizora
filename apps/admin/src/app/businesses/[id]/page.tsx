@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useCan } from "@/components/admin-shell";
 import { FeaturesPanel } from "@/components/features-panel";
+import { LifecyclePanel } from "@/components/lifecycle-panel";
 import { HealthPanel } from "@/components/health-panel";
 import { LimitsPanel } from "@/components/limits-panel";
 import { ReasonDialog } from "@/components/reason-dialog";
@@ -127,6 +128,7 @@ export default function BusinessPage() {
       <LimitsPanel tenantId={profile.id} />
 
       <FeaturesPanel tenantId={profile.id} />
+      <LifecyclePanel tenantId={profile.id} />
 
       <HealthPanel tenantId={profile.id} />
 

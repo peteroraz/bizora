@@ -4,6 +4,7 @@ import { ApiError } from "../../common/errors.js";
 import type { SupportActor } from "../../common/support-actor.js";
 import { FeatureService } from "../entitlements/feature.service.js";
 import { AdminAuditService } from "./admin-audit.service.js";
+import { AdminLifecycleService } from "./admin-lifecycle.service.js";
 import { AdminMeasuresService } from "./admin-measures.service.js";
 import { AdminLimitsService } from "./admin-limits.service.js";
 import { AdminRecordsService, SUPPORT_PAGES, type SupportPage } from "./admin-records.service.js";
@@ -13,6 +14,11 @@ import type { AdminStaffMember } from "./admin-session.service.js";
 function actorFor(admin: AdminStaffMember, reason: string, req: AdminRequest): SupportActor {
   const meta = requestMeta(req);
   return { staffId: admin.staffId, staffEmail: admin.email, reason, correlationId: req.correlationId ?? "admin", ip: meta.ip, userAgent: meta.userAgent };
+}
+
+function actorMeta(admin: AdminStaffMember, req: AdminRequest) {
+  const meta = requestMeta(req);
+  return { staffId: admin.staffId, staffEmail: admin.email, correlationId: req.correlationId ?? "admin", ip: meta.ip, userAgent: meta.userAgent };
 }
 
 function reasonOf(body: unknown) {
@@ -31,7 +37,29 @@ export class AdminBusinessController {
     @Inject(FeatureService) private readonly features: FeatureService,
     @Inject(AdminAuditService) private readonly adminAudit: AdminAuditService,
     @Inject(AdminMeasuresService) private readonly measures: AdminMeasuresService,
+    @Inject(AdminLifecycleService) private readonly lifecycle: AdminLifecycleService,
   ) {}
+
+  /** Whether Bizora has suspended this business, and every change with who, why and when (ADR-071). */
+  @Get("lifecycle")
+  @AdminCan("businesses.read")
+  async lifecycleState(@Param("id", ParseUUIDPipe) id: string, @Req() req: AdminRequest) {
+    return success({ lifecycle: await this.lifecycle.state(id) }, req.correlationId ?? "admin");
+  }
+
+  @Post("suspend")
+  @HttpCode(200)
+  @AdminCan("business.suspend")
+  async suspend(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown, @CurrentAdmin() admin: AdminStaffMember, @Req() req: AdminRequest) {
+    return success({ lifecycle: await this.lifecycle.suspend(id, body, admin, actorMeta(admin, req)) }, req.correlationId ?? "admin");
+  }
+
+  @Post("reinstate")
+  @HttpCode(200)
+  @AdminCan("business.reinstate")
+  async reinstate(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown, @CurrentAdmin() admin: AdminStaffMember, @Req() req: AdminRequest) {
+    return success({ lifecycle: await this.lifecycle.reinstate(id, body, admin, actorMeta(admin, req)) }, req.correlationId ?? "admin");
+  }
 
   /** For support (ADR-045): sync refusals, voice problems and sign-ins of the last 7 days. Codes and counts only. */
   @Get("health")

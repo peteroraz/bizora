@@ -432,5 +432,43 @@
       "last": "Last"
     },
     "logsHint": "App errors are in Cloud Logging and Error Reporting (search by the business's ID). See the pilot runbook."
+  },
+  "lifecycle": {
+    "title": "Suspension",
+    "active": "Working normally",
+    "activeLine": "Bizora has not suspended this business.",
+    "suspended": "Suspended",
+    "suspendedLine": "For {reason}, since {since}, by {by}. Review by {review}.",
+    "suspend": "Suspend business",
+    "suspendTitle": "Suspend this business?",
+    "suspendDescription": "Nothing can be recorded from any phone or session until it is reinstated. The owner can still read and download records, and sees the category but not your note. Work waiting on phones stays there.",
+    "suspendDone": "Business suspended.",
+    "reinstate": "Reinstate",
+    "reinstateTitle": "Reinstate this business?",
+    "reinstateDescription": "The business can record again, and work waiting on phones is sent. For fraud or security, someone other than the person who suspended must do this.",
+    "reinstateDone": "Business reinstated.",
+    "category": "Reason",
+    "categoryHint": "The owner sees this.",
+    "caseRef": "Case reference",
+    "caseRefHint": "Optional. Bizora staff only.",
+    "caseLine": "Case {ref}",
+    "eventSuspended": "Suspended: {reason}",
+    "eventReinstated": "Reinstated",
+    "columns": {
+      "when": "When",
+      "what": "What",
+      "why": "Note",
+      "who": "Who"
+    },
+    "reasons": {
+      "fraud": "Suspected fraud",
+      "security": "Security problem",
+      "abuse": "Misuse of Bizora",
+      "terms": "Breach of the Terms of use",
+      "ownership": "Ownership dispute",
+      "regulatory": "Legal requirement",
+      "payment_dispute": "Payment dispute",
+      "other": "Other"
+    }
   }
 }

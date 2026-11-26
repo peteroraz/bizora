@@ -43,7 +43,9 @@ export function ReasonDialog({
       setReason("");
     } catch (error) {
       if (error instanceof AdminApiError) {
-        setProblem(error.fields.find((field) => field.field === "reason")?.message ?? (error.status === 403 ? errors("notAllowed") : error.message || errors("generic")));
+        // A fresh sign-in or a second person (ADR-071) is something the staff member can act on, so say it plainly.
+        const actionable = error.code === "SIGN_IN_AGAIN" || error.code === "SECOND_PERSON_NEEDED";
+        setProblem(error.fields.find((field) => field.field === "reason")?.message ?? (error.status === 403 && !actionable ? errors("notAllowed") : error.message || errors("generic")));
       } else {
         setProblem(errors("generic"));
       }

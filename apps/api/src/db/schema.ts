@@ -91,6 +91,10 @@ export const organizations = pgTable(
     traderProfile: jsonb("trader_profile"),
     /** A sample business for demonstrations (migration 0039, ADR-045): marked everywhere, removable with a script. */
     isSample: boolean("is_sample").notNull().default(false),
+    /** Bizora's hold (migration 0054, ADR-071): none or suspended, the category of reason and since when. Details are in business_lifecycle_events. */
+    bizoraHold: varchar("bizora_hold", { length: 12 }).$type<"none" | "suspended">().notNull().default("none"),
+    holdReasonCode: varchar("hold_reason_code", { length: 24 }),
+    holdSince: timestamp("hold_since", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -1546,6 +1550,23 @@ export const organizationLogos = pgTable("organization_logos", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Every change to a business's lifecycle (migration 0054, ADR-071). Append-only: a trigger refuses updates and deletes. */
+export const businessLifecycleEvents = pgTable("business_lifecycle_events", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  field: varchar("field", { length: 24 }).$type<"bizora_hold">().notNull(),
+  fromValue: varchar("from_value", { length: 16 }).notNull(),
+  toValue: varchar("to_value", { length: 16 }).notNull(),
+  reasonCode: varchar("reason_code", { length: 24 }),
+  note: varchar("note", { length: 500 }).notNull(),
+  caseRef: varchar("case_ref", { length: 64 }),
+  reviewOn: date("review_on", { mode: "string" }),
+  actorStaffId: uuid("actor_staff_id"),
+  actorStaffEmail: varchar("actor_staff_email", { length: 320 }),
+  actorUserId: uuid("actor_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const schema = {
   addresses,
   organizations,
@@ -1600,6 +1621,7 @@ export const schema = {
   statementRules,
   statementLines,
   organizationLogos,
+  businessLifecycleEvents,
 };
 
 export type DatabaseSchema = typeof schema;

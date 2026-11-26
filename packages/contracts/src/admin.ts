@@ -24,6 +24,10 @@ export const ADMIN_ABILITIES = {
   "audit.read": ["super_admin", "operations"],
   /** Add, change and remove Bizora staff. */
   "staff.manage": ["super_admin"],
+  /** Suspend a business: it can no longer record anything; the owner can only read and download (ADR-071). */
+  "business.suspend": ["super_admin", "operations"],
+  /** Lift a suspension. For fraud or security, a different person from the one who suspended (ADR-071). */
+  "business.reinstate": ["super_admin", "operations"],
 } as const satisfies Record<string, readonly AdminRole[]>;
 export type AdminAbility = keyof typeof ADMIN_ABILITIES;
 
@@ -74,3 +78,21 @@ export const ADMIN_LIMITS = ["max_branches", "max_staff", "max_devices", "ai_dai
 export type AdminLimit = (typeof ADMIN_LIMITS)[number];
 
 export type AdminStaffAddInput = z.infer<typeof adminStaffAddSchema>;
+
+/** Why Bizora suspended a business (ADR-071). The owner sees the category; the note stays with Bizora staff. */
+export const HOLD_REASONS = ["fraud", "security", "abuse", "terms", "ownership", "regulatory", "payment_dispute", "other"] as const;
+export type HoldReason = (typeof HOLD_REASONS)[number];
+/** Reasons serious enough that the person who suspended cannot also lift the suspension. */
+export const TWO_PERSON_HOLD_REASONS: readonly HoldReason[] = ["fraud", "security"];
+/** Suspending or reinstating needs a sign-in to the portal no older than this (ADR-071). */
+export const LIFECYCLE_SIGN_IN_MINUTES = 10;
+/** A suspension is looked at again by this many days, unless a date is given. */
+export const HOLD_REVIEW_DAYS = 90;
+
+export const adminSuspendSchema = z.object({
+  reasonCode: z.enum(HOLD_REASONS),
+  reason: adminReasonSchema.shape.reason,
+  caseRef: z.string().trim().max(64).optional(),
+  reviewOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.").optional(),
+});
+export type AdminSuspendInput = z.infer<typeof adminSuspendSchema>;
