@@ -11,6 +11,8 @@ import { api } from "../../lib/api";
 import { ActionLink } from "../../components/action-link";
 import { useStockText } from "../../components/stock-quantity";
 import { formatCurrency, formatWhen } from "../../i18n/format";
+import type { Profit } from "../../lib/money-client";
+import { uncostedSalesNote } from "../../lib/profit-note";
 import type { SaleSummary } from "../../lib/sales-client";
 
 type Check = { id: string; done: boolean; href: string };
@@ -48,7 +50,7 @@ export default function AppHomePage() {
   const seesProfit = can(access, Permission.REPORTS_PROFIT_READ) && shown.includes("money");
   const approvesExpenses = can(access, Permission.EXPENSES_APPROVE);
   const [cash, setCash] = useState<{ currency: string; totalMinor: bigint; shops: number } | null>(null);
-  const [profit, setProfit] = useState<{ currency: string; profitMinor: string; active: boolean } | null>(null);
+  const [profit, setProfit] = useState<{ currency: string; profitMinor: string; active: boolean; costMissing: boolean } | null>(null);
   const [expensesToApprove, setExpensesToApprove] = useState(0);
 
   useEffect(() => {
@@ -65,8 +67,13 @@ export default function AppHomePage() {
       void api("/api/v1/money/profit")
         .then(async (response) => {
           if (!response.ok) return;
-          const data = (await response.json()).data as { currency: string; profitMinor: string; salesMinor: string; expensesMinor: string };
-          setProfit({ currency: data.currency, profitMinor: data.profitMinor, active: data.salesMinor !== "0" || data.expensesMinor !== "0" });
+          const data = (await response.json()).data as Pick<Profit, "currency" | "profitMinor" | "salesMinor" | "expensesMinor" | "uncostedSalesMinor" | "profitStatus">;
+          setProfit({
+            currency: data.currency,
+            profitMinor: data.profitMinor,
+            active: data.salesMinor !== "0" || data.expensesMinor !== "0",
+            costMissing: uncostedSalesNote(data.salesMinor, data.uncostedSalesMinor, data.profitStatus) !== null,
+          });
         })
         .catch(() => undefined);
     }
@@ -312,6 +319,11 @@ export default function AppHomePage() {
                 <span className={`block text-xl font-semibold tabular-nums ${BigInt(profit.profitMinor) < 0n ? "text-danger" : ""}`}>
                   {formatCurrency(BigInt(profit.profitMinor), profit.currency, locale)}
                 </span>
+                {profit.costMissing ? (
+                  <span className="block text-sm text-muted" data-testid="home-profit-cost-missing">
+                    {t("profitCostMissing")}
+                  </span>
+                ) : null}
                 <span className="text-sm text-primary">{t("seeProfit")}</span>
               </Link>
             ) : (

@@ -9,7 +9,7 @@ import { createApp } from "./bootstrap.js";
 import { schema } from "./db/schema.js";
 import { loadMigrationSql } from "./db/sql.js";
 import { createLogger } from "./logging.js";
-import { auth, product, shop } from "./test-support.js";
+import { auth, expectBalancedBooks, product, shop } from "./test-support.js";
 
 const env: AppEnv = {
   NODE_ENV: "test",
@@ -85,6 +85,48 @@ describe("ADR-051: the books' profit is always shown", () => {
       expect(BigInt(view.profitMinor)).toBeGreaterThan(BigInt(view.uncostedSalesMinor));
       expect(view.costCoverageBps).toBe(9800);
     }
+  });
+
+  async function stocked(token: string, name: string, extra: Record<string, unknown>) {
+    const created = await request(http)
+      .post("/api/v1/products")
+      .set(auth(token))
+      .send({ name, baseUnit: "bag", priceMinor: "220000", openingQuantity: "20", ...extra })
+      .expect(201);
+    return created.body.data.product.id as string;
+  }
+
+  async function sell(token: string, productId: string) {
+    await request(http)
+      .post("/api/v1/sales")
+      .set(auth(token))
+      .send({ lines: [{ productId, quantity: "2", unit: "bag" }], payments: [{ method: "cash", amountMinor: "440000" }] })
+      .expect(201);
+  }
+
+  it("does not count goods added with no cost as free (review, 26 Nov)", async () => {
+    const bisi = await shop(http, "profit-nocost@bizora.test", "Bisi Provisions");
+    const semovita = await stocked(bisi.token, "Semovita 1kg", {});
+    await sell(bisi.token, semovita);
+    const view = await profit(bisi.token);
+    expect(view).toMatchObject({ salesMinor: "440000", uncostedSalesMinor: "440000", profitStatus: "unknown", costCoverageBps: 0 });
+    const lines = await client.query<{ cost_minor: string | null }>("SELECT cost_minor FROM sale_lines WHERE tenant_id = $1", [bisi.tenantId]);
+    expect(lines.rows).toEqual([{ cost_minor: null }]);
+    await expectBalancedBooks(client, bisi.tenantId);
+  });
+
+  it("counts a cost of 0 as known when the owner set it", async () => {
+    const ada = await shop(http, "profit-free@bizora.test", "Ada Samples");
+    const sample = await stocked(ada.token, "Free sample", { defaultCostMinor: "0" });
+    await sell(ada.token, sample);
+    expect(await profit(ada.token)).toMatchObject({ uncostedSalesMinor: "0", profitStatus: "known", profitMinor: "440000" });
+  });
+
+  it("keeps a real cost on goods added with one", async () => {
+    const ada = await shop(http, "profit-costed@bizora.test", "Ada Costed");
+    const rice = await stocked(ada.token, "Rice 1kg", { openingCostMinor: "3000000" });
+    await sell(ada.token, rice);
+    expect(await profit(ada.token)).toMatchObject({ uncostedSalesMinor: "0", profitStatus: "known", costOfSalesMinor: "300000", profitMinor: "140000" });
   });
 
   it("shows sales minus expenses for a food shop that records ingredients as expenses", async () => {

@@ -84,4 +84,27 @@ test("expenses, the cash in the drawer, a blind count, money to the bank and the
   await expect(page.getByTestId("profit-amount")).toHaveText("₦2,000.00");
   await page.goto("/app");
   await expect(page.getByTestId("home-profit")).toContainText("₦2,000.00");
+  await expect(page.getByTestId("home-profit-cost-missing")).toHaveCount(0);
+});
+
+test("goods added with no cost are not shown as all profit (review, 26 Nov)", async ({ browser, request }) => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const email = `nocost.${suffix}@bizora.test`;
+  const registered = await request.post("/api/v1/auth/register", {
+    data: { acceptTerms: true, email, password, displayName: "Bisi Owner", organizationName: `Bisi Provisions ${suffix}`, countryCode: "NG", baseCurrencyCode: "NGN", timezone: "Africa/Lagos" },
+  });
+  const headers = { authorization: `Bearer ${(await registered.json()).data.accessToken}` };
+  expect((await request.patch("/api/v1/onboarding", { headers, data: { countryCode: "NG", industryCode: "general-retail", baseCurrencyCode: "NGN", timezone: "Africa/Lagos", businessName: "Bisi Provisions", branchName: "Main" } })).ok()).toBeTruthy();
+  // 20 bags added with no cost, 2 sold for ₦4,400.
+  const product = await request.post("/api/v1/products", { headers, data: { name: "Semovita 1kg", baseUnit: "bag", priceMinor: "220000", openingQuantity: "20" } });
+  await request.post("/api/v1/sales", { headers, data: { lines: [{ productId: (await product.json()).data.product.id, quantity: "2", unit: "bag" }], payments: [{ method: "cash", amountMinor: "440000" }] } });
+
+  const { context, page } = await signIn(browser, email);
+  await expect(page.getByTestId("home-profit")).toContainText("₦4,400.00");
+  await expect(page.getByTestId("home-profit-cost-missing")).toHaveText("Some goods sold have no cost, so the real profit may be lower.");
+  await page.goto("/app/money");
+  await expect(page.getByTestId("money-profit-cost-missing")).toBeVisible();
+  await page.goto("/app/money/profit");
+  await expect(page.getByTestId("profit-uncosted")).toContainText("₦4,400.00 of sales (100%) have no cost recorded.");
+  await context.close();
 });

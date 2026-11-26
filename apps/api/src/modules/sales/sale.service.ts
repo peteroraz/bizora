@@ -82,6 +82,15 @@ type ProblemLine = { productId?: string; description?: string; quantity?: string
 /** What an amount-only line is called on receipts and lists when the seller did not say what it was for (ADR-069). */
 const AMOUNT_LINE_NAME = "Sale";
 
+/**
+ * What a goods line cost, or null when nobody has said (ADR-049 addendum, 26 Nov). Stock added without a cost leaves
+ * the shelf at ₦0. That is "no cost recorded", not free goods, so profit must not count it as known. An owner who
+ * really gets goods free sets the product's cost to 0, and then ₦0 is a known cost.
+ */
+export function knownLineCost(costMinor: bigint, product: Pick<ProductRow, "defaultCostMinor">): bigint | null {
+  return costMinor === 0n && product.defaultCostMinor === null ? null : costMinor;
+}
+
 function problemLines(payload: Record<string, unknown>): ProblemLine[] {
   return Array.isArray(payload.lines) ? (payload.lines as ProblemLine[]) : [];
 }
@@ -1357,7 +1366,7 @@ export class SaleService {
       });
       await tx
         .update(saleLines)
-        .set({ stockMovementId: movement.id, costMinor: -movement.valueMinor })
+        .set({ stockMovementId: movement.id, costMinor: knownLineCost(-movement.valueMinor, product) })
         .where(and(eq(saleLines.tenantId, tenant.tenantId), eq(saleLines.id, line.id)));
     }
   }

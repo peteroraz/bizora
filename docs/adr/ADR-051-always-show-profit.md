@@ -19,3 +19,14 @@ The profit screen hid its figure whenever any goods were sold without a cost. On
 
 - A shop that has not entered costs still sees what the books say.
 - Typing an item that is not a product still just works.
+
+## Addendum, 26 Nov 2026: goods added with no cost
+
+The app review found that a product added with stock but no cost was counted as costing ₦0. Its sales then looked fully costed: Home showed all of the sale as profit with no warning, and the profit note left those sales out.
+
+- A goods line taken from stock at ₦0, for a product with no cost of its own, is now saved with no cost (`cost_minor` NULL), like a typed item. It counts in `uncostedSalesMinor` and in `profitStatus`.
+- A product whose cost the owner set to 0 (free samples, gifts) keeps ₦0 as a known cost.
+- The stock movement and the books are unchanged: the goods still leave stock at ₦0, so the books' profit is the same figure as before. Only the note and the status change.
+- The Home and Money profit cards now say "Some goods sold have no cost, so the real profit may be lower." when the profit note would show.
+- Sales saved before this change keep the ₦0 they were saved with. Historical records are not rewritten.
+- Known limit: when costed and uncosted stock of the same product are mixed, the average cost is lower than the real cost and the line still counts as costed.

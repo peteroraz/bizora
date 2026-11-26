@@ -12,6 +12,7 @@ import { can } from "../../../lib/access";
 import { useAccess, usePlace } from "../../../lib/access-context";
 import { api } from "../../../lib/api";
 import type { CashPosition, Profit, TransferList } from "../../../lib/money-client";
+import { uncostedSalesNote } from "../../../lib/profit-note";
 
 /** Money (ADR-020, ADR-028): cash in each shop, profit, expenses, money in and out, and bank statements. */
 function MoneyScreen() {
@@ -100,7 +101,14 @@ function MoneyScreen() {
           <Card data-testid="money-profit">
             <p className="text-sm font-medium">{t("profitTitle")}</p>
             {profit ? (
-              <p className={`mt-1 text-xl font-semibold tabular-nums ${BigInt(profit.profitMinor) < 0n ? "text-danger" : ""}`}>{money(profit.profitMinor, profit.currency)}</p>
+              <>
+                <p className={`mt-1 text-xl font-semibold tabular-nums ${BigInt(profit.profitMinor) < 0n ? "text-danger" : ""}`}>{money(profit.profitMinor, profit.currency)}</p>
+                {uncostedSalesNote(profit.salesMinor, profit.uncostedSalesMinor, profit.profitStatus) ? (
+                  <p className="mt-1 text-sm text-muted" data-testid="money-profit-cost-missing">
+                    {t("profitCostMissing")}
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="mt-1 text-sm text-muted">{t("profitLead")}</p>
             )}
