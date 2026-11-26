@@ -14,6 +14,7 @@ import { api } from "../../../../lib/api";
 import { type CachedProduct, readCatalog } from "../../../../lib/offline/catalog";
 import { enqueue } from "../../../../lib/offline/outbox";
 import { warmOfflineCopy } from "../../../../lib/offline/sw-client";
+import { patientImport } from "../../../../lib/patient-import";
 import { isNetworkFailure } from "../../../../lib/offline/sync";
 import { nextProvisionalNumber } from "../../../../lib/provisional";
 import { baseQuantity, lineTotal, listPrice } from "../../../../lib/sales-client";
@@ -36,29 +37,30 @@ const quantityText = (thousandths: bigint) =>
 /** Products sold on this phone recently, newest first, for the quick tiles. Kept per shop, on the phone only. */
 const RECENT_LIMIT = 24;
 // The Scan button is loaded after the screen, to keep the sale screen within its size budget (ADR-066).
-const SaleScan = lazy(() => import("../../../../components/sale-scan").then((module) => ({ default: module.SaleScan })));
-const voiceModule = () => import("../../../../components/voice-sale");
+const scanModule = patientImport(() => import("../../../../components/sale-scan"));
+const SaleScan = lazy(() => scanModule().then((module) => ({ default: module.SaleScan })));
+const voiceModule = patientImport(() => import("../../../../components/voice-sale"));
 type NextSales = import("../../../../components/voice-sale").NextSales;
 const VoiceSale = lazy(voiceModule);
 // Loaded when shown, to keep the quick sale within its script budget.
-const pickerModule = () => import("../../../../components/customer-picker");
+const pickerModule = patientImport(() => import("../../../../components/customer-picker"));
 const CustomerPicker = lazy(() => pickerModule().then((module) => ({ default: module.CustomerPicker })));
-const creditModule = () => import("../../../../components/credit-fields");
+const creditModule = patientImport(() => import("../../../../components/credit-fields"));
 const CreditFields = lazy(creditModule);
-const extrasModule = () => import("../../../../components/sale-money-extras");
+const extrasModule = patientImport(() => import("../../../../components/sale-money-extras"));
 const SaleMoneyExtras = lazy(extrasModule);
-const linesModule = () => import("../../../../components/quick-sale-lines");
+const linesModule = patientImport(() => import("../../../../components/quick-sale-lines"));
 const QuickSaleLines = lazy(linesModule);
-const savedItemsModule = () => import("../../../../lib/offline/saved-items");
-const priceListModule = () => import("../../../../components/sale-price-list");
+const savedItemsModule = patientImport(() => import("../../../../lib/offline/saved-items"));
+const priceListModule = patientImport(() => import("../../../../components/sale-price-list"));
 const SalePriceList = lazy(priceListModule);
 // Held sales (ADR-070): kept on the phone; the store and the panel load after the screen, or when first used.
-const heldModule = () => import("../../../../lib/offline/held-sales");
-const heldPanelModule = () => import("../../../../components/held-sales");
+const heldModule = patientImport(() => import("../../../../lib/offline/held-sales"));
+const heldPanelModule = patientImport(() => import("../../../../components/held-sales"));
 const HeldPanel = lazy(heldPanelModule);
-const picksModule = () => import("./quick-sale-picks");
+const picksModule = patientImport(() => import("./quick-sale-picks"));
 // Just the amount (ADR-069): its pad loads only when opened.
-const amountModule = () => import("../../../../components/amount-sale");
+const amountModule = patientImport(() => import("../../../../components/amount-sale"));
 const AmountSale = lazy(amountModule);
 
 function recentKey(tenantId: string, branchId: string) {
@@ -184,7 +186,12 @@ function QuickSaleScreen() {
     else window.addEventListener("load", () => window.setTimeout(loadHeld, 0), { once: true });
     // Every part loaded later is fetched once the screen has opened, so it is on the phone for selling offline.
     const preload = () => {
-      void Promise.all([linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), ...(amountOk ? [amountModule()] : []), priceListModule()]).catch(() => undefined);
+      // Once every part is here, the screen says so: it can now sell with no network (also what tests wait for).
+      void Promise.all([picksModule(), heldPanelModule(), linesModule(), extrasModule(), creditModule(), pickerModule(), savedItemsModule(), ...(voiceOn ? [voiceModule()] : []), ...(amountOk ? [amountModule()] : []), priceListModule()])
+        .then(() => {
+          document.documentElement.dataset.saleParts = "ready";
+        })
+        .catch(() => undefined);
       // Customer names for finding a customer with no network; refreshed at most every few hours.
       if (navigator.onLine) void import("../../../../lib/offline/customers").then((names) => names.refreshCustomerDirectoryIfOld(owner)).catch(() => undefined);
     };
@@ -633,7 +640,7 @@ function QuickSaleScreen() {
       <SafeForm className="space-y-4" pending={pending} onSubmit={() => void save()}>
         {priced.length > 0 ? (
           <Card className="p-4">
-            <Suspense fallback={<p className="text-sm text-muted">{t("loading")}</p>}>
+            <Suspense fallback={<p className="text-sm text-muted">{typeof navigator !== "undefined" && !navigator.onLine ? t("loadingOffline") : t("loading")}</p>}>
               <QuickSaleLines priced={priced} currency={currency} canDiscount={canDiscount} priceOpen={priceOpen} onPriceOpen={setPriceOpen} onStep={step} onChange={updateLine} units={extraUnits} />
             </Suspense>
           </Card>

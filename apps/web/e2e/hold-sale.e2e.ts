@@ -12,8 +12,8 @@ test("a cashier holds a sale, serves the next customer, then resumes and records
 
   // First customer: two bags of rice, then goes to the ATM.
   await page.getByLabel("Find a product").fill("rice");
-  await page.getByRole("button", { name: /Rice 50kg/ }).click();
-  await page.getByRole("button", { name: /Rice 50kg/ }).click();
+  await page.getByRole("button", { name: /^Rice 50kg/ }).click();
+  await page.getByRole("button", { name: /^Rice 50kg/ }).click();
   await expect(page.getByTestId("sale-total")).toHaveText("₦150,000.00");
   await page.getByTestId("hold-sale").click();
   const holdPanel = page.getByTestId("hold-panel");
@@ -32,7 +32,7 @@ test("a cashier holds a sale, serves the next customer, then resumes and records
 
   // Next customer, one bag, recorded straight away.
   await page.getByLabel("Find a product").fill("rice");
-  await page.getByRole("button", { name: /Rice 50kg/ }).click();
+  await page.getByRole("button", { name: /^Rice 50kg/ }).click();
   // While a sale is on screen, a held one cannot be resumed over it.
   await page.getByTestId("held-open").click();
   await expect(page.getByTestId("held-list").getByRole("button", { name: "Resume" })).toBeDisabled();
@@ -67,7 +67,7 @@ test("a held sale can be deleted, with a second tap to make sure", async ({ page
   await signIn(page, email);
   await page.goto("/app/sales/new");
   await page.getByLabel("Find a product").fill("rice");
-  await page.getByRole("button", { name: /Rice 50kg/ }).click();
+  await page.getByRole("button", { name: /^Rice 50kg/ }).click();
   await page.getByTestId("hold-sale").click();
   await page.getByTestId("hold-panel").getByRole("button", { name: "Hold" }).click();
   await expect(page.getByTestId("held-note")).toHaveText("Customer is held. Serve the next customer.");
