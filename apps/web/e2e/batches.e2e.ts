@@ -5,10 +5,11 @@ import { shop, signIn } from "./voice-helpers";
 
 test.use({ viewport: { width: 360, height: 780 } });
 
-const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
-
 test("a pharmacy records a batch with its expiry, sees what is expiring and takes expired stock off", async ({ page, request }) => {
   const { email, headers } = await shop(request);
+  // Days count in the shop's time zone (Lagos), not the test machine's UTC: near midnight the two dates differ.
+  const today = (await (await request.get("/api/v1/sales/summary", { headers })).json()).data.date as string;
+  const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
   const created = await request.post("/api/v1/products", { headers, data: { name: "Amoxicillin 500mg", baseUnit: "pack", priceMinor: "250000" } });
   const productId = (await created.json()).data.product.id as string;
   // An older delivery, already past its date.
