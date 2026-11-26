@@ -1,3 +1,4 @@
+import { takeEarly } from "./early-requests";
 import { isSignedOutError, REFRESH_PATH } from "./session-pass";
 import { isShopMode } from "./shop-mode";
 
@@ -62,7 +63,9 @@ function send(path: string, init: RequestInit) {
  * `background` calls such as sync never move the page, the next thing the person does will.
  */
 export async function api(path: string, init: RequestInit = {}, options: { background?: boolean } = {}) {
-  const response = await send(path, init);
+  // A plain GET the page's HTML already started (ADR-072). If it failed, ask as usual.
+  const early = !init.method && !init.body && !init.headers ? takeEarly(path) : null;
+  const response = (early ? await early.catch(() => null) : null) ?? (await send(path, init));
   if (typeof window === "undefined" || path.startsWith(REFRESH_PATH) || !(await signedOut(response))) return response;
   const outcome = await renewSession();
   if (outcome === "renewed") {
