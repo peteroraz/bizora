@@ -85,7 +85,11 @@ jobs:
       - run: pnpm --filter @bizora/web voice:models
       - name: Make the voice test recording
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q espeak-ng
+          # The runner image lists Microsoft's package server, which sometimes refuses (403) and fails the whole
+          # update. espeak-ng comes from Ubuntu, so drop that source and carry on if one list cannot be fetched.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update -q || echo "Some package lists could not be fetched; installing from the ones that were."
+          sudo apt-get install -y -q espeak-ng
           mkdir -p apps/web/e2e/fixtures
           espeak-ng -v en-us -s 130 -w apps/web/e2e/fixtures/voice-sale.wav "Sold two bags of rice at seventy five thousand naira each, cash."
       - run: pnpm build
