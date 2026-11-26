@@ -1,6 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { earlyRequestScript } from "../../lib/early-requests";
 import { redirect } from "next/navigation";
 import { WorkBanner, type WorkStatus } from "../../components/work-banner";
+import { VERIFY_BANNER_COOKIE } from "../../lib/verify-banner";
 import { AppShell, type ShellProfile } from "./shell";
 
 const origin = process.env.API_ORIGIN ?? "http://localhost:3001";
@@ -32,9 +34,17 @@ export default async function AppShellLayout({ children }: { children: React.Rea
   const work: WorkStatus | null = workResponse?.ok ? ((await workResponse.json()).data ?? null) : null;
   const businessId = (me.data as { tenant?: { businessId?: string | null } }).tenant?.businessId;
   const timeZone = (businesses as { id: string; timezone?: string }[]).find((business) => business.id === businessId)?.timezone ?? "UTC";
+  // The content security policy allows only scripts carrying this page's nonce (ADR-036).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // Hidden for a week from the banner itself; kept in a cookie so the page is drawn without it (ADR-072).
+  const verifyBannerHidden = jar.has(VERIFY_BANNER_COOKIE);
   return (
-    <AppShell profile={{ ...me.data, businesses, branches, logoVersion }} banner={<WorkBanner status={work} timeZone={timeZone} />}>
-      {children}
-    </AppShell>
+    <>
+      {/* Starts this screen's first requests while its scripts download (ADR-072). */}
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: earlyRequestScript() }} />
+      <AppShell profile={{ ...me.data, businesses, branches, logoVersion, verifyBannerHidden }} banner={<WorkBanner status={work} timeZone={timeZone} />}>
+        {children}
+      </AppShell>
+    </>
   );
 }

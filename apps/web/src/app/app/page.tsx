@@ -132,7 +132,8 @@ export default function AppHomePage() {
 
   useEffect(() => {
     void (async () => {
-      const meResponse = await api("/api/v1/auth/me");
+      // Both at once: the dashboard does not depend on the profile, and a slow phone saves a round trip (ADR-072).
+      const [meResponse, dashboard] = await Promise.all([api("/api/v1/auth/me"), api("/api/v1/dashboard")]);
       if (!meResponse.ok) return;
       const me = await meResponse.json();
       if (me.data?.onboardingCompleted === false) {
@@ -140,7 +141,6 @@ export default function AppHomePage() {
         return;
       }
       setName(me.data?.user?.displayName ?? "");
-      const dashboard = await api("/api/v1/dashboard");
       if (!dashboard.ok) return;
       const payload = await dashboard.json();
       setChecks(payload.data?.checklist ?? []);

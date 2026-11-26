@@ -34,13 +34,14 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentTyp
 import { useTranslations } from "next-intl";
 import { LazySheet } from "../../components/lazy-sheet";
 import { NotificationBell } from "../../components/notification-bell";
-import { api } from "../../lib/api";
+import { api, beginSwitch } from "../../lib/api";
 import type { AccountMenuProps } from "./account-menu";
 import { setShopMode } from "../../lib/shop-mode";
 import { navAllowed } from "../../lib/access";
 import { AccessProvider } from "../../lib/access-context";
 import { signOutEverywhere } from "../../lib/offline/sw-client";
 import { bottomItemsFor, primaryNav, type NavId } from "../../lib/nav";
+import { rememberVerifyBannerHidden, VERIFY_BANNER_HIDE_SECONDS } from "../../lib/verify-banner";
 
 // Shown only for a business Bizora has suspended (ADR-071), so it is not part of anyone else's first download.
 const SuspendedNotice = lazy(() => import("../../components/suspended-notice"));
@@ -76,6 +77,8 @@ export type ShellBranch = { id: string; name: string; businessId: string };
 export type ShellProfile = {
   user?: { displayName: string; email: string | null; emailVerifiedAt?: string | null; kind?: string } | null;
   organization?: { name: string; isSample?: boolean; bizoraHold?: "none" | "suspended"; holdReasonCode?: string | null } | null;
+  /** The owner hid the email check banner this week (ADR-072). */
+  verifyBannerHidden?: boolean;
   /** Changes when the company logo changes (ADR-021); null when there is no logo. */
   logoVersion?: string | null;
   tenant?: {
@@ -223,12 +226,18 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
 
   async function switchWorkspace(organizationId: string) {
     setSwitchError(null);
+    const stay = beginSwitch();
     const response = await api("/api/v1/auth/select-context", {
       method: "POST",
       body: JSON.stringify({ organizationId }),
-    });
-    if (response.ok) {
+    }).catch(() => null);
+    if (response?.ok) {
       window.location.assign("/app");
+      return;
+    }
+    stay();
+    if (!response) {
+      setSwitchError(t("switchFailed"));
       return;
     }
     const payload = await response.json().catch(() => null);
@@ -236,6 +245,8 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
   }
 
   async function selectContext(nextBusinessId: string, nextBranchId?: string) {
+    // Requests from this page that come back signed out during the switch must not open the sign-in page.
+    const stay = beginSwitch();
     const response = await api("/api/v1/auth/select-context", {
       method: "POST",
       body: JSON.stringify({
@@ -243,8 +254,9 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
         businessId: nextBusinessId,
         ...(nextBranchId ? { branchId: nextBranchId } : {}),
       }),
-    });
-    if (response.ok) window.location.assign("/app");
+    }).catch(() => null);
+    if (response?.ok) window.location.assign("/app");
+    else stay();
   }
 
   const staffMode = Boolean(profile.tenant?.deviceId);
@@ -488,7 +500,7 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
             </Button>
           </div>
         ) : null}
-        {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email && pathname === "/app" ? <EmailVerificationBanner /> : null}
+        {profile.user?.emailVerifiedAt === null && !staffMode && profile.user?.email && pathname === "/app" ? <EmailVerificationBanner hiddenAtFirst={profile.verifyBannerHidden === true} /> : null}
         {banner}
         {suspended ? (
           <Suspense fallback={null}>
@@ -543,21 +555,29 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
   );
 }
 
-const BANNER_KEY = "bizora.verifyBannerHiddenUntil";
+/** Where hiding was kept before ADR-072. Still honoured once, then moved to the cookie. */
+const OLD_BANNER_KEY = "bizora.verifyBannerHiddenUntil";
 
-/** Shown on Home only. The owner can hide it for a week. */
-function EmailVerificationBanner() {
+/** Shown on Home only, drawn with the page so it does not wait for scripts. The owner can hide it for a week. */
+function EmailVerificationBanner({ hiddenAtFirst }: { hiddenAtFirst: boolean }) {
   const t = useTranslations("shell");
   const [notice, setNotice] = useState<string | null>(null);
-  const [hidden, setHidden] = useState(true);
+  const [hidden, setHidden] = useState(hiddenAtFirst);
 
   useEffect(() => {
     try {
-      setHidden(Number(window.localStorage.getItem(BANNER_KEY) ?? 0) > Date.now());
+      const until = Number(window.localStorage.getItem(OLD_BANNER_KEY) ?? 0);
+      window.localStorage.removeItem(OLD_BANNER_KEY);
+      if (until > Date.now()) hideFor(Math.round((until - Date.now()) / 1000));
     } catch {
-      setHidden(false);
+      // Nothing kept on this phone from before.
     }
   }, []);
+
+  function hideFor(seconds: number) {
+    setHidden(true);
+    rememberVerifyBannerHidden(seconds);
+  }
 
   async function resend() {
     const response = await api("/api/v1/auth/email/verification", { method: "POST" });
@@ -566,12 +586,7 @@ function EmailVerificationBanner() {
   }
 
   function hide() {
-    setHidden(true);
-    try {
-      window.localStorage.setItem(BANNER_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    } catch {
-      // Hiding is a convenience; it simply shows again next time.
-    }
+    hideFor(VERIFY_BANNER_HIDE_SECONDS);
   }
 
   if (hidden) return null;

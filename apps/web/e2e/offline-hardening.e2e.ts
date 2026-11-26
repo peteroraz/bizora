@@ -5,12 +5,45 @@ import { shop, signIn } from "./voice-helpers";
 
 test.use({ viewport: { width: 360, height: 780 } });
 
+/**
+ * Waits until the product list kept on this phone has the product. The screen shows before the list is saved, and
+ * going offline earlier leaves an offline search with nothing to find.
+ */
+async function savedOnPhone(page: Page, product: string) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (name) => {
+          const db: IDBDatabase = await new Promise((resolve, reject) => {
+            const opened = indexedDB.open("bizora-offline");
+            opened.onsuccess = () => resolve(opened.result);
+            opened.onerror = () => reject(opened.error);
+          });
+          const kept: { key: string; products?: Record<string, { name: string }> }[] = await new Promise((resolve) => {
+            const all = db.transaction("cache").objectStore("cache").getAll();
+            all.onsuccess = () => resolve(all.result);
+          });
+          db.close();
+          return kept.some((entry) => entry.key.startsWith("catalog:") && Object.values(entry.products ?? {}).some((item) => item.name === name));
+        }, product),
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+}
+
+/** The sale screen has fetched every part it loads after opening, so it can sell with no network. */
+async function partsReady(page: Page) {
+  await expect(page.locator("html[data-sale-parts=ready]")).toHaveCount(1, { timeout: 20_000 });
+}
+
 async function sellOffline(page: Page, context: import("@playwright/test").BrowserContext, tins = "1") {
   await page.goto("/app/sales/new");
   await expect(page.getByTestId("say-sale")).toBeVisible();
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
+  await savedOnPhone(page, "Rice 50kg");
+  await partsReady(page);
   await context.setOffline(true);
   await page.getByLabel("Find a product").fill("rice");
   await page.getByRole("button", { name: /Rice 50kg/ }).click();
@@ -88,6 +121,8 @@ test("a sale the server refuses is named on screen, not dropped, while others sy
   // Opened again now the offline helper is running, as on any later visit, so every part is kept on the phone.
   await page.reload();
   await page.waitForLoadState("networkidle");
+  await savedOnPhone(page, "Beans");
+  await partsReady(page);
   await context.setOffline(true);
   // On credit to Emeka, then a plain cash sale.
   await page.getByLabel("Find a product").fill("rice");
@@ -135,16 +170,22 @@ test("a sale saved offline stays in its shop even if the owner switches shop bef
   await Promise.all([page.waitForEvent("framenavigated"), page.getByRole("combobox").last().selectOption(market)]);
   await page.waitForLoadState("load");
   await page.unroute("**/api/v1/sync/push");
-  await page.getByTestId("sync-now").click({ timeout: 3000 }).catch(() => undefined);
-  await expect(page.getByTestId("sync-now")).toHaveCount(0, { timeout: 20_000 });
-  await expect(page.getByText(/could not be saved/)).toHaveCount(0);
+  // Earlier tries failed, so the next automatic one may be a while off: tap "Send now" whenever it shows. Its part of
+  // the screen loads after the page, so it may not be there at first; checking only once could miss it.
   let sales: { id: string }[] = [];
   await expect
-    .poll(async () => {
-      sales = (await (await request.get("/api/v1/sales", { headers })).json()).data.items as { id: string }[];
-      return sales.length;
-    })
+    .poll(
+      async () => {
+        const sendNow = page.getByTestId("sync-now");
+        if (await sendNow.isVisible().catch(() => false)) await sendNow.click({ timeout: 2_000 }).catch(() => undefined);
+        sales = (await (await request.get("/api/v1/sales", { headers })).json()).data.items as { id: string }[];
+        return sales.length;
+      },
+      { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+    )
     .toBe(1);
+  await expect(page.getByTestId("sync-now")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByText(/could not be saved/)).toHaveCount(0);
   const sale = (await (await request.get(`/api/v1/sales/${sales[0]!.id}`, { headers })).json()).data.sale as { branchName: string };
   expect(sale.branchName).toBe("Main");
 });
