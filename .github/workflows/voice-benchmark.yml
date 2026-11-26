@@ -21,7 +21,11 @@ jobs:
           version: 10.12.1
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @bizora/contracts build
-      - run: sudo apt-get update -q && sudo apt-get install -y -q espeak-ng ffmpeg unzip
+      # Same as CI: Microsoft's package source on the runner can refuse and fail the update; the tools come from Ubuntu.
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update -q || echo "Some package lists could not be fetched; installing from the ones that were."
+          sudo apt-get install -y -q espeak-ng ffmpeg unzip
       - uses: actions/cache@v4
         with:
           path: apps/web/.cache/voice-bench
