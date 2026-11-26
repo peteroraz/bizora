@@ -39,8 +39,25 @@ async function signedOut(response: Response) {
 }
 
 let leaving = false;
+let switching = 0;
+
+/**
+ * Choosing another shop or business ends this sign-in and starts a new one. Requests the old page still has in
+ * flight then come back "signed out", and must not send the person to the sign-in page while the switch is moving
+ * them to the new one. Call before asking to switch; call the returned function if the switch did not happen.
+ */
+export function beginSwitch() {
+  switching += 1;
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    switching -= 1;
+  };
+}
+
 function goToSignIn() {
-  if (leaving) return;
+  if (leaving || switching > 0) return;
   leaving = true;
   if (isShopMode()) {
     window.location.href = "/shop";

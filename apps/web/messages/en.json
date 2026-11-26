@@ -1803,7 +1803,8 @@
       "resumed": "Finishing the sale held for {name}.",
       "full": "20 sales are already held on this phone. Resume or delete one first.",
       "failed": "This phone could not hold the sale. Finish it or try again."
-    }
+    },
+    "loadingOffline": "No network yet: this part of the screen finishes loading when it is back. The items you tapped are kept."
   },
   "held": {
     "holdTitle": "Hold this sale",
