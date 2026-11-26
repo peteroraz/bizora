@@ -34,7 +34,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentTyp
 import { useTranslations } from "next-intl";
 import { LazySheet } from "../../components/lazy-sheet";
 import { NotificationBell } from "../../components/notification-bell";
-import { api } from "../../lib/api";
+import { api, beginSwitch } from "../../lib/api";
 import type { AccountMenuProps } from "./account-menu";
 import { setShopMode } from "../../lib/shop-mode";
 import { navAllowed } from "../../lib/access";
@@ -226,12 +226,18 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
 
   async function switchWorkspace(organizationId: string) {
     setSwitchError(null);
+    const stay = beginSwitch();
     const response = await api("/api/v1/auth/select-context", {
       method: "POST",
       body: JSON.stringify({ organizationId }),
-    });
-    if (response.ok) {
+    }).catch(() => null);
+    if (response?.ok) {
       window.location.assign("/app");
+      return;
+    }
+    stay();
+    if (!response) {
+      setSwitchError(t("switchFailed"));
       return;
     }
     const payload = await response.json().catch(() => null);
@@ -239,6 +245,8 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
   }
 
   async function selectContext(nextBusinessId: string, nextBranchId?: string) {
+    // Requests from this page that come back signed out during the switch must not open the sign-in page.
+    const stay = beginSwitch();
     const response = await api("/api/v1/auth/select-context", {
       method: "POST",
       body: JSON.stringify({
@@ -246,8 +254,9 @@ export function AppShell({ profile, children, banner }: { profile: ShellProfile;
         businessId: nextBusinessId,
         ...(nextBranchId ? { branchId: nextBranchId } : {}),
       }),
-    });
-    if (response.ok) window.location.assign("/app");
+    }).catch(() => null);
+    if (response?.ok) window.location.assign("/app");
+    else stay();
   }
 
   const staffMode = Boolean(profile.tenant?.deviceId);

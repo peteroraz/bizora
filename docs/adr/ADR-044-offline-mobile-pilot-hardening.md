@@ -62,3 +62,13 @@ The pilot puts Bizora on low-end Android phones with networks that come and go. 
 - **Older items.** Items already waiting on phones from before this change sync into the shop selected at the time of sync, as before.
 - **The quick sale budget** is at 169.9 KB of 170 KB.
 - **Not testable in automation:** real low-memory behaviour, the virtual keyboard covering inputs, and installed-app (PWA) mode on real Android phones. These are in the manual device matrix (`docs/PILOT_MOBILE_TEST_MATRIX.md`).
+
+## Addendum (26 Nov 2026): a part that has not arrived must not crash the sale screen
+
+The quick sale fetches several parts after it opens (item lines, customer picker, credit fields, voice, held sales…), and the offline helper keeps each one only once it has loaded. If the network went in the second or two before a part arrived and a product was then tapped, the failed load crashed the whole screen ("Application error"). This was also the cause of the intermittent `offline-hardening.e2e.ts` failures in CI.
+
+- Every part loaded later now goes through `lib/patient-import.ts`. A failed load waits for the network to come back (or tries again every 5 seconds) instead of failing, and all callers share one load. The item lines show "Loading…", or with no network "this part finishes loading when it is back; the items you tapped are kept".
+- When all parts are on the phone, the page marks itself (`<html data-sale-parts="ready">`): it can now sell with no network. The offline tests wait for that mark, and for the product to be saved in the phone's product list, before going offline.
+- **Choosing another shop no longer sends the owner to the sign-in page now and then.** Choosing a shop ends the sign-in and starts a new one (ADR-026). A request the old page still had in flight came back "signed out", tried to renew with the old pass, failed, and opened the sign-in page, racing the switch's own move to the new one. While a switch is under way (`beginSwitch()` in `lib/api.ts`), a failed renewal no longer redirects; if the switch fails, the rule is restored. This was the other cause of the shop-switch offline test failing under load: the owner ended on the sign-in page, so the waiting sale could not be sent.
+- The shop-switch offline test taps "Send now" whenever it shows until the sale arrives, rather than once with a 3-second limit that could pass before that part of the screen had loaded.
+- Tests: `src/lib/api.test.ts`; `src/lib/patient-import.test.ts`; `e2e/sale-part-offline.e2e.ts` (holds back the item lines part, taps a product, checks for no crash, then lets it through). The browser test fails on the code before this change.
