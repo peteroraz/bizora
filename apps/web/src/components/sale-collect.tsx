@@ -25,6 +25,7 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
   const locale = useLocale();
   const access = useAccess();
   const canCredit = can(access, Permission.SALES_CREDIT, Permission.DEBTORS_MANAGE);
+  const canApproveCredit = can(access, Permission.DEBTORS_MANAGE);
   const total = BigInt(sale.totalMinor);
   const first: Mode = sale.requestedPayment && (sale.requestedPayment !== "credit" || canCredit) ? sale.requestedPayment : "cash";
   const [mode, setMode] = useState<Mode>(first);
@@ -35,6 +36,7 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
   const [credit, setCredit] = useState<Credit | null>(sale.customerCredit);
   const [dueDate, setDueDate] = useState("");
   const [comment, setComment] = useState("");
+  const [approveCredit, setApproveCredit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [given, setGiven] = useState("");
@@ -50,10 +52,14 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
   const balance = total - paid;
   const limit = credit?.limitMinor ? BigInt(credit.limitMinor) : null;
   const owing = credit ? BigInt(credit.owingMinor) : 0n;
+  // An owner or manager at the cash point approves the customer here (review, 26 Nov). The cashier still cannot.
+  const needsApproval = balance > 0n && credit !== null && !credit.allowed;
+  const approving = needsApproval && canApproveCredit && approveCredit;
 
   async function pick(next: PickedCustomer | null) {
     setCustomer(next);
     setCredit(null);
+    setApproveCredit(false);
     if (!next) return;
     const response = await api(`/api/v1/customers/${next.id}`).catch(() => null);
     if (response?.ok) {
@@ -68,10 +74,10 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
     if (balance > 0n) {
       if (!canCredit) return t("creditNotAllowed");
       if (!customer) return t("creditNeedsCustomer");
-      if (credit && !credit.allowed) return t("creditCustomerNotApproved", { name: customer.name });
+      if (needsApproval && !approving) return canApproveCredit ? t("creditTickApprove", { name: customer.name }) : t("creditCustomerNotApproved", { name: customer.name });
       if (limit !== null && owing + balance > limit && !can(access, Permission.DEBTORS_MANAGE)) return t("overLimit");
       if (!dueDate) return t("creditNeedsDate");
-      if (!comment.trim()) return t("creditNeedsComment");
+      if (!comment.trim() && !approving) return t("creditNeedsComment");
     }
     return null;
   }
@@ -92,6 +98,7 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
         ...(customer ? { customerId: customer.id } : {}),
         ...(balance > 0n ? { dueDate } : {}),
         ...(comment.trim() ? { comment: comment.trim() } : {}),
+        ...(approving ? { approveCredit: true } : {}),
       }),
     }).catch(() => null);
     const payload = response ? await response.json().catch(() => null) : null;
@@ -152,10 +159,19 @@ export function SaleCollect({ sale, onDone }: { sale: SaleDetail; onDone: (sale:
         {balance > 0n ? (
           <div className="space-y-3">
             <p className="text-sm text-warning">{t("owingOnCredit", { amount: money(balance) })}</p>
+            {needsApproval && canApproveCredit && customer ? (
+              <div className="rounded-control border border-border p-3" data-testid="collect-approve-credit">
+                <p className="text-sm">{t("creditNotApprovedYet", { name: customer.name })}</p>
+                <label className="mt-2 flex min-h-11 items-center gap-3 text-sm font-medium">
+                  <input type="checkbox" className="size-5" checked={approveCredit} onChange={(event) => setApproveCredit(event.target.checked)} />
+                  {t("creditApproveHere", { name: customer.name })}
+                </label>
+              </div>
+            ) : null}
             <FormField id="collect-due" label={t("dueDate")}>
               <DueDatePicker id="collect-due" value={dueDate} today={dayKey(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} onChange={setDueDate} />
             </FormField>
-            <FormField id="collect-comment" label={t("creditComment")}>
+            <FormField id="collect-comment" label={t("creditComment")} hint={approving ? t("creditCommentOptional") : undefined}>
               <SentenceInput id="collect-comment" value={comment} maxLength={500} onChange={(event) => setComment(event.target.value)} />
             </FormField>
           </div>

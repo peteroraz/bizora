@@ -135,6 +135,8 @@ export const saleCreateSchema = z.object({
   dueDate: isoDate.optional(),
   /** A comment, saved on the sale. Needed for credit: why, and how the customer will pay. */
   comment: comment.optional(),
+  /** An owner or manager approves the customer for credit here, without leaving the sale. */
+  approveCredit: z.boolean().optional(),
   /** typed: typed at the counter. voice: read from speech and confirmed. Left out on a retry is still typed. */
   itemSource: z.enum(ITEM_SOURCES).optional(),
 });
@@ -148,6 +150,8 @@ export const saleCollectSchema = z.object({
   customerId: z.string().uuid().optional(),
   dueDate: isoDate.optional(),
   comment: comment.optional(),
+  /** An owner or manager approves the customer for credit here, without leaving the sale. */
+  approveCredit: z.boolean().optional(),
 });
 export type SaleCollectInput = z.infer<typeof saleCollectSchema>;
 

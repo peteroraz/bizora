@@ -1483,6 +1483,7 @@
     "creditNeedsDate": "Enter the date the customer will pay.",
     "creditNeedsComment": "Write a comment for this credit.",
     "creditCustomerNotApproved": "{name} is not approved for credit. A manager or owner can approve them on the customer's page.",
+    "creditTickApprove": "{name} is not approved for credit yet. Tick \"Approve {name} for credit\" to give credit.",
     "customerSearchFailed": "Could not search customers. Check the network.",
     "noCustomer": "No customer found.",
     "creditApproved": "Approved for credit",
@@ -1795,6 +1796,9 @@
     "readAsSale": "Read this as a sale",
     "reportLink": "Sales report",
     "creditOnTerms": "Optional: this customer is on {days}-day terms.",
+    "creditNotApprovedYet": "{name} is not approved for credit yet.",
+    "creditApproveHere": "Approve {name} for credit",
+    "creditCommentOptional": "Optional. You can change their credit later on the customer's page.",
     "held": {
       "hold": "Hold",
       "open": "Held sales ({count})",
