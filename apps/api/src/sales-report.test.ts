@@ -100,6 +100,9 @@ describe("ADR-058: sales by week, month and year", () => {
       .send({ lines: [{ productId: riceId, quantity: "1", unit: "bag" }], discountMinor: "500000", payments: [{ method: "transfer", amountMinor: "7500000" }] })
       .expect(201);
     // Offline: one sold yesterday at 12:00 Lagos time, and one at 00:30 Lagos time today (23:30 UTC yesterday).
+    // Between midnight and 00:30 in Lagos, 00:30 is still to come and a sale cannot be dated in the future: use a
+    // moment just past midnight instead, which is still early today.
+    const earlyToday = new Date(Math.min(Date.now() - 10_000, Date.parse(`${yesterday}T23:30:00.000Z`))).toISOString();
     const offline = (soldAt: string) => ({
       id: uuidv7(),
       type: "sale.create",
@@ -109,7 +112,7 @@ describe("ADR-058: sales by week, month and year", () => {
     const pushed = await request(http)
       .post("/api/v1/sync/push")
       .set(auth(cashier))
-      .send({ operations: [offline(`${yesterday}T11:00:00.000Z`), offline(`${yesterday}T23:30:00.000Z`)] })
+      .send({ operations: [offline(`${yesterday}T11:00:00.000Z`), offline(earlyToday)] })
       .expect(200);
     expect(pushed.body.data.results.map((result: { status: string }) => result.status)).toEqual(["applied", "applied"]);
   }, 90_000);
