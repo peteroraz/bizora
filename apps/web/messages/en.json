@@ -1570,6 +1570,7 @@
     "alreadyCustomer": "That phone number is already a customer. Pick them below.",
     "paidLater": "Paid later ({number})",
     "quickPicks": "Quick picks",
+    "quickPicksToggle": "Saved and recent items ({count})",
     "less": "One less {name}",
     "more": "One more {name}",
     "changePrice": "Change price",
