@@ -36,3 +36,11 @@ Remembered items stay on `saved_items`. They are not a second catalog and not a 
 - The quick-sale screen keeps a 2,500 ms target. A screen that misses it on the first measurement is measured once more, and fails only if the second measurement misses too. The script-size check is unchanged. The few helpers that screen needs (`savedItemKey`, the sales-items setting, the display unit price) live apart from the sale schemas, so the first script stays within 170 KB.
 - Historical lines imported with no product are marked `service`, so they are not treated as goods waiting for a cost.
 - Usage counts (times sold, last price) are not written to the audit log. Creating, renaming, aliasing, upgrading, merging, archiving and estimating a cost are.
+
+## Addendum, 26 Nov 2026: saved and recent items as a list that opens
+
+The quick sale showed up to 12 saved and recent items as a grid of tiles under the search box. On a computer each tile was wide, and on a phone the grid pushed "Paid with" and the total off the first screen. The owner said it cluttered the sale.
+
+- The items are now one row, **Saved and recent items (n)**. A tap opens them as a short list, one line each: name on the left, price on the right.
+- It starts closed. The phone remembers if the trader leaves it open (`localStorage`, light per-phone setting; if storage is blocked it starts closed).
+- Which items appear, and their order, is unchanged. Typing in the search box still shows the matching items instead.

@@ -13,6 +13,7 @@ test("a cashier holds a sale, serves the next customer, then resumes and records
   // First customer: two bags of rice, then goes to the ATM.
   await page.getByLabel("Find a product").fill("rice");
   await page.getByRole("button", { name: /^Rice 50kg/ }).click();
+  await page.getByLabel("Find a product").fill("rice");
   await page.getByRole("button", { name: /^Rice 50kg/ }).click();
   await expect(page.getByTestId("sale-total")).toHaveText("₦150,000.00");
   await page.getByTestId("hold-sale").click();

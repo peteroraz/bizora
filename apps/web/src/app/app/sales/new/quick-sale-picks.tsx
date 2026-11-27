@@ -2,16 +2,35 @@
 
 import { capitaliseFirst, compactItemKey, isExactListedName, matchSaleItems, savedItemKey, TYPED_ITEM_NAME_MAX } from "@bizora/contracts";
 import { looksLikeSpokenSale } from "@bizora/contracts/voice";
+import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUnitName } from "../../../../components/stock-quantity";
 import { searchCatalog, type CachedProduct, type Catalog } from "../../../../lib/offline/catalog";
 import { asProduct } from "../../../../lib/offline/typed-product";
 
 type PickProduct = CachedProduct & { quantity: string };
 
+/** Whether this phone keeps the saved and recent items open. Storage can be missing or blocked: then it starts closed. */
+const OPEN_KEY = "bizora.quickPicksOpen";
+function readOpen() {
+  try {
+    return window.localStorage.getItem(OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeOpen(open: boolean) {
+  try {
+    window.localStorage.setItem(OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // Not kept; it opens closed next time.
+  }
+}
+
 /**
- * The product search results and quick tiles. Loaded after the quick sale screen opens so they are not part of
+ * The product search results, and the saved and recent items as one short list that opens on a tap (it used to be a
+ * grid of up to 12 tiles that pushed the sale down the screen, review 26 Nov). Loaded after the quick sale screen opens so they are not part of
  * the first script (that screen is at its size limit).
  */
 export function QuickSalePicks({
@@ -43,6 +62,7 @@ export function QuickSalePicks({
   const t = useTranslations("sales");
   const unitName = useUnitName();
   const asked = query.trim().toLowerCase();
+  const [picksOpen, setPicksOpen] = useState(readOpen);
   const askedKey = savedItemKey(query);
   // Ranked after the screen has opened, so this search is not part of the first script (ADR-049).
   const matches = useMemo(() => {
@@ -144,18 +164,33 @@ export function QuickSalePicks({
       ) : query.trim() && catalog && !typedOk ? (
         <p className="text-sm text-muted">{t("noMatches")}</p>
       ) : !asked && tiles.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label={t("quickPicks")} data-testid="product-tiles">
-          {tiles.map((product) => (
-            <button
-              key={product.id}
-              type="button"
-              className="flex min-h-16 flex-col items-start justify-between rounded-card border border-border bg-card px-3 py-2 text-left hover:border-primary"
-              onClick={() => onAdd(product)}
-            >
-              <span className="line-clamp-2 text-sm font-medium leading-tight">{product.name}</span>
-              <span className="text-xs text-muted">{product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}</span>
-            </button>
-          ))}
+        <div className="rounded-card border border-border bg-card" data-testid="product-tiles">
+          <button
+            type="button"
+            className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-sm font-medium"
+            aria-expanded={picksOpen}
+            aria-controls="quick-picks-list"
+            data-testid="quick-picks-toggle"
+            onClick={() => {
+              setPicksOpen(!picksOpen);
+              writeOpen(!picksOpen);
+            }}
+          >
+            {t("quickPicksToggle", { count: tiles.length })}
+            <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${picksOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+          </button>
+          {picksOpen ? (
+            <ul id="quick-picks-list" className="divide-y divide-border border-t border-border" aria-label={t("quickPicks")}>
+              {tiles.map((product) => (
+                <li key={product.id}>
+                  <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-2 text-left hover:bg-sidebar" onClick={() => onAdd(product)}>
+                    <span className="min-w-0 truncate text-sm">{product.name}</span>
+                    <span className="shrink-0 text-sm tabular-nums text-muted">{product.priceMinor ? money(BigInt(product.priceMinor)) : t("noPriceShort")}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
       {typedOk && askedKey && !taken && tooLong ? <p className="text-sm text-muted">{t("typed.tooLong", { max: TYPED_ITEM_NAME_MAX })}</p> : null}
