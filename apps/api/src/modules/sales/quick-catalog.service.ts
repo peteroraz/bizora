@@ -395,14 +395,7 @@ export class QuickCatalogService {
               ...(payload.trackStock === true && payload.openingQuantity ? { openingQuantity: payload.openingQuantity, ...(payload.openingCostMinor ? { openingCostMinor: payload.openingCostMinor } : {}) } : {}),
             }),
           );
-      await tx
-        .update(savedItems)
-        .set({ productId: created, catalogMode: "managed", updatedAt: new Date(), updatedBy: tenant.userId })
-        .where(and(eq(savedItems.id, item.id), eq(savedItems.tenantId, tenant.tenantId)));
-      await tx
-        .update(itemAliases)
-        .set({ productId: created, savedItemId: null })
-        .where(and(eq(itemAliases.tenantId, tenant.tenantId), eq(itemAliases.savedItemId, item.id)));
+      await this.link(tx, tenant, item.id, created);
       await this.audit.record(
         {
           tenantId: tenant.tenantId,
@@ -644,6 +637,31 @@ export class QuickCatalogService {
       .limit(1);
     if (!row) throw new ApiError("NOT_FOUND", "That item was not found.", 404);
     return row;
+  }
+
+  /** Points a remembered item, and its other names, at a product (ADR-049 upgrade). */
+  private async link(tx: DbExecutor, tenant: TenantContext, savedItemId: string, productId: string) {
+    await tx
+      .update(savedItems)
+      .set({ productId, catalogMode: "managed", updatedAt: new Date(), updatedBy: tenant.userId })
+      .where(and(eq(savedItems.id, savedItemId), eq(savedItems.tenantId, tenant.tenantId)));
+    await tx
+      .update(itemAliases)
+      .set({ productId, savedItemId: null })
+      .where(and(eq(itemAliases.tenantId, tenant.tenantId), eq(itemAliases.savedItemId, savedItemId)));
+  }
+
+  /**
+   * A product just added from imported sales takes over the remembered item with the same name, if there is one, so
+   * the sale screen offers one thing, not two (ADR-074).
+   */
+  async linkByName(tx: DbExecutor, tenant: TenantContext, businessId: string, name: string, productId: string) {
+    const [item] = await tx
+      .select({ id: savedItems.id })
+      .from(savedItems)
+      .where(and(eq(savedItems.tenantId, tenant.tenantId), eq(savedItems.businessId, businessId), eq(savedItems.nameKey, savedItemKey(name)), isNull(savedItems.productId)))
+      .limit(1);
+    if (item) await this.link(tx, tenant, item.id, productId);
   }
 
   private async productByKey(db: DbExecutor, tenantId: string, businessId: string, key: string) {

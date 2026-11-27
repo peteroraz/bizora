@@ -1849,6 +1849,17 @@
       "error": "Fix this"
     },
     "historyOnly": "History only",
+    "newItemsTitle": "{count, plural, one {# item is} other {# items are}} not in your products",
+    "newItemsHint": "Choose how to add each one when you save. Products are added without counting stock: open the product and enter how many you have when you are ready. You can change any price later.",
+    "newItemsCannotAdd": "A manager or owner can add these as products. For now they will be saved as typed items.",
+    "newItemPrice": "Last sold at {price} per {unit} · {count, plural, one {row} other {rows}} {rows}",
+    "newItemSimilar": "Looks like {name}, already in your products. To sell that one, change the name in these rows.",
+    "newItemChoiceLabel": "How to add {name}",
+    "newItemChoice": {
+      "product": "Add as a product",
+      "service": "Add as a service",
+      "typed": "Keep as a typed item"
+    },
     "fieldError": "{field}: {message}",
     "check": "Check rows",
     "working": "Working…",

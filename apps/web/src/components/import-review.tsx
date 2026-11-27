@@ -5,7 +5,10 @@ import {
   type CaptureTarget,
   IDEMPOTENCY_HEADER,
   IMPORT_MAX_ROWS,
+  type ImportNewItem,
   type ImportRowResult,
+  NEW_ITEM_CHOICES,
+  type NewItemChoice,
   capitaliseFirst,
   capitaliseWords,
   parseAmount,
@@ -60,7 +63,15 @@ type Props<F extends string> = {
   capture?: CaptureTarget;
 };
 
-type Result = { committed: boolean; waiting?: boolean; results: ImportRowResult[]; totals: { create: number; update: number; error: number } };
+type Result = {
+  committed: boolean;
+  waiting?: boolean;
+  results: ImportRowResult[];
+  totals: { create: number; update: number; error: number };
+  /** Sales import: items not in your products, and whether this person may add them (ADR-074). */
+  canAddItems?: boolean;
+  newItems?: ImportNewItem[];
+};
 
 export function ImportReview<F extends string>({ columns, synonyms, endpoint, extra = {}, templateName, templateExample, onSaved, capture }: Props<F>) {
   const t = useTranslations("imports");
@@ -77,12 +88,16 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [captured, setCaptured] = useState<{ rows: number; warnings: string[]; transcript: string | null } | null>(null);
+  /** How to add each new item, by name. Starts at the check's suggestion; sent with every check and save. */
+  const [choices, setChoices] = useState<Record<string, NewItemChoice>>({});
 
   const blank = () => Object.fromEntries(columns.map((column) => [column.field, ""])) as Record<F, string>;
   const filled = rows.filter((row) => columns.some((column) => row[column.field].trim()));
   // Rows read by AI are marked, so the activity log shows they came from a capture a person checked.
   const sent = { ...extra, source: captured ? "capture" : "file" };
   const key = JSON.stringify([filled, sent]);
+  // The new items the last check found, with the person's choice for each. Only these are added on save.
+  const newItems = (checked?.newItems ?? []).map((item) => ({ ...item, as: choices[item.name] ?? item.as }));
   const upToDate = checked !== null && checkedKey === key;
   const canSave = upToDate && checked.totals.error === 0 && filled.length > 0;
 
@@ -109,7 +124,7 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
       const response = await api(endpoint, {
         method: "POST",
         headers: { [IDEMPOTENCY_HEADER]: uuidv7() },
-        body: JSON.stringify({ ...sent, dryRun, rows: filled }),
+        body: JSON.stringify({ ...sent, dryRun, rows: filled, newItems: Object.entries(choices).map(([name, as]) => ({ name, as })) }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -120,12 +135,15 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
       if (dryRun || !result.committed) {
         setChecked(result);
         setCheckedKey(key);
+        // Keep choices for items still found; new ones start at the suggestion.
+        setChoices((current) => Object.fromEntries((result.canAddItems ? (result.newItems ?? []) : []).map((item) => [item.name, current[item.name] ?? item.as])));
       }
       if (!dryRun && result.committed) {
         setSaved(result);
         setRows([]);
         setChecked(null);
         setCaptured(null);
+        setChoices({});
         onSaved?.(result.totals);
       }
     } catch {
@@ -282,6 +300,41 @@ export function ImportReview<F extends string>({ columns, synonyms, endpoint, ex
             ) : null}
           </table>
         </div>
+      ) : null}
+      {upToDate && newItems.length > 0 ? (
+        <Card data-testid="import-new-items">
+          <p className="font-medium">{t("newItemsTitle", { count: newItems.length })}</p>
+          <p className="mt-1 text-sm text-muted">{checked.canAddItems ? t("newItemsHint") : t("newItemsCannotAdd")}</p>
+          <ul className="mt-3 divide-y divide-border">
+            {newItems.map((item) => (
+              <li key={item.name} className="flex flex-wrap items-start justify-between gap-3 py-3" data-testid="import-new-item">
+                <div className="min-w-0">
+                  <p className="font-medium">{item.name}</p>
+                  <p className="text-sm text-muted">
+                    {t("newItemPrice", { price: formatCurrency(BigInt(item.priceMinor), currency, locale), unit: item.unit, rows: item.rows.join(", "), count: item.rows.length })}
+                  </p>
+                  {item.similar ? <p className="text-sm text-warning">{t("newItemSimilar", { name: item.similar })}</p> : null}
+                </div>
+                {checked.canAddItems ? (
+                  <label className="text-sm">
+                    <span className="sr-only">{t("newItemChoiceLabel", { name: item.name })}</span>
+                    <select
+                      className="min-h-11 rounded-control border border-border bg-background px-3"
+                      value={item.as}
+                      onChange={(event) => setChoices((current) => ({ ...current, [item.name]: event.target.value as NewItemChoice }))}
+                    >
+                      {NEW_ITEM_CHOICES.map((choice) => (
+                        <option key={choice} value={choice}>
+                          {t(`newItemChoice.${choice}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
       {upToDate ? (
         <p className="text-sm" role="status">

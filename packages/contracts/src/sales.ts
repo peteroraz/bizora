@@ -162,6 +162,23 @@ export const saleCommentSchema = z.object({ body: comment });
 
 export const notificationReadSchema = z.object({ ids: z.array(z.string().uuid()).max(100).optional(), all: z.boolean().optional() });
 
+/** An item in imported sales that is not in your products: add it as a product, as a service, or keep it typed (ADR-074). */
+export const NEW_ITEM_CHOICES = ["product", "service", "typed"] as const;
+export type NewItemChoice = (typeof NEW_ITEM_CHOICES)[number];
+
+/** One new item found by a sales import check, and what will happen to it. */
+export type ImportNewItem = {
+  name: string;
+  as: NewItemChoice;
+  suggested: NewItemChoice;
+  /** The most recent price it sold for in these rows, in that sale's unit. */
+  priceMinor: string;
+  unit: string;
+  rows: number[];
+  /** An existing product with a similar name, in case this is the same thing spelled differently. */
+  similar: string | null;
+};
+
 /** How imported sales are treated: counted fully (stock and accounts) or kept as history only. */
 export const SALE_IMPORT_MODES = ["mixed", "full", "history"] as const;
 export type SaleImportMode = (typeof SALE_IMPORT_MODES)[number];
@@ -209,6 +226,15 @@ export const salesImportSchema = z.object({
   source: z.enum(IMPORT_SOURCES).default("file"),
   /** mixed: today's sales count fully, older ones are history only. */
   mode: z.enum(SALE_IMPORT_MODES).default("mixed"),
+  /**
+   * What to do with each item that is not in your products (ADR-074): add it as a product, add it as a service, or
+   * keep it as a typed item. The check suggests a choice for each; a save adds only the items listed here, so a
+   * person has seen every product that is added. An item not listed stays typed.
+   */
+  newItems: z
+    .array(z.object({ name: z.string().trim().min(1).max(200), as: z.enum(NEW_ITEM_CHOICES) }))
+    .max(500)
+    .default([]),
   rows: z
     .array(
       z.object({

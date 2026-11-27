@@ -110,12 +110,13 @@ test("records a sale, shares the receipt, sells with no network, and imports pro
     buffer: Buffer.from(`Date,Item,Qty,Rate,Paid by,Receipt No\n${lagosToday()},Semovita,1,4500,cash,B7\n01/11/2026,Old stock item,3,1000,cash,OLD-1\n`),
   });
   await page.getByRole("button", { name: "Check rows" }).click();
-  await expect(page.getByText("1 row needs fixing before you can save.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save 2 rows" })).toBeDisabled();
+  // "Semovita" is not a product: it is offered as a new item (ADR-074). Here it was a short name for one we have.
+  await expect(page.getByTestId("import-new-items")).toContainText("2 items are not in your products");
   await page.getByLabel("Product, row 1").fill("Golden Penny Semovita");
   await page.getByRole("button", { name: "Check rows" }).click();
   await expect(page.getByText("All rows look right: 2 new, 0 updates.")).toBeVisible();
   await expect(page.getByTestId("import-row-2").getByText("History only", { exact: true })).toBeVisible();
+  await page.getByLabel("How to add Old stock item").selectOption("typed");
   await page.getByRole("button", { name: "Save 2 rows" }).click();
   await expect(page.getByText("Saved: 2 new, 0 updated.")).toBeVisible();
   const semovita = (await (await request.get("/api/v1/products?q=semovita", { headers })).json()).data.items[0];
