@@ -92,6 +92,8 @@ function QuickSaleScreen() {
   const stockText = useStockText();
   const canDiscount = can(access, Permission.SALES_DISCOUNT);
   const canCredit = can(access, Permission.SALES_CREDIT, Permission.DEBTORS_MANAGE);
+  // Owners and managers approve a customer for credit right here, instead of leaving the sale (review, 26 Nov).
+  const canApproveCredit = can(access, Permission.DEBTORS_MANAGE);
   // Desk flow (ADR-016): the sales person sends the sale to the cashier, who takes the money.
   const desk = access.salesFlow === "desk";
   const findsCustomers = can(access, Permission.CUSTOMERS_READ, Permission.CUSTOMERS_LOOKUP);
@@ -105,6 +107,7 @@ function QuickSaleScreen() {
   const [note, setNote] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [comment, setComment] = useState("");
+  const [approveCredit, setApproveCredit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedOffline, setSavedOffline] = useState<string | null>(null);
   const [savedNext, setSavedNext] = useState<string | null>(null);
@@ -272,6 +275,9 @@ function QuickSaleScreen() {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...change } : line)));
   }
 
+  const needsApproval = balance > 0n && customer?.credit?.allowed === false;
+  const approving = needsApproval && canApproveCredit && approveCredit;
+
   function problem(): string | null {
     if (lines.length === 0) return t("noLines");
     for (const item of priced) {
@@ -283,9 +289,9 @@ function QuickSaleScreen() {
     if (balance < 0n) return t("overpaid");
     if (balance > 0n && !canCredit) return t("creditNotAllowed");
     if (balance > 0n && !customer) return t("creditNeedsCustomer");
-    if (balance > 0n && customer && customer.credit?.allowed === false) return t("creditCustomerNotApproved", { name: customer.name });
+    if (needsApproval && customer && !approving) return canApproveCredit ? t("creditTickApprove", { name: customer.name }) : t("creditCustomerNotApproved", { name: customer.name });
     if (balance > 0n && !dueDate) return t("creditNeedsDate");
-    if (balance > 0n && !comment.trim() && !customer?.credit?.termsDays) return t("creditNeedsComment");
+    if (balance > 0n && !comment.trim() && !customer?.credit?.termsDays && !approving) return t("creditNeedsComment");
     if (desk && mode === "credit" && !customer) return t("creditNeedsCustomer");
     return null;
   }
@@ -315,6 +321,7 @@ function QuickSaleScreen() {
     setCustomer(null);
     setNote("");
     setComment("");
+    setApproveCredit(false);
     setDueDate("");
     setGiven("");
     setMode("cash");
@@ -429,6 +436,7 @@ function QuickSaleScreen() {
       ...(desk ? { requestedPayment: mode } : {}),
       ...(balance > 0n ? { dueDate } : {}),
       ...(comment.trim() ? { comment: comment.trim() } : {}),
+      ...(approving ? { approveCredit: true } : {}),
       ...(spoken.current ? { itemSource: "voice" as const } : {}),
     };
     setPending(true);
@@ -670,14 +678,28 @@ function QuickSaleScreen() {
             <p className="text-sm font-medium">{balance > 0n || mode === "credit" ? t("customer") : t("customerOptional")}</p>
             <div className="mt-2">
               <Suspense fallback={null}>
-                <CustomerPicker id="sale-customer" value={customer} onChange={setCustomer} />
+                <CustomerPicker
+                  id="sale-customer"
+                  value={customer}
+                  onChange={(next) => {
+                    setCustomer(next);
+                    setApproveCredit(false);
+                  }}
+                />
               </Suspense>
             </div>
           </Card>
         ) : null}
         {balance > 0n ? (
           <Suspense fallback={null}>
-            <CreditFields dueDate={dueDate} comment={comment} onDueDate={setDueDate} onComment={setComment} termsDays={customer?.credit?.termsDays ?? null} />
+            <CreditFields
+              dueDate={dueDate}
+              comment={comment}
+              onDueDate={setDueDate}
+              onComment={setComment}
+              termsDays={customer?.credit?.termsDays ?? null}
+              approve={needsApproval && canApproveCredit && customer ? { name: customer.name, checked: approveCredit, onChange: setApproveCredit } : null}
+            />
           </Suspense>
         ) : desk ? (
           <FormField id="sale-comment" label={t("deskComment")} hint={t("optional")}>

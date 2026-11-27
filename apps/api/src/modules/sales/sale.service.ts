@@ -165,7 +165,8 @@ export class SaleService {
       if (branch.kind === "warehouse" && source === "pos") {
         throw new ApiError("WAREHOUSE_NO_SALES", `${branch.name} is a warehouse. Choose a shop to sell from, or move the stock to a shop first.`, 409);
       }
-      const customer = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
+      const found = payload.customerId ? await this.requireCustomer(tx, tenant, business.id, payload.customerId) : null;
+      const customer = source === "pos" || source === "offline" ? await this.approveCreditHere(tx, tenant, payload, found, id) : found;
       // A price list: chosen at the counter, or the customer's (ADR-048).
       const priceList = await choosePriceList(tx, tenant, {
         businessId: business.id,
@@ -457,7 +458,7 @@ export class SaleService {
         await this.assertOnShelf(tx, tenant, branch, saleItems.map((line) => ({ product: line.productId ? (byId.get(line.productId) ?? null) : null, quantity: line.quantity })));
       }
       const customerId = payload.customerId ?? sale.customerId;
-      const customer = customerId ? await this.requireCustomer(tx, tenant, business.id, customerId) : null;
+      const customer = await this.approveCreditHere(tx, tenant, payload, customerId ? await this.requireCustomer(tx, tenant, business.id, customerId) : null, sale.id);
       const now = new Date();
       const receiptNumber = sale.saleNumber ?? (await this.numbers.next(tx, tenant.tenantId, business.id, "receipt")).number;
       onTerms(payload, customer, sale.totalMinor, business.timezone);
@@ -2213,6 +2214,43 @@ export class SaleService {
     const [sale] = lock ? await query.for("update") : await query;
     if (!sale) throw new ApiError("NOT_FOUND", "Sale not found.", 404);
     return sale;
+  }
+
+  /**
+   * An owner or manager approves a customer for credit without leaving the sale (app review, 26 Nov). It is the same
+   * approval as on the customer's page: the same permission, the same audit entry, and the customer stays approved.
+   * The approval stands in for the credit comment, so none is asked for. Staff without the permission are refused.
+   */
+  private async approveCreditHere(
+    tx: DbExecutor,
+    tenant: TenantContext,
+    payload: { approveCredit?: boolean | undefined; comment?: string | undefined },
+    customer: CustomerRow | null,
+    saleId: string,
+  ): Promise<CustomerRow | null> {
+    if (!payload.approveCredit || !customer || customer.creditAllowed) return customer;
+    if (!tenant.permissions.includes(Permission.DEBTORS_MANAGE)) {
+      throw new ApiError("FORBIDDEN", "Only a manager or owner can approve a customer for credit.", 403, [{ field: "approveCredit", message: "Ask a manager or owner." }]);
+    }
+    await tx
+      .update(customers)
+      .set({ creditAllowed: true, updatedAt: new Date(), updatedBy: tenant.userId })
+      .where(and(eq(customers.tenantId, tenant.tenantId), eq(customers.id, customer.id)));
+    await this.audit.record(
+      {
+        tenantId: tenant.tenantId,
+        actorUserId: tenant.userId,
+        action: "customer.credit_changed",
+        entityType: "customer",
+        entityId: customer.id,
+        correlationId: tenant.correlationId,
+        businessId: customer.businessId,
+        metadata: { creditAllowed: true, creditLimitMinor: customer.creditLimitMinor?.toString() ?? null, creditTermsDays: customer.creditTermsDays ?? null, saleId },
+      },
+      tx,
+    );
+    payload.comment ??= "Approved for credit at this sale.";
+    return { ...customer, creditAllowed: true };
   }
 
   private async requireCustomer(tx: DbExecutor, tenant: TenantContext, businessId: string, customerId: string): Promise<CustomerRow> {
