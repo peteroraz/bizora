@@ -28,14 +28,19 @@ import {
   stockReceiveSchema,
   stockTransferSchema,
   unitFromText,
+  compactItemKey,
+  productCreateSchema,
+  savedItemKey,
+  type ImportNewItem,
   type ImportRowResult,
+  type NewItemChoice,
 } from "@bizora/contracts";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors.js";
 import type { TenantContext } from "../../common/tenant-context.js";
 import { localDate, zonedDateTime } from "../../common/zoned-day.js";
 import type { AppDatabase } from "../../db/database.js";
-import { branches, customers, products, stockBalances } from "../../db/schema.js";
+import { branches, customers, itemAliases, products, stockBalances } from "../../db/schema.js";
 import { DB } from "../../tokens.js";
 import { productUnitsFor, requireBusiness, resolveBranch, type ProductRow, type ProductUnitRow } from "../inventory/inventory-scope.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -43,6 +48,7 @@ import { CatalogService } from "../inventory/catalog.service.js";
 import { brandFromName, CATEGORY_PATH_MAX, categoryFromPath, categoryLevels, itemByName, priceListsByName, setListPrice, setSupplierCode, yesNo } from "../inventory/product-file.js";
 import { ProductService } from "../inventory/product.service.js";
 import { StockService } from "../inventory/stock.service.js";
+import { QuickCatalogService } from "./quick-catalog.service.js";
 import { SaleService } from "./sale.service.js";
 
 /** A product import this big refreshes the planner's statistics on products when it is saved (ADR-067). */
@@ -70,6 +76,7 @@ export class ImportService {
     @Inject(StockService) private readonly stock: StockService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CatalogService) private readonly catalog: CatalogService,
+    @Inject(QuickCatalogService) private readonly quickCatalog: QuickCatalogService,
   ) {}
 
   async products(tenant: TenantContext, raw: unknown) {
@@ -257,7 +264,23 @@ export class ImportService {
       .select()
       .from(products)
       .where(and(eq(products.tenantId, tenant.tenantId), eq(products.businessId, business.id), isNull(products.archivedAt)));
-    const byName = new Map(productRows.map((product) => [product.name.trim().toLowerCase(), product]));
+    // A name matches a product written with other spacing or a full stop at the end, or one of its other names (ADR-049).
+    const byName = new Map<string, ProductRow>();
+    for (const product of productRows) if (!byName.has(savedItemKey(product.name))) byName.set(savedItemKey(product.name), product);
+    const byId = new Map(productRows.map((product) => [product.id, product]));
+    const aliasRows = await this.db
+      .select({ key: itemAliases.aliasKey, productId: itemAliases.productId })
+      .from(itemAliases)
+      .where(and(eq(itemAliases.tenantId, tenant.tenantId), eq(itemAliases.businessId, business.id)));
+    for (const alias of aliasRows) {
+      const product = alias.productId ? byId.get(alias.productId) : undefined;
+      if (product && !byName.has(alias.key)) byName.set(alias.key, product);
+    }
+    // Items not in your products: owners and managers add them as products or services; anyone else keeps them typed (ADR-074).
+    const canAddItems = tenant.permissions.includes(Permission.CATALOG_MANAGE);
+    const choices = new Map(payload.newItems.map((item) => [savedItemKey(item.name), item.as]));
+    type NewItem = { name: string; as: NewItemChoice; suggested: NewItemChoice; date: string; index: number; unit: string; price: bigint; rows: number[] };
+    const fresh = new Map<string, NewItem>();
     const units = await productUnitsFor(this.db, tenant.tenantId, productRows.map((product) => product.id));
     const customerRows = await this.db
       .select({ id: customers.id, name: customers.name, phone: customers.phoneE164 })
@@ -266,7 +289,7 @@ export class ImportService {
     const canDiscount = tenant.permissions.includes(Permission.SALES_DISCOUNT);
     const canCredit = tenant.permissions.includes(Permission.DEBTORS_MANAGE);
 
-    type Line = { product: ProductRow | null; description: string; unit: string; entered: bigint; quantity: bigint; unitPrice: bigint; lineTotal: bigint };
+    type Line = { product: ProductRow | null; newKey: string | null; description: string; unit: string; entered: bigint; quantity: bigint; unitPrice: bigint; lineTotal: bigint };
     type Group = { date: string; method: string; customerId: string | null; counts: boolean; ref: string | null; lines: Line[]; rows: number[] };
     const groups = new Map<string, Group>();
     const results: ImportRowResult[] = payload.rows.map((row, index) => {
@@ -275,9 +298,20 @@ export class ImportService {
       if (!date) errors.push({ field: "date", message: `Can't read the date "${row.date}". Write it like 16/11/2026.` });
       else if (date > today) errors.push({ field: "date", message: "This date is in the future." });
       const counts = payload.mode === "full" ? true : payload.mode === "history" ? false : date === today;
-      const product = byName.get(row.product.trim().toLowerCase()) ?? null;
+      const product = byName.get(savedItemKey(row.product)) ?? null;
+      const newKey = !product && row.product.trim() ? savedItemKey(row.product) : null;
+      const suggested: NewItemChoice = canAddItems ? (looksLikeService(row.product) ? "service" : "product") : "typed";
+      // The check suggests; only a save that names the item adds it, so a person has seen every new product (ADR-018).
+      const choice: NewItemChoice | null = newKey ? (canAddItems ? (choices.get(newKey) ?? (payload.dryRun ? suggested : "typed")) : "typed") : null;
       if (!row.product.trim()) errors.push({ field: "product", message: "Enter what was sold." });
-      else if (!product && counts) errors.push({ field: "product", message: `"${row.product}" is not in your products. Add it first, or import this sale as history.` });
+      else if (!product && counts && choice === "typed") {
+        errors.push({
+          field: "product",
+          message: canAddItems
+            ? `"${row.product}" is not in your products. Add it as a product or service, or import this sale as history.`
+            : `"${row.product}" is not in your products. Ask a manager or owner to add it, or import this sale as history.`,
+        });
+      }
       const productUnits = product ? (units.get(product.id) ?? []) : [];
       const unit = row.unit.trim() ? unitFromText(row.unit) : (product?.baseUnit ?? "piece");
       if (!unit) errors.push({ field: "unit", message: `Unknown unit "${row.unit}".` });
@@ -315,6 +349,21 @@ export class ImportService {
       }
       if (errors.length > 0) return { row: index + 1, status: "error", errors, counts };
 
+      if (newKey && choice) {
+        const seen = fresh.get(newKey);
+        // The most recent sale sets the price and unit: the latest date, then the lowest row on the sheet.
+        const latest = !seen || (date as string) > seen.date || ((date as string) === seen.date && index > seen.index);
+        fresh.set(newKey, {
+          name: seen?.name ?? row.product.trim().replace(/\s+/g, " "),
+          as: choice,
+          suggested,
+          date: latest ? (date as string) : (seen as NewItem).date,
+          index: latest ? index : (seen as NewItem).index,
+          unit: latest ? (unit as string) : (seen as NewItem).unit,
+          price: latest ? unitPrice : (seen as NewItem).price,
+          rows: [...(seen?.rows ?? []), index + 1],
+        });
+      }
       const key = row.ref.trim() ? `ref:${row.ref.trim()}` : `row:${index}`;
       const group = groups.get(key) ?? {
         date: date as string,
@@ -330,6 +379,7 @@ export class ImportService {
       }
       group.lines.push({
         product,
+        newKey: choice === "product" || choice === "service" ? newKey : null,
         description: product?.name ?? row.product.trim(),
         unit: unit as string,
         entered: entered as bigint,
@@ -347,7 +397,59 @@ export class ImportService {
       };
     });
 
-    if (payload.dryRun || results.some((result) => result.status === "error")) return this.outcome(results, false);
+    // A new product is counted in the unit of its latest sale. A counted sale in another unit cannot be converted.
+    for (const group of groups.values()) {
+      if (!group.counts) continue;
+      group.lines.forEach((line, position) => {
+        const item = line.newKey ? fresh.get(line.newKey) : undefined;
+        if (!item || line.unit === item.unit) return;
+        const at = (group.rows[position] as number) - 1;
+        const result = results[at] as ImportRowResult;
+        results[at] = {
+          row: result.row,
+          status: "error",
+          counts: result.counts,
+          errors: [...(result.errors ?? []), { field: "unit", message: `"${item.name}" is sold in ${item.unit} in its latest sale. Use ${item.unit} here too, or import this sale as history.` }],
+        };
+      });
+    }
+    const newItems: ImportNewItem[] = [...fresh.values()].map((item) => ({
+      name: item.name,
+      as: item.as,
+      suggested: item.suggested,
+      priceMinor: item.price.toString(),
+      unit: item.unit,
+      rows: item.rows,
+      similar: similarProduct(item.name, productRows),
+    }));
+
+    if (payload.dryRun || results.some((result) => result.status === "error")) return { ...this.outcome(results, false), canAddItems, newItems };
+    // New items first, all together: products are sold without counting stock until the owner enters a quantity, and
+    // services never count stock. No cost is set, so profit says their cost is missing (ADR-074, ADR-051).
+    const adding = [...fresh.entries()].filter(([, item]) => item.as === "product" || item.as === "service");
+    if (adding.length > 0) {
+      const ids = await this.db.transaction(async (tx) => {
+        const made: [string, string][] = [];
+        for (const [key, item] of adding) {
+          const id = await this.productService.createIn(
+            tx,
+            tenant,
+            productCreateSchema.parse({ name: item.name, baseUnit: item.unit, priceMinor: item.price.toString(), itemType: item.as === "service" ? "service" : "physical", trackStock: false }),
+          );
+          await this.quickCatalog.linkByName(tx, tenant, business.id, item.name, id);
+          made.push([key, id]);
+        }
+        return made;
+      });
+      const rows = await this.db
+        .select()
+        .from(products)
+        .where(and(eq(products.tenantId, tenant.tenantId), inArray(products.id, ids.map(([, id]) => id))));
+      const added = new Map(ids.map(([key, id]) => [key, rows.find((row) => row.id === id) as ProductRow]));
+      for (const group of groups.values()) {
+        for (const line of group.lines) if (line.newKey && added.has(line.newKey)) line.product = added.get(line.newKey) as ProductRow;
+      }
+    }
     for (const group of groups.values()) {
       if (group.counts) {
         const total = group.lines.reduce((sum, line) => sum + line.lineTotal, 0n);
@@ -380,7 +482,7 @@ export class ImportService {
       }
     }
     await this.recordImport(tenant, business.id, "sales", payload.source, results.length);
-    return this.outcome(results, true);
+    return { ...this.outcome(results, true), canAddItems, newItems };
   }
 
   /**
@@ -695,5 +797,29 @@ function reasonFromText(text: string) {
   if (said("own use|shop use|used|use|staff|we ate|drank|ate")) return "own_use";
   if (said("gift|dash|free|sample|promo|give away|gave")) return "gift";
   if (said("other")) return "other";
+  return null;
+}
+
+/** Words that mean work done rather than goods sold, so an unknown item is offered as a service first (ADR-074). */
+const SERVICE_WORDS = /\b(repairs?|repairing|fix|fixing|fixed|services?|servicing|labou?r|install|installation|installing|workmanship|wash(ing)?|cleaning|tuning|diagnos\w*|alignment|balancing|haircut|barbing|braiding|tailoring|sewing|delivery|consultation|charges?)\b/i;
+
+export function looksLikeService(name: string) {
+  return SERVICE_WORDS.test(name);
+}
+
+/**
+ * An existing product that may be the same item spelled differently: the same letters and numbers once spaces and
+ * punctuation are ignored, or every word of the shorter name (two words or more) inside the longer one.
+ */
+export function similarProduct(name: string, rows: { name: string }[]) {
+  const compact = compactItemKey(name);
+  const words = (text: string) => new Set(savedItemKey(text).split(/[^a-z0-9]+/).filter(Boolean));
+  const mine = words(name);
+  for (const row of rows) {
+    if (compactItemKey(row.name) === compact) return row.name;
+    const theirs = words(row.name);
+    const [small, big] = mine.size <= theirs.size ? [mine, theirs] : [theirs, mine];
+    if (small.size >= 2 && [...small].every((word) => big.has(word))) return row.name;
+  }
   return null;
 }
